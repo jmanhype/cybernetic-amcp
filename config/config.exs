@@ -12,12 +12,16 @@ config :libcluster,
     ]
   ]
 
-# Transport configuration
+# Transport configuration - Using AMQP as primary transport
 config :cybernetic, :transport,
-  adapter: Cybernetic.Transport.GenStageAdapter,
+  adapter: Cybernetic.Transport.AMQP,
   max_demand: 1000,
-  consumers: [
-    systems: [:system1, :system2, :system3, :system4, :system5],
-    max_demand: 10,
-    min_demand: 5
+  amqp: [
+    url: {:system, "AMQP_URL", "amqp://guest:guest@localhost:5672"},
+    prefetch_count: 10,
+    consumers: [
+      systems: [:system1, :system2, :system3, :system4, :system5],
+      max_demand: 10,
+      min_demand: 5
+    ]
   ]
