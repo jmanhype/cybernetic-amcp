@@ -288,7 +288,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     }
     
     # Send to S4 for processing
-    case Cybernetic.Core.Transport.AMQP.Publisher.publish(
+    case Cybernetic.Transport.Behaviour.publish(
       "cyb.commands",
       "s4.algedonic",
       signal,
