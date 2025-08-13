@@ -3,6 +3,11 @@ defmodule Cybernetic.Core.Transport.AMQP.Connection do
   Alias to the main AMQP Connection for backward compatibility.
   """
   
-  defdelegate reconnect(), to: Cybernetic.Transport.AMQP.Connection
-  defdelegate get_channel(), to: Cybernetic.Transport.AMQP.Connection
+  def reconnect do
+    Cybernetic.Transport.AMQP.Connection.reconnect()
+  end
+  
+  def get_channel do
+    Cybernetic.Transport.AMQP.Connection.get_channel()
+  end
 end
