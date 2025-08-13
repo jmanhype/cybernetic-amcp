@@ -145,6 +145,14 @@ defmodule Cybernetic.Integration.VSMPathTest do
     end
     
     test "pleasure signal optimizes system performance", %{collector: collector} do
+      # Temporarily enable algedonic signals for this test
+      original_test_mode = Application.get_env(:cybernetic, :test_mode)
+      Application.put_env(:cybernetic, :test_mode, false)
+      
+      on_exit(fn ->
+        Application.put_env(:cybernetic, :test_mode, original_test_mode)
+      end)
+      
       # Simulate successful operations to trigger pleasure signal
       Enum.each(1..20, fn i ->
         success_event = %{
