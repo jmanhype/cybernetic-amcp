@@ -39,7 +39,14 @@ defmodule Cybernetic.MCP.Core do
     ]
     
     Enum.each(mock_tools, fn tool ->
-      Registry.register_tool(tool.name, tool)
+      # Register with proper parameters
+      Registry.register_tool(
+        tool.name, 
+        tool.description, 
+        %{}, # parameters
+        {__MODULE__, :mock_handler}, # handler
+        [] # opts
+      )
     end)
     
     tools_map = Map.new(mock_tools, &{&1.name, &1})
