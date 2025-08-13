@@ -28,8 +28,8 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
   defp handle_coordination(payload, meta) do
     # Check if action is present
     unless Map.has_key?(payload, "action") || Map.has_key?(payload, :action) do
-      return {:error, :missing_action}
-    end
+      {:error, :missing_action}
+    else
     
     action = Map.get(payload, "action") || Map.get(payload, :action)
     Logger.info("System2: Coordination with action=#{action}")
