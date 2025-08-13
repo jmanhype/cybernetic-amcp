@@ -32,6 +32,10 @@ defmodule Cybernetic.Transport.AMQP.Connection do
     GenServer.cast(__MODULE__, :reconnect)
   end
   
+  def reconnect do
+    GenServer.cast(__MODULE__, :reconnect)
+  end
+  
   def handle_call(:get_channel, _from, %{channel: channel, status: :connected} = state) do
     {:reply, {:ok, channel}, state}
   end
