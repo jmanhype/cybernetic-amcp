@@ -5,7 +5,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
   describe "ContextGraph" do
     setup do
       # Start a new ContextGraph for each test
-      {:ok, pid} = ContextGraph.start_link()
+      {:ok, pid} = ContextGraph.start_link([])
       {:ok, graph: pid}
     end
 
