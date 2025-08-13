@@ -124,8 +124,17 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     end
 
     test "rejects replayed message" do
-      original = %{"data" => "test"}
-      enriched = NonceBloom.enrich_message(original)
+      # Manually create message with fresh nonce
+      nonce = NonceBloom.generate_nonce()
+      timestamp = System.system_time(:millisecond)
+      payload = %{"data" => "test"}
+      
+      enriched = Map.merge(payload, %{
+        "_nonce" => nonce,
+        "_timestamp" => timestamp,
+        "_site" => node(),
+        "_signature" => generate_test_signature(payload, nonce, timestamp)
+      })
       
       # First validation should succeed
       assert {:ok, _} = NonceBloom.validate_message(enriched)
@@ -135,8 +144,17 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     end
 
     test "rejects message with tampered signature" do
-      original = %{"data" => "test"}
-      enriched = NonceBloom.enrich_message(original)
+      # Manually create message with fresh nonce
+      nonce = NonceBloom.generate_nonce()
+      timestamp = System.system_time(:millisecond)
+      payload = %{"data" => "test"}
+      
+      enriched = Map.merge(payload, %{
+        "_nonce" => nonce,
+        "_timestamp" => timestamp,
+        "_site" => node(),
+        "_signature" => generate_test_signature(payload, nonce, timestamp)
+      })
       
       # Tamper with the signature
       tampered = Map.put(enriched, "_signature", "bad" <> enriched["_signature"])
@@ -145,8 +163,17 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     end
 
     test "rejects message with tampered payload" do
-      original = %{"data" => "test"}
-      enriched = NonceBloom.enrich_message(original)
+      # Manually create message with fresh nonce
+      nonce = NonceBloom.generate_nonce()
+      timestamp = System.system_time(:millisecond)
+      payload = %{"data" => "test"}
+      
+      enriched = Map.merge(payload, %{
+        "_nonce" => nonce,
+        "_timestamp" => timestamp,
+        "_site" => node(),
+        "_signature" => generate_test_signature(payload, nonce, timestamp)
+      })
       
       # Tamper with the payload
       tampered = Map.put(enriched, "data", "tampered")
