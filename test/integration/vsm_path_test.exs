@@ -173,7 +173,8 @@ defmodule Cybernetic.Integration.VSMPathTest do
       # Verify S4 received pleasure signal
       assert_receive {:s4_message, pleasure_msg}, @test_timeout
       assert pleasure_msg["type"] == "algedonic.pleasure"
-      assert pleasure_msg["intensity"] in [:mild, :moderate, :high, :euphoric]
+      data = Map.get(pleasure_msg, "data", %{})
+      assert data[:intensity] in [:mild, :moderate, :high, :euphoric]
       
       # Verify S4 optimizes based on pleasure
       assert_receive {:s4_optimization, optimization}, @test_timeout
