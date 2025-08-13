@@ -287,8 +287,10 @@ defmodule Cybernetic.Integration.VSMPathTest do
             GenServer.cast(__MODULE__, {:s2_event, metadata})
           [:vsm, :s4, _] ->
             GenServer.cast(__MODULE__, {:s4_event, metadata})
-          [:telegram, _, _] ->
+          [:telegram, :command, :processed] ->
             GenServer.cast(__MODULE__, {:telegram_event, metadata})
+          [:telegram, :response, :sent] ->
+            GenServer.cast(__MODULE__, {:telegram_response_event, metadata})
           [:goldrush, :algedonic, _] ->
             GenServer.cast(__MODULE__, {:algedonic_event, metadata})
           _ ->
