@@ -46,7 +46,17 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
   end
 
   def handle_call({:publish, exchange, routing_key, payload, opts}, _from, %{channel: nil} = state) do
-    {:reply, {:error, :no_channel}, state}
+    # Try to get channel again
+    case Cybernetic.Transport.AMQP.Connection.get_channel() do
+      {:ok, channel} ->
+        setup_exchanges(channel)
+        Confirm.select(channel)
+        new_state = %{state | channel: channel}
+        handle_call({:publish, exchange, routing_key, payload, opts}, _from, new_state)
+      
+      {:error, _} ->
+        {:reply, {:error, :no_channel}, state}
+    end
   end
 
   def handle_call({:publish, exchange, routing_key, payload, opts}, _from, %{channel: channel} = state) do
