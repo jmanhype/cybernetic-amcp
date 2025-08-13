@@ -9,6 +9,17 @@ config :cybernetic, :amqp,
   url: System.get_env("AMQP_URL") || "amqp://guest:guest@localhost:5672",
   exchange: System.get_env("AMQP_EXCHANGE") || "cyb.commands",
   exchange_type: :topic,
+  exchanges: %{
+    events: "cyb.events",
+    telemetry: "cyb.telemetry", 
+    commands: "cyb.commands",
+    mcp_tools: "cyb.mcp.tools",
+    s1: "cyb.vsm.s1",
+    s2: "cyb.vsm.s2",
+    s3: "cyb.vsm.s3",
+    s4: "cyb.vsm.s4",
+    s5: "cyb.vsm.s5"
+  },
   queues: [
     system1: "vsm.system1.operations",
     system2: "vsm.system2.coordination", 
