@@ -229,21 +229,22 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
       :ok
     else
       # Record algedonic events and generate signals when thresholds are met
-    algedonic_data = %{
-      type: type,
-      severity: Map.get(payload, "severity", "normal"),
-      timestamp: DateTime.utc_now(),
-      source: Map.get(payload, "source", "unknown"),
-      operation: Map.get(payload, "operation", "unknown")
-    }
-    
-    # Store in process dictionary for simple state tracking
-    events = Process.get({:algedonic_events, type}, [])
-    recent_events = [algedonic_data | events] |> Enum.take(100)  # Keep last 100 events
-    Process.put({:algedonic_events, type}, recent_events)
-    
-    # Check if we should emit an algedonic signal
-    check_algedonic_thresholds(type, recent_events)
+      algedonic_data = %{
+        type: type,
+        severity: Map.get(payload, "severity", "normal"),
+        timestamp: DateTime.utc_now(),
+        source: Map.get(payload, "source", "unknown"),
+        operation: Map.get(payload, "operation", "unknown")
+      }
+      
+      # Store in process dictionary for simple state tracking
+      events = Process.get({:algedonic_events, type}, [])
+      recent_events = [algedonic_data | events] |> Enum.take(100)  # Keep last 100 events
+      Process.put({:algedonic_events, type}, recent_events)
+      
+      # Check if we should emit an algedonic signal
+      check_algedonic_thresholds(type, recent_events)
+    end
   end
 
   defp check_algedonic_thresholds(type, events) do
