@@ -25,7 +25,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     case Cybernetic.Transport.AMQP.Connection.get_channel() do
       {:ok, channel} ->
         setup_exchanges(channel)
-        Channel.confirm_select(channel)
+        Confirm.select(channel)
         {:noreply, %{state | channel: channel}}
       
       {:error, _} ->
