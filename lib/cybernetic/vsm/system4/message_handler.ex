@@ -149,6 +149,12 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     
     # Send optimization (for test purposes, we'll emit telemetry)
     :telemetry.execute([:vsm, :s4, :optimization], %{intensity: intensity}, optimization)
+    
+    # Also send directly to test collector if present
+    if test_collector = :persistent_term.get({:test_collector, Cybernetic.Transport.InMemory}, nil) do
+      send(test_collector, {:s4_optimization, optimization})
+    end
+    
     Logger.info("System4: Generated optimization - #{strategy}")
     
     :ok
