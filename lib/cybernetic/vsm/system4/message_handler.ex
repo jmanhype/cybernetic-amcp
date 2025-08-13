@@ -112,6 +112,12 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     
     # Send intervention (for test purposes, we'll emit telemetry)
     :telemetry.execute([:vsm, :s4, :intervention], %{severity: severity}, intervention)
+    
+    # Also send directly to test collector if present
+    if test_collector = :persistent_term.get({:test_collector, Cybernetic.Transport.InMemory}, nil) do
+      send(test_collector, {:s4_intervention, intervention})
+    end
+    
     Logger.info("System4: Generated intervention - #{action}")
     
     :ok
