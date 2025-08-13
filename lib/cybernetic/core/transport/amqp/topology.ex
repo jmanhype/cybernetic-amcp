@@ -173,14 +173,19 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   end
   
   @doc """
-  Get exchange name for a given component
+  Get exchange name for a given component from config
   """
-  def exchange_for(:vsm), do: "vsm"
-  def exchange_for(:events), do: "events"
-  def exchange_for(:telemetry), do: "telemetry"
-  def exchange_for(:mcp), do: "mcp"
-  def exchange_for(:priority), do: "priority"
-  def exchange_for(_), do: "events"
+  def exchange_for(key) when is_atom(key) do
+    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
+    Map.get(exchanges, key, "cyb.events")
+  end
+  
+  @doc """
+  Helper to get exchange name by key
+  """
+  defp ex(name) do
+    Application.get_env(:cybernetic, :amqp)[:exchanges][name]
+  end
   
   @doc """
   Get queue name for a VSM system
