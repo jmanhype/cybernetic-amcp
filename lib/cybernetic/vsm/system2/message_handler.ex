@@ -170,12 +170,17 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
   end
 
   defp forward_to_intelligence(payload, meta, coordination_result) do
+    # Extract coordination_id from the payload first, then from coordination_result
+    coordination_id = Map.get(payload, "coordination_id") || 
+                     Map.get(payload, :coordination_id) ||
+                     Map.get(coordination_result, "coordination_id")
+    
     # Create intelligence message for S4
     intelligence_msg = %{
       "type" => "vsm.s4.intelligence",
       "source_system" => "s2",
-      "coordination_id" => Map.get(coordination_result, "coordination_id"),
-      "operation" => Map.get(payload, "operation", "unknown"),
+      "coordination_id" => coordination_id,
+      "operation" => "intelligence",
       "coordination_data" => coordination_result,
       "analysis_request" => "pattern_detection",
       "timestamp" => DateTime.utc_now()
