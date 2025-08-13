@@ -310,7 +310,7 @@ defmodule Cybernetic.Core.CRDT.GraphQueries do
     {:ok, query}
   end
   
-  defp validate_query(%Query{type: type}) do
+  defp validate_query(%Query{type: type} = query) do
     if type in list_query_types() do
       {:ok, query}
     else
