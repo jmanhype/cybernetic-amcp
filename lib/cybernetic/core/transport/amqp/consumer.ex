@@ -39,8 +39,13 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   end
 
   def handle_info({:basic_deliver, payload, meta}, state) do
-    with {:ok, message} <- Jason.decode(payload),
-         {:ok, validated} <- validate_and_process(message, meta) do
+    # Normalize message shape for consistent processing
+    normalized_message = case Jason.decode(payload) do
+      {:ok, decoded} -> Message.normalize(decoded)
+      {:error, _} -> Message.normalize(payload)
+    end
+    
+    with {:ok, validated} <- validate_and_process(normalized_message, meta) do
       Basic.ack(state.channel, meta.delivery_tag)
       :telemetry.execute([:amqp, :message, :processed], %{count: 1}, meta)
     else
