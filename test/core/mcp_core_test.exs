@@ -29,7 +29,7 @@ defmodule Cybernetic.MCP.CoreTest do
       assert Enum.any?(tools, fn t -> t.name == "analyze" end)
       
       # Verify tools are registered in registry
-      registered = Registry.list_tools()
+      {:ok, registered} = Registry.list_tools()
       assert length(registered) > 0
     end
 
