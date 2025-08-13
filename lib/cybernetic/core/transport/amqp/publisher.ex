@@ -122,10 +122,6 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
 
   defp build_headers(opts) do
     %{
-      "security" => %{
-        "nonce" => NonceBloom.generate_nonce(),
-        "timestamp" => System.system_time(:second)
-      },
       "causal" => opts[:causal] || %{},
       "correlation_id" => opts[:correlation_id] || generate_correlation_id(),
       "source" => opts[:source] || node()
