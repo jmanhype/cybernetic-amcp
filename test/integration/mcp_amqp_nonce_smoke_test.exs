@@ -87,15 +87,18 @@ defmodule MCPAMQPNonceSmokeTest do
             {:error, :replay} ->
               IO.puts("  ✓ Replay detection working")
               
-              # Test message enrichment
-              test_message = %{"test" => "data", "timestamp" => System.system_time()}
+              # Test message enrichment with a NEW message (to avoid replay detection)
+              test_message = %{"test" => "data", "timestamp" => System.system_time(), "unique_id" => System.unique_integer()}
               enriched = Cybernetic.Core.Security.NonceBloom.enrich_message(test_message)
               
               if Map.has_key?(enriched, "_nonce") and Map.has_key?(enriched, "_signature") do
                 IO.puts("  ✓ Message enrichment working")
                 
-                # Test message validation
-                case Cybernetic.Core.Security.NonceBloom.validate_message(enriched) do
+                # Test message validation with a FRESH message
+                fresh_message = %{"test" => "validation", "timestamp" => System.system_time(), "unique_id" => System.unique_integer()}
+                fresh_enriched = Cybernetic.Core.Security.NonceBloom.enrich_message(fresh_message)
+                
+                case Cybernetic.Core.Security.NonceBloom.validate_message(fresh_enriched) do
                   {:ok, validated} ->
                     IO.puts("  ✓ Message validation successful")
                     true
