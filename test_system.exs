@@ -59,7 +59,16 @@ end
 IO.puts("\n2. Testing NonceBloom replay protection...")
 try do
   nonce1 = :crypto.strong_rand_bytes(16) |> Base.encode64()
-  message1 = %{nonce: nonce1, data: "test1"}
+  # Message needs proper security headers
+  message1 = %{
+    "headers" => %{
+      "security" => %{
+        "nonce" => nonce1,
+        "timestamp" => System.system_time(:second)
+      }
+    },
+    "payload" => %{"data" => "test1"}
+  }
   
   # First validation should succeed
   case Cybernetic.Core.Security.NonceBloom.validate_message(message1) do
