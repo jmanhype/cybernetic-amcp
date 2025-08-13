@@ -21,7 +21,7 @@ defmodule Cybernetic.MCP.CoreTest do
 
     test "discovers and registers tools on startup", %{mcp: _mcp} do
       # List available tools
-      tools = Core.list_tools()
+      {:ok, tools} = Core.list_tools()
       
       assert length(tools) > 0
       assert Enum.any?(tools, fn t -> t.name == "search" end)
@@ -78,7 +78,7 @@ defmodule Cybernetic.MCP.CoreTest do
     end
 
     test "lists all available tools", %{mcp: _mcp} do
-      tools = Core.list_tools()
+      {:ok, tools} = Core.list_tools()
       
       assert is_list(tools)
       assert length(tools) == 3
@@ -124,7 +124,7 @@ defmodule Cybernetic.MCP.CoreTest do
 
     test "tool discovery happens automatically", %{mcp: _mcp} do
       # Get initial tool count
-      initial_tools = Core.list_tools()
+      {:ok, initial_tools} = Core.list_tools()
       initial_count = length(initial_tools)
       
       # Tools should already be discovered from setup
