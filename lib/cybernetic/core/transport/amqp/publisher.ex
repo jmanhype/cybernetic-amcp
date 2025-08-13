@@ -68,13 +68,16 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
           headers: headers["causal"] || %{}
         )
         
-        # Wait for confirm
-        case wait_for_confirm(channel) do
-          :ok ->
+        # Wait for confirm using AMQP.Confirm
+        case Confirm.wait_for_confirms(channel, 1500) do
+          true ->
             {:reply, :ok, state}
-          error ->
-            Logger.error("Publish failed: #{inspect(error)}")
-            {:reply, error, state}
+          false ->
+            Logger.error("Message nack'd by broker")
+            {:reply, {:error, :nack}, state}
+          :timeout ->
+            Logger.error("Timeout waiting for confirm")
+            {:reply, {:error, :confirm_timeout}, state}
         end
       
       {:error, reason} ->
