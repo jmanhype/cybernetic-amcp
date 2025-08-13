@@ -57,4 +57,57 @@ defmodule Cybernetic.Transport.Message do
   def get_type(%{"payload" => %{"type" => type}}), do: type
   def get_type(%{"headers" => %{"type" => type}}), do: type
   def get_type(_), do: nil
+
+  # Private functions
+
+  @doc """
+  Flatten security headers from nested structures to top-level for NonceBloom compatibility.
+  
+  Handles these nesting patterns:
+  - Already flat: %{"_nonce" => "...", "_timestamp" => ...}
+  - Nested in headers: %{"headers" => %{"security" => %{"_nonce" => "...", ...}}}
+  - Nested in security: %{"security" => %{"_nonce" => "...", ...}}
+  - AMQP headers format: %{"headers" => %{"_nonce" => "...", ...}}
+  """
+  def flatten_security_headers(message) when is_map(message) do
+    security_keys = ["_nonce", "_timestamp", "_site", "_signature"]
+    
+    # Check if security headers are already at top level
+    if Enum.any?(security_keys, &Map.has_key?(message, &1)) do
+      message
+    else
+      # Try to find security headers in nested structures
+      flattened_security = extract_security_from_nested(message, security_keys)
+      Map.merge(message, flattened_security)
+    end
+  end
+
+  defp extract_security_from_nested(message, security_keys) do
+    # Pattern 1: headers.security.*
+    security_from_headers_security = 
+      get_in(message, ["headers", "security"])
+      |> extract_security_keys(security_keys)
+
+    # Pattern 2: security.*  
+    security_from_security =
+      Map.get(message, "security", %{})
+      |> extract_security_keys(security_keys)
+
+    # Pattern 3: headers.*
+    security_from_headers =
+      Map.get(message, "headers", %{})
+      |> extract_security_keys(security_keys)
+
+    # Merge in priority order: headers.security > security > headers
+    %{}
+    |> Map.merge(security_from_headers)
+    |> Map.merge(security_from_security) 
+    |> Map.merge(security_from_headers_security)
+  end
+
+  defp extract_security_keys(nil, _keys), do: %{}
+  defp extract_security_keys(source, security_keys) when is_map(source) do
+    Map.take(source, security_keys)
+  end
+  defp extract_security_keys(_, _), do: %{}
 end
