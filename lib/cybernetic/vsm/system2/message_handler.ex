@@ -101,6 +101,27 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     :ok
   end
 
+  defp handle_coordination_complete(payload, meta) do
+    Logger.info("System2: Coordination complete - #{inspect(payload)}")
+    
+    # Create intelligence signal for S4 based on the coordination result
+    intelligence_payload = %{
+      "type" => "vsm.s4.intelligence",
+      "source_system" => "s2", 
+      "coordination_id" => Map.get(payload, "coordination_id"),
+      "original_operation" => Map.get(payload, "original_operation"),
+      "resources_allocated" => Map.get(payload, "resources_allocated", []),
+      "priority" => Map.get(payload, "priority", "normal"),
+      "analysis_request" => "coordination_analysis",
+      "timestamp" => DateTime.utc_now()
+    }
+    
+    # Send intelligence to S4
+    forward_to_intelligence(intelligence_payload, meta, payload)
+    
+    :ok
+  end
+
   defp handle_default(payload, meta) do
     Logger.debug("System2: Default handler - #{inspect(payload)}")
     :ok
