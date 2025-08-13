@@ -109,4 +109,9 @@ defmodule Cybernetic.MCP.Core do
   def handle_call(:list_tools, _from, %{tools: tools} = state) do
     {:reply, Map.values(tools), state}
   end
+
+  @doc false
+  def mock_handler(params) do
+    {:ok, %{result: "Mock handler executed", params: params}}
+  end
 end
