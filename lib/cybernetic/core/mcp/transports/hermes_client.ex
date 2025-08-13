@@ -14,6 +14,12 @@ defmodule Cybernetic.MCP.HermesClient do
   @behaviour Cybernetic.Plugin
 
   @impl true
+  def init(opts) do
+    # Initialize plugin state
+    {:ok, %{opts: opts, initialized: true}}
+  end
+
+  @impl true
   def process(%{tool: tool, params: params}, state) do
     Logger.debug("Hermes MCP tool call: #{tool} with #{inspect(params)}")
     
