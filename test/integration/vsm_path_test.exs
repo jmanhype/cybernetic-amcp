@@ -6,8 +6,8 @@ defmodule Cybernetic.Integration.VSMPathTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureLog
   alias Cybernetic.Core.Transport.AMQP.Publisher
-  alias Cybernetic.Apps.Telegram.Bot.Agent, as: TelegramAgent
-  alias Cybernetic.Apps.VSM.{System1, System2, System4}
+  alias Cybernetic.VSM.System1.Agents.TelegramAgent
+  alias Cybernetic.VSM.{System1, System2, System4}
   
   @test_timeout 10_000
   
