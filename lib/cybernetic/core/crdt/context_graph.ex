@@ -31,8 +31,14 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
 
   @doc """
   Query triples by subject, predicate, or object.
+  
+  Examples:
+    query(subject: "user123") - Find all triples with subject "user123"
+    query(predicate: "likes") - Find all "likes" relationships  
+    query(subject: "user123", predicate: "likes") - Find what user123 likes
+    query(%{}) - Get all triples
   """
-  @spec query(subject: term() | nil, predicate: term() | nil, object: term() | nil) :: list()
+  @spec query(keyword() | map()) :: list()
   def query(criteria) do
     GenServer.call(__MODULE__, {:query, criteria})
   end
