@@ -46,6 +46,11 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
     GenServer.cast(__MODULE__, {:telemetry_event, event_name, measurements, metadata})
   end
 
+  def handle_info(:setup_patterns, state) do
+    setup_goldrush_patterns()
+    {:noreply, state}
+  end
+
   def handle_cast({:telemetry_event, event_name, measurements, metadata}, state) do
     # Convert to Goldrush event format
     event = build_goldrush_event(event_name, measurements, metadata)
