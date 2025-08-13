@@ -26,8 +26,8 @@ defmodule RealMCPTest do
     case Supervisor.start_link(children, strategy: :one_for_one, name: __MODULE__.Supervisor) do
       {:ok, _pid} ->
         IO.puts("   ✅ Supervisor started successfully")
-        # Give it a moment to initialize
-        Process.sleep(1000)
+        # Give it more time to complete MCP initialization handshake
+        Process.sleep(3000)
         test_real_connection()
       {:error, reason} ->
         IO.puts("   ❌ Failed to start supervisor: #{inspect(reason)}")
