@@ -91,13 +91,22 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   end
 
   defp validate_and_process(message, meta) do
-    # Extract nonce from message headers or body
-    nonce = message["nonce"] || get_header(meta, "x-nonce")
-    
-    # Validate nonce hasn't been seen before
-    case NonceBloom.validate_message(nonce, message) do
-      {:ok, _validated} ->
-        # Process the message based on type
+    # Validate the message using NonceBloom security envelope
+    case NonceBloom.validate_message(message) do
+      {:ok, validated_message} ->
+        # Process the validated message based on type
+        process_validated_message(validated_message, meta)
+      
+      {:error, :replay} ->
+        {:error, :replay_detected}
+        
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+  
+  defp process_validated_message(message, meta) do
+    # Process the message based on type
         process_by_type(message, meta)
         
       {:error, :replay} ->
