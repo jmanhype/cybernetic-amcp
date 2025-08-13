@@ -20,7 +20,7 @@ defmodule RealMCPTest do
     
     # Set up proper supervision tree like the docs show
     children = [
-      {__MODULE__, transport: {:stdio, command: "claude", args: ["mcp", "serve", "--debug"]}}
+      {__MODULE__, transport: {:stdio, command: "claude", args: ["mcp", "serve"]}}
     ]
     
     case Supervisor.start_link(children, strategy: :one_for_one, name: __MODULE__.Supervisor) do
