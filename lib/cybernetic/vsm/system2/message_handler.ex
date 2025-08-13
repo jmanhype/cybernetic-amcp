@@ -71,7 +71,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     Logger.debug("System2: Sync request - #{inspect(payload)}")
     
     # Broadcast sync to all systems
-    Cybernetic.Core.Transport.AMQP.Publisher.publish(
+    Cybernetic.Transport.Behaviour.publish(
       "cyb.events",
       "s2.sync_response", 
       %{"timestamp" => :os.system_time(:millisecond), "data" => payload},
@@ -109,7 +109,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     action = Map.get(payload, "action", "coordinate")
     
     Enum.each(systems, fn system ->
-      Cybernetic.Core.Transport.AMQP.Publisher.publish(
+      Cybernetic.Transport.Behaviour.publish(
         "cyb.commands",
         "#{system}.coordination",
         Map.put(payload, "coordinator", "system2"),
@@ -122,7 +122,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     case Map.get(meta, :source_node) do
       nil -> Logger.debug("System2: No source node for status response")
       _source_node ->
-        Cybernetic.Core.Transport.AMQP.Publisher.publish(
+        Cybernetic.Transport.Behaviour.publish(
           "cyb.events",
           "s2.status_response",
           status,
