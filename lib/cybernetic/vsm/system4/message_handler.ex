@@ -57,8 +57,10 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     :ok
   end
 
-  defp handle_default(payload, meta) do
+  defp handle_default(payload, _meta) do
     Logger.debug("System4: Default handler - #{inspect(payload)}")
     :ok
   end
+  
+  defp return(value), do: value
 end
