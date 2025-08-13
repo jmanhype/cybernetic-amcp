@@ -89,6 +89,26 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     {:dlx, "dlq", ""}
   ]
   
+  # GenServer callbacks
+  
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+  
+  def init(_opts) do
+    # Setup topology on connection
+    case Connection.get_channel() do
+      {:ok, channel} ->
+        case setup(channel) do
+          :ok -> {:ok, %{channel: channel}}
+          error -> {:stop, error}
+        end
+      {:error, reason} ->
+        Logger.warn("Failed to get AMQP channel for topology setup: #{inspect(reason)}")
+        {:ok, %{channel: nil}}
+    end
+  end
+  
   @doc """
   Set up the complete AMQP topology - legacy entry point
   """
