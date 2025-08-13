@@ -101,13 +101,25 @@ defmodule Cybernetic.MCP.Core do
 
   @doc """
   List available tools.
+  Returns {:ok, tools} on success, {:error, reason} on failure.
   """
   def list_tools do
     GenServer.call(__MODULE__, :list_tools)
   end
 
+  @doc """
+  List available tools, raising on error.
+  Returns tools list directly or raises on failure.
+  """
+  def list_tools! do
+    case list_tools() do
+      {:ok, tools} -> tools
+      {:error, reason} -> raise "Failed to list tools: #{inspect(reason)}"
+    end
+  end
+
   def handle_call(:list_tools, _from, %{tools: tools} = state) do
-    {:reply, Map.values(tools), state}
+    {:reply, {:ok, Map.values(tools)}, state}
   end
 
   @doc false
