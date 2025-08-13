@@ -32,8 +32,8 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     # Handle operational tasks and workflows
     Logger.info("System1: Processing operation - #{inspect(payload)}")
     
-    # Forward to operational supervisor if it exists
-    case Process.whereis(Cybernetic.VSM.System1.Operational) do
+    # Process the operation locally first
+    operation_result = case Process.whereis(Cybernetic.VSM.System1.Operational) do
       nil -> 
         Logger.warn("System1 operational supervisor not found")
         {:error, :supervisor_not_found}
@@ -42,6 +42,14 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
         Cybernetic.VSM.System1.Operational.handle_message(payload, meta)
         :ok
     end
+    
+    # Forward to S2 for coordination if operation is significant
+    forward_to_coordination(payload, meta)
+    
+    # Emit telemetry for the operation
+    :telemetry.execute([:vsm, :s1, :operation], %{count: 1}, payload)
+    
+    operation_result
   end
 
   defp handle_status_update(payload, meta) do
