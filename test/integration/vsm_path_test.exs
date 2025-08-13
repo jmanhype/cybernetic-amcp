@@ -386,6 +386,18 @@ defmodule Cybernetic.Integration.VSMPathTest do
       {:noreply, Map.update!(state, :s4_intelligence, &(&1 + 1))}
     end
 
+    # Handle S4 intervention messages
+    def handle_info({:s4_intervention, intervention}, state) do
+      send(state.test_pid, {:s4_intervention, intervention})
+      {:noreply, state}
+    end
+
+    # Handle S4 optimization messages  
+    def handle_info({:s4_optimization, optimization}, state) do
+      send(state.test_pid, {:s4_optimization, optimization})
+      {:noreply, state}
+    end
+
     # Catch-all for unexpected messages
     def handle_info(msg, state) do
       Logger.debug("TestCollector received unexpected message: #{inspect(msg)}")
