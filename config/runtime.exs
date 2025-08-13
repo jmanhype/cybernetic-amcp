@@ -49,3 +49,15 @@ config :cybernetic, :goldrush,
   event_buffer_size: 1000,
   flush_interval: 100,
   enable_telemetry: true
+
+# Security configuration
+config :cybernetic, :security,
+  hmac_secret: System.get_env("CYBERNETIC_HMAC_SECRET") || :crypto.strong_rand_bytes(32) |> Base.encode64(),
+  nonce_ttl: 300_000,  # 5 minutes
+  bloom_size: 100_000,
+  bloom_error_rate: 0.001
+
+# Application configuration
+config :cybernetic,
+  environment: config_env(),
+  node_name: node()
