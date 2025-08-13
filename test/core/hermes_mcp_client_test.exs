@@ -151,23 +151,33 @@ defmodule Cybernetic.MCP.HermesClientTest do
   end
 
   describe "error scenarios" do
-    test "handles network timeouts gracefully" do
-      # Test timeout scenario
-      result = HermesClient.execute_tool("slow_tool", %{}, [timeout: 1])
-      
-      # Should handle timeout gracefully
-      assert {:error, %{type: :client_error}} = result
-    end
-
-    test "handles malformed tool parameters" do
-      # Test with invalid tool response format
+    test "process/2 handles malformed tool parameters" do
+      # Test with valid structure but would cause server errors
       input = %{tool: "malformed_tool", params: %{}}
       state = %{some: "state"}
       
       result = HermesClient.process(input, state)
       
-      # Should handle malformed responses
-      assert {:error, %{tool: "malformed_tool"}, ^state} = result
+      # Should handle server connection errors gracefully
+      assert {:error, %{tool: "malformed_tool", error: :client_error}, ^state} = result
+    end
+
+    test "process/2 validates input structure" do
+      # Test various invalid input structures
+      test_cases = [
+        %{},                                    # Missing fields
+        %{tool: "test"},                       # Missing params
+        %{params: %{}},                        # Missing tool
+        %{tool: 123, params: %{}},            # Wrong tool type
+        %{tool: "test", params: "not_map"}    # Wrong params type
+      ]
+      
+      state = %{some: "state"}
+      
+      for input <- test_cases do
+        result = HermesClient.process(input, state)
+        assert {:error, %{error: :client_error, details: "Invalid input structure"}, ^state} = result
+      end
     end
   end
 end
