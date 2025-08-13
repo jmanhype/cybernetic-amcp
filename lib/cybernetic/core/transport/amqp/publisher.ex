@@ -65,7 +65,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
           json,
           persistent: true,
           content_type: "application/json",
-          headers: headers["causal"] || %{}
+          headers: []
         )
         
         # Wait for confirm using AMQP.Confirm
