@@ -107,14 +107,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   
   defp process_validated_message(message, meta) do
     # Process the message based on type
-        process_by_type(message, meta)
-        
-      {:error, :replay} ->
-        {:error, :replay_detected}
-        
-      {:error, reason} ->
-        {:error, reason}
-    end
+    process_by_type(message, meta)
   end
 
   defp process_by_type(%{"type" => "vsm." <> system} = message, meta) do
