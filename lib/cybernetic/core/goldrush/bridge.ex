@@ -47,8 +47,8 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
   end
 
   def handle_info(:setup_patterns, state) do
-    setup_goldrush_patterns()
-    {:noreply, state}
+    patterns = setup_goldrush_patterns()
+    {:noreply, %{state | patterns: patterns}}
   end
 
   def handle_cast({:telemetry_event, event_name, measurements, metadata}, state) do
