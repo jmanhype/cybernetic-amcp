@@ -16,17 +16,21 @@ defmodule RealMCPTest do
     IO.puts("🧪 Testing REAL MCP Connection")
     IO.puts("==============================")
     
-    # Start the client with stdio transport to Claude Code MCP server
-    transport_config = {:stdio, command: "claude", args: ["mcp", "serve", "--debug"]}
-    client_info = %{name: "CyberneticTest", version: "0.1.0"}
+    IO.puts("\n1. Setting up supervisor with Hermes client...")
     
-    IO.puts("\n1. Starting Hermes client with Claude Code MCP server...")
-    case start_link(transport: transport_config, name: __MODULE__) do
-      {:ok, pid} ->
-        IO.puts("   ✅ Client started successfully: #{inspect(pid)}")
+    # Set up proper supervision tree like the docs show
+    children = [
+      {__MODULE__, transport: {:stdio, command: "claude", args: ["mcp", "serve", "--debug"]}}
+    ]
+    
+    case Supervisor.start_link(children, strategy: :one_for_one, name: __MODULE__.Supervisor) do
+      {:ok, _pid} ->
+        IO.puts("   ✅ Supervisor started successfully")
+        # Give it a moment to initialize
+        Process.sleep(1000)
         test_real_connection()
       {:error, reason} ->
-        IO.puts("   ❌ Failed to start client: #{inspect(reason)}")
+        IO.puts("   ❌ Failed to start supervisor: #{inspect(reason)}")
     end
   end
   
