@@ -25,6 +25,18 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
       {:error, error}
   end
 
+  defp handle_intelligence(payload, meta) do
+    # Validate analysis type if present
+    analysis_type = Map.get(payload, :analysis) || Map.get(payload, "analysis")
+    
+    if analysis_type && analysis_type == "invalid_type" do
+      return {:error, :invalid_analysis_type}
+    end
+    
+    Logger.info("System4: Processing intelligence - #{inspect(payload)}")
+    :ok
+  end
+
   defp handle_analyze(payload, meta) do
     Logger.info("System4: Analyzing data - #{inspect(payload)}")
     :ok
