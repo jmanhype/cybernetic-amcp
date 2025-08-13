@@ -7,6 +7,8 @@ defmodule Cybernetic.Transport.Message do
   @doc """
   Normalize a message to canonical shape expected by NonceBloom and other components.
   
+  Flattens security headers from nested structures to top-level for NonceBloom validation.
+  
   Expected canonical shape:
   %{
     "headers" => %{...},
@@ -19,6 +21,7 @@ defmodule Cybernetic.Transport.Message do
   """
   def normalize(message) when is_map(message) do
     message
+    |> flatten_security_headers()
   end
   
   def normalize(binary) when is_binary(binary) do
