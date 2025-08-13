@@ -14,15 +14,20 @@ defmodule Cybernetic.Application do
       
       # AMQP Transport
       Cybernetic.Transport.AMQP.Connection,
+      Cybernetic.Core.Transport.AMQP.Publisher,
       
       # MCP Registry  
       Cybernetic.Core.MCP.Hermes.Registry,
       
-      # Goldrush Plugin
+      # Goldrush Integration
       {Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic, []},
+      Cybernetic.Core.Goldrush.Bridge,
       
       # VSM Supervisor (includes S1-S5)
-      Cybernetic.VSM.Supervisor
+      Cybernetic.VSM.Supervisor,
+      
+      # Telegram Agent (S1)
+      Cybernetic.VSM.System1.Agents.TelegramAgent
     ]
     opts = [strategy: :one_for_one, name: Cybernetic.Supervisor]
     Supervisor.start_link(children, opts)
