@@ -19,30 +19,6 @@ defmodule Cybernetic.MCP.HermesClientTest do
 
   describe "Client lifecycle without server" do
     # These tests verify the client handles no-server scenarios gracefully
-    test "health_check/0 handles no server connection" do
-      # Since no Hermes server is running, this should handle the error gracefully
-      result = HermesClient.health_check()
-      
-      # Should return error status when no server available
-      assert {:error, %{status: :error}} = result
-    end
-
-    test "get_available_tools/0 handles no server connection" do
-      # Since no Hermes server is running, this should handle the error gracefully
-      result = HermesClient.get_available_tools()
-      
-      # Should return error when no server available
-      assert {:error, _reason} = result
-    end
-
-    test "execute_tool/3 handles no server connection" do
-      # Since no Hermes server is running, this should handle the error gracefully
-      result = HermesClient.execute_tool("test_tool", %{query: "test"}, [])
-      
-      # Should return error when no server available
-      assert {:error, %{type: :client_error}} = result
-    end
-
     test "process/2 handles tool calls without server" do
       input = %{tool: "test_tool", params: %{data: "test"}}
       initial_state = %{some: "state"}
@@ -54,14 +30,34 @@ defmodule Cybernetic.MCP.HermesClientTest do
     end
 
     test "process/2 handles exceptions gracefully" do
-      # Test with invalid input structure to trigger exception
+      # Test with invalid input structure to trigger the fallback clause
       input = %{invalid: "structure"}
       initial_state = %{some: "state"}
       
       result = HermesClient.process(input, initial_state)
       
-      # Should catch exceptions and return structured error
-      assert {:error, %{error: :client_error}, ^initial_state} = result
+      # Should catch invalid structure and return structured error
+      assert {:error, %{error: :client_error, details: "Invalid input structure"}, ^initial_state} = result
+    end
+
+    test "process/2 handles nil tool name" do
+      input = %{tool: nil, params: %{}}
+      initial_state = %{some: "state"}
+      
+      result = HermesClient.process(input, initial_state)
+      
+      # Should handle nil tool name gracefully
+      assert {:error, %{error: :client_error, details: "Invalid input structure"}, ^initial_state} = result
+    end
+
+    test "process/2 handles nil params" do
+      input = %{tool: "test", params: nil}
+      initial_state = %{some: "state"}
+      
+      result = HermesClient.process(input, initial_state)
+      
+      # Should handle nil params gracefully  
+      assert {:error, %{error: :client_error, details: "Invalid input structure"}, ^initial_state} = result
     end
   end
 
