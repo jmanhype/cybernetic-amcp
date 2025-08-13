@@ -14,6 +14,7 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
       "learn" -> handle_learn(payload, meta)
       "predict" -> handle_predict(payload, meta)
       "intelligence_update" -> handle_intelligence_update(payload, meta)
+      "algedonic" -> handle_algedonic(payload, meta)
       "default" -> handle_default(payload, meta)
       _ -> 
         Logger.warning("Unknown operation for System4: #{operation}")
