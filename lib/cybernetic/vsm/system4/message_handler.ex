@@ -9,13 +9,14 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     Logger.debug("System4 received #{operation}: #{inspect(payload)}")
     
     case operation do
+      "intelligence" -> handle_intelligence(payload, meta)
       "analyze" -> handle_analyze(payload, meta)
       "learn" -> handle_learn(payload, meta)
       "predict" -> handle_predict(payload, meta)
       "intelligence_update" -> handle_intelligence_update(payload, meta)
       "default" -> handle_default(payload, meta)
       _ -> 
-        Logger.warn("Unknown operation for System4: #{operation}")
+        Logger.warning("Unknown operation for System4: #{operation}")
         {:error, :unknown_operation}
     end
   rescue
