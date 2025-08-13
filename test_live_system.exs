@@ -127,7 +127,7 @@ test_pid = self()
 InMemory.publish("test", "s1.operation", %{
   type: "vsm.s1.operation",
   operation: "telemetry_test"
-})
+}, [])
 
 receive do
   {:telemetry, ^telemetry_ref, measurements, metadata} ->
