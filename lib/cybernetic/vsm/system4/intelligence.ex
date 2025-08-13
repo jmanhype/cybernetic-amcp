@@ -9,8 +9,19 @@ defmodule Cybernetic.VSM.System4.Intelligence do
   
   # Handle transport messages from in-memory transport
   def handle_cast({:transport_message, message, opts}, state) do
-    # Route message to the appropriate message handler
-    operation = Map.get(message, "operation", "unknown")
+    # Extract operation from type field first (for routing keys), then fallback to operation field
+    operation = case Map.get(message, :type) || Map.get(message, "type") do
+      "vsm.s4.intelligence" -> "intelligence"
+      "vsm.s4.analyze" -> "analyze"
+      "vsm.s4.learn" -> "learn" 
+      "vsm.s4.predict" -> "predict"
+      "algedonic.pain" -> "algedonic"
+      "algedonic.pleasure" -> "algedonic"
+      _ ->
+        # Fallback to operation field
+        Map.get(message, :operation, Map.get(message, "operation", "unknown"))
+    end
+    
     meta = Keyword.get(opts, :meta, %{})
     
     # Process the message through the message handler
