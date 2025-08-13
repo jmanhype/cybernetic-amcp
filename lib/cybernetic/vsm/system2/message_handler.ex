@@ -9,13 +9,14 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     Logger.debug("System2 received #{operation}: #{inspect(payload)}")
     
     case operation do
+      "coordination" -> handle_coordination(payload, meta)
       "coordinate" -> handle_coordinate(payload, meta)
       "sync" -> handle_sync(payload, meta)
       "status_request" -> handle_status_request(payload, meta)
       "priority_update" -> handle_priority_update(payload, meta)
       "default" -> handle_default(payload, meta)
       _ -> 
-        Logger.warn("Unknown operation for System2: #{operation}")
+        Logger.warning("Unknown operation for System2: #{operation}")
         {:error, :unknown_operation}
     end
   rescue
