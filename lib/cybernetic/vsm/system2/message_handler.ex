@@ -62,10 +62,11 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     Logger.debug("System2: Sync request - #{inspect(payload)}")
     
     # Broadcast sync to all systems
-    Cybernetic.Transport.GenStageAdapter.broadcast_vsm_message(
-      "sync_response", 
+    Cybernetic.Core.Transport.AMQP.Publisher.publish(
+      "cyb.events",
+      "s2.sync_response", 
       %{"timestamp" => :os.system_time(:millisecond), "data" => payload},
-      meta
+      [source: :system2, meta: meta]
     )
     
     :ok
@@ -99,11 +100,11 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     action = Map.get(payload, "action", "coordinate")
     
     Enum.each(systems, fn system ->
-      Cybernetic.Transport.GenStageAdapter.publish_vsm_message(
-        system,
-        "coordination",
+      Cybernetic.Core.Transport.AMQP.Publisher.publish(
+        "cyb.commands",
+        "#{system}.coordination",
         Map.put(payload, "coordinator", "system2"),
-        meta
+        [source: :system2, meta: meta]
       )
     end)
   end
@@ -112,11 +113,11 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     case Map.get(meta, :source_node) do
       nil -> Logger.debug("System2: No source node for status response")
       _source_node ->
-        Cybernetic.Transport.GenStageAdapter.publish_vsm_message(
-          :system2,
-          "status_response",
+        Cybernetic.Core.Transport.AMQP.Publisher.publish(
+          "cyb.events",
+          "s2.status_response",
           status,
-          meta
+          [source: :system2, meta: meta]
         )
     end
   end
