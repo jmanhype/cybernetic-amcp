@@ -143,17 +143,22 @@ defmodule Cybernetic.MCP.HermesClientTest do
       assert Cybernetic.Plugin in behaviours
     end
 
-    test "module defines expected Hermes client configuration" do
-      # Test that the module is properly configured
-      # The actual Hermes.Client macros should define proper callbacks
-      assert function_exported?(HermesClient, :start_link, 1)
-      assert function_exported?(HermesClient, :init, 1)
+    test "module defines expected functions from Hermes.Client" do
+      # Test that the module has functions from use Hermes.Client
+      assert function_exported?(HermesClient, :ping, 0)
+      assert function_exported?(HermesClient, :list_tools, 0)
+      assert function_exported?(HermesClient, :call_tool, 2)
+      assert function_exported?(HermesClient, :read_resource, 1)
+      
+      # Plugin behavior functions
       assert function_exported?(HermesClient, :metadata, 0)
+      assert function_exported?(HermesClient, :process, 2)
+      assert function_exported?(HermesClient, :handle_event, 2)
     end
   end
 
   describe "error scenarios" do
-    test "handles network timeouts" do
+    test "handles network timeouts gracefully" do
       # Test timeout scenario
       result = HermesClient.execute_tool("slow_tool", %{}, [timeout: 1])
       
@@ -161,10 +166,10 @@ defmodule Cybernetic.MCP.HermesClientTest do
       assert {:error, %{type: :client_error}} = result
     end
 
-    test "handles malformed responses" do
+    test "handles malformed tool parameters" do
       # Test with invalid tool response format
       input = %{tool: "malformed_tool", params: %{}}
-      state = %{cfg: [], tools: %{}, connected: false}
+      state = %{some: "state"}
       
       result = HermesClient.process(input, state)
       
