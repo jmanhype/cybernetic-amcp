@@ -14,7 +14,9 @@ IO.puts """
 Process.sleep(1000)
 
 IO.puts "📡 Checking AMQP Connection..."
-IO.inspect(Cybernetic.Transport.AMQP.Connection.get_status(), label: "AMQP Status")
+conn_pid = Process.whereis(Cybernetic.Transport.AMQP.Connection)
+amqp_status = if conn_pid && Process.alive?(conn_pid), do: "✅ Connected", else: "❌ Disconnected"
+IO.puts "  AMQP Status: #{amqp_status} (PID: #{inspect(conn_pid)})"
 
 IO.puts "\n🔍 Verifying All VSM Systems..."
 systems = [
