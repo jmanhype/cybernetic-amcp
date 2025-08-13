@@ -17,11 +17,17 @@ try do
     nil -> IO.puts("  ❌ MCP Registry not started")
     pid -> 
       IO.puts("  ✓ MCP Registry running: #{inspect(pid)}")
+      # Wait for tools to register (happens 100ms after startup)
+      Process.sleep(150)
       # Check if tools are registered
-      tools = Cybernetic.Core.MCP.Hermes.Registry.list_tools()
-      IO.puts("    Tools registered: #{length(tools)}")
-      if length(tools) > 0 do
-        IO.puts("    Sample tools: #{Enum.take(tools, 3) |> Enum.map(&elem(&1, 0)) |> inspect()}")
+      case Cybernetic.Core.MCP.Hermes.Registry.list_tools() do
+        {:ok, tools} ->
+          IO.puts("    Tools registered: #{length(tools)}")
+          if length(tools) > 0 do
+            IO.puts("    Sample tools: #{Enum.take(tools, 3) |> Enum.map(& &1.name) |> inspect()}")
+          end
+        _ ->
+          IO.puts("    ❌ Failed to list tools")
       end
   end
   
