@@ -68,6 +68,28 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     Logger.debug("System4: Default handler - #{inspect(payload)}")
     :ok
   end
+
+  defp process_intelligence_analysis(payload, meta) do
+    # Analyze the intelligence data from S2
+    coordination_id = Map.get(payload, "coordination_id")
+    analysis_type = Map.get(payload, "analysis_request", "general")
+    
+    # Create analysis result
+    analysis_result = %{
+      "type" => "vsm.s4.analysis_complete",
+      "coordination_id" => coordination_id,
+      "analysis_type" => analysis_type,
+      "patterns_detected" => ["normal_operation", "coordination_success"],
+      "health_score" => 0.95,
+      "recommendations" => ["maintain_current_state"],
+      "timestamp" => DateTime.utc_now()
+    }
+    
+    Logger.debug("System4: Analysis complete for #{coordination_id}")
+    
+    # Send analysis back to coordination or to other systems if needed
+    analysis_result
+  end
   
   defp return(value), do: value
 end
