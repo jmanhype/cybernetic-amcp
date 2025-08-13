@@ -36,7 +36,7 @@ defmodule Cybernetic.Transport.InMemory do
 
   defp send_to_system(system, message, opts) do
     # For tests, send message to test collector if present
-    if test_collector = Process.get(:test_collector) do
+    if test_collector = :persistent_term.get({:test_collector, __MODULE__}, nil) do
       send(test_collector, {:"#{system}_message", message})
     end
     
