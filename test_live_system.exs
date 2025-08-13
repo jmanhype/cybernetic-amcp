@@ -90,7 +90,7 @@ for i <- 1..10 do
     type: "vsm.s1.error",
     error: "test_error_#{i}",
     timestamp: DateTime.utc_now()
-  })
+  }, [])
 end
 IO.puts("  ✅ Triggered pain signal (10 errors)")
 
@@ -103,7 +103,7 @@ for i <- 1..20 do
     operation: "task_#{i}",
     latency: :rand.uniform(50),
     timestamp: DateTime.utc_now()
-  })
+  }, [])
 end
 IO.puts("  ✅ Triggered pleasure signal (20 successes)")
 
