@@ -5,8 +5,10 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   Defines durable exchanges, queues, and bindings for VSM systems.
   """
   
+  use GenServer
   require Logger
   alias AMQP.{Channel, Exchange, Queue}
+  alias Cybernetic.Core.Transport.AMQP.Connection
   
   @exchanges [
     # Core event bus for all systems
