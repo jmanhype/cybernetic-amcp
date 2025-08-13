@@ -9,7 +9,8 @@ defmodule RealMCPTest do
   use Hermes.Client,
     name: "CyberneticTest",
     version: "0.1.0",
-    protocol_version: "2024-11-05"
+    protocol_version: "2024-11-05",
+    capabilities: [:roots]
 
   def start_and_test do
     IO.puts("🧪 Testing REAL MCP Connection")
