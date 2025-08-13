@@ -16,7 +16,20 @@ defmodule Cybernetic.VSM.System1.Operational do
   
   # Test interface - routes messages through the message handler
   def handle_message(message, meta \\ %{}) do
-    operation = Map.get(message, :operation, "unknown")
+    # Extract operation from type field or operation field
+    operation = case Map.get(message, :type) || Map.get(message, "type") do
+      "vsm.s1.operation" -> "operation"
+      "vsm.s1.error" -> "error"
+      "vsm.s1.success" -> "success"
+      "vsm.s1.status" -> "status_update"
+      "vsm.s1.resource" -> "resource_request"
+      "vsm.s1.coordination" -> "coordination"
+      "vsm.s1.telemetry" -> "telemetry"
+      _ ->
+        # Fallback to operation field or operation extracted from message
+        Map.get(message, :operation, Map.get(message, "operation", "default"))
+    end
+    
     Cybernetic.VSM.System1.MessageHandler.handle_message(operation, message, meta)
   end
 end
