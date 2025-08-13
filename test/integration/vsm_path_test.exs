@@ -275,6 +275,7 @@ defmodule Cybernetic.Integration.VSMPathTest do
   
   defmodule TestCollector do
     use GenServer
+    require Logger
     
     def init(test_pid) do
       # Subscribe to telemetry events
