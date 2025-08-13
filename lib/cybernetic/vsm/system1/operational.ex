@@ -13,4 +13,10 @@ defmodule Cybernetic.VSM.System1.Operational do
     ]
     Supervisor.init(children, strategy: :one_for_one)
   end
+  
+  # Test interface - routes messages through the message handler
+  def handle_message(message, meta \\ %{}) do
+    operation = Map.get(message, :operation, "unknown")
+    Cybernetic.VSM.System1.MessageHandler.handle_message(operation, message, meta)
+  end
 end
