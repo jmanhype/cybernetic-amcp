@@ -276,6 +276,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
           })
         end
     end
+    end
   end
 
   defp emit_algedonic_signal(type, data) do
