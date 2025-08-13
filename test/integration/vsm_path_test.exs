@@ -358,5 +358,35 @@ defmodule Cybernetic.Integration.VSMPathTest do
       metrics = Map.put(state, :path_latency, current_time - state.start_time)
       {:reply, metrics, state}
     end
+
+    # Handle direct system messages from InMemory transport
+    def handle_info({:system1_message, message}, state) do
+      send(state.test_pid, {:s1_message, message})
+      {:noreply, Map.update!(state, :s1_events, &(&1 + 1))}
+    end
+
+    def handle_info({:system2_message, message}, state) do
+      send(state.test_pid, {:s2_message, message})
+      {:noreply, Map.update!(state, :s2_coordinations, &(&1 + 1))}
+    end
+
+    def handle_info({:system4_message, message}, state) do
+      send(state.test_pid, {:s4_message, message})
+      
+      # Check for interventions and optimizations
+      case message["type"] do
+        "vsm.s4.intervention" -> send(state.test_pid, {:s4_intervention, message})
+        "vsm.s4.optimization" -> send(state.test_pid, {:s4_optimization, message})
+        _ -> :ok
+      end
+      
+      {:noreply, Map.update!(state, :s4_intelligence, &(&1 + 1))}
+    end
+
+    # Catch-all for unexpected messages
+    def handle_info(msg, state) do
+      Logger.debug("TestCollector received unexpected message: #{inspect(msg)}")
+      {:noreply, state}
+    end
   end
 end
