@@ -33,9 +33,9 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     Logger.info("System1: Processing operation - #{inspect(payload)}")
     
     # Forward to operational supervisor if it exists
-    case Process.whereis(Cybernetic.VSM.System1.Supervisor) do
+    case Process.whereis(Cybernetic.VSM.System1.Operational) do
       nil -> 
-        Logger.warn("System1 supervisor not found")
+        Logger.warn("System1 operational supervisor not found")
         {:error, :supervisor_not_found}
       pid -> 
         # Send message to supervisor for processing
