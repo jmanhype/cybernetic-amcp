@@ -28,7 +28,9 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
 
   def init(_opts) do
     :ets.new(@registry_table, [:named_table, :public, :set, read_concurrency: true])
-    register_builtin_tools()
+    
+    # Register builtin tools after init
+    Process.send_after(self(), :register_builtin_tools, 100)
     
     {:ok, %{
       tools: %{},
