@@ -14,8 +14,8 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
     # Attach telemetry handlers
     attach_telemetry_handlers()
     
-    # Setup Goldrush patterns if available
-    setup_goldrush_patterns()
+    # Setup Goldrush patterns after init completes
+    Process.send_after(self(), :setup_patterns, 100)
     
     {:ok, %{
       patterns: %{},
