@@ -136,7 +136,8 @@ defmodule Cybernetic.Integration.VSMPathTest do
       # Verify S4 received pain signal
       assert_receive {:s4_message, pain_msg}, @test_timeout
       assert pain_msg["type"] == "algedonic.pain"
-      assert pain_msg["severity"] in [:moderate, :severe, :critical]
+      data = Map.get(pain_msg, "data", %{})
+      assert data[:severity] in [:moderate, :severe, :critical]
       
       # Verify S4 generates intervention
       assert_receive {:s4_intervention, intervention}, @test_timeout
