@@ -103,14 +103,18 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
       Logger.info("Declared exchange: #{name} (#{type})")
     end)
 
-    # Setup queues
+    # Setup queues using config
+    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
+    commands_exchange = Map.get(exchanges, :commands, "cyb.commands")
+    telemetry_exchange = Map.get(exchanges, :telemetry, "cyb.telemetry")
+    
     [
-      {"cyb.s1.ops", "cyb.commands", "s1.*"},
-      {"cyb.s2.coord", "cyb.commands", "s2.*"},
-      {"cyb.s3.control", "cyb.commands", "s3.*"},
-      {"cyb.s4.llm", "cyb.commands", "s4.*"},
-      {"cyb.s5.policy", "cyb.commands", "s5.*"},
-      {"cyb.telemetry.q", "cyb.telemetry", "#"}
+      {"cyb.s1.ops", commands_exchange, "s1.*"},
+      {"cyb.s2.coord", commands_exchange, "s2.*"},
+      {"cyb.s3.control", commands_exchange, "s3.*"},
+      {"cyb.s4.llm", commands_exchange, "s4.*"},
+      {"cyb.s5.policy", commands_exchange, "s5.*"},
+      {"cyb.telemetry.q", telemetry_exchange, "#"}
     ]
     |> Enum.each(fn {queue, exchange, routing_key} ->
       AMQP.Queue.declare(channel, queue, durable: true)
