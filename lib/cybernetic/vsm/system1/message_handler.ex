@@ -223,4 +223,79 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   defp generate_coordination_id do
     "coord_#{:os.system_time(:millisecond)}_#{:rand.uniform(1000)}"
   end
+
+  defp record_algedonic_event(type, payload, meta) do
+    # Record algedonic events and generate signals when thresholds are met
+    algedonic_data = %{
+      type: type,
+      severity: Map.get(payload, "severity", "normal"),
+      timestamp: DateTime.utc_now(),
+      source: Map.get(payload, "source", "unknown"),
+      operation: Map.get(payload, "operation", "unknown")
+    }
+    
+    # Store in process dictionary for simple state tracking
+    events = Process.get({:algedonic_events, type}, [])
+    recent_events = [algedonic_data | events] |> Enum.take(100)  # Keep last 100 events
+    Process.put({:algedonic_events, type}, recent_events)
+    
+    # Check if we should emit an algedonic signal
+    check_algedonic_thresholds(type, recent_events)
+  end
+
+  defp check_algedonic_thresholds(type, events) do
+    case type do
+      :pain ->
+        # Check error rate in last time window
+        recent_errors = Enum.filter(events, fn event ->
+          DateTime.diff(DateTime.utc_now(), event.timestamp, :millisecond) < 10_000  # Last 10 seconds
+        end)
+        
+        if length(recent_errors) >= 5 do  # 5 or more errors in 10 seconds triggers pain
+          emit_algedonic_signal(:pain, %{
+            severity: :moderate,
+            error_count: length(recent_errors),
+            time_window: 10_000
+          })
+        end
+        
+      :pleasure ->
+        # Check success rate
+        recent_successes = Enum.filter(events, fn event ->
+          DateTime.diff(DateTime.utc_now(), event.timestamp, :millisecond) < 30_000  # Last 30 seconds
+        end)
+        
+        if length(recent_successes) >= 15 do  # 15 or more successes triggers pleasure
+          emit_algedonic_signal(:pleasure, %{
+            intensity: :moderate,
+            success_count: length(recent_successes),
+            time_window: 30_000
+          })
+        end
+    end
+  end
+
+  defp emit_algedonic_signal(type, data) do
+    signal = %{
+      "type" => "algedonic.#{type}",
+      "source_system" => "s1",
+      "data" => data,
+      "timestamp" => DateTime.utc_now()
+    }
+    
+    # Send to S4 for processing
+    case Cybernetic.Core.Transport.AMQP.Publisher.publish(
+      "cyb.commands",
+      "s4.algedonic",
+      signal,
+      [source: :system1]
+    ) do
+      :ok ->
+        Logger.info("System1: Emitted #{type} algedonic signal")
+        :ok
+      error ->
+        Logger.warn("System1: Failed to emit algedonic signal: #{inspect(error)}")
+        error
+    end
+  end
 end
