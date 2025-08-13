@@ -132,12 +132,12 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
           "timestamp" => :os.system_time(:millisecond)
         }
         
-        # Use the transport adapter to send response
-        Cybernetic.Transport.GenStageAdapter.publish_vsm_message(
-          :system1, 
-          "resource_response", 
+        # Use AMQP Publisher to send response
+        Cybernetic.Core.Transport.AMQP.Publisher.publish(
+          "cyb.events", 
+          "s1.resource_response", 
           response,
-          %{target_node: source_node}
+          [source: :system1, target_node: source_node]
         )
     end
   end
