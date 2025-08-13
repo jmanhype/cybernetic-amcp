@@ -53,4 +53,17 @@ defmodule Cybernetic.MixProject do
       {:plug_cowboy, "~> 2.5"}
     ]
   end
+
+  defp aliases do
+    [
+      "cyb.up": [
+        "deps.get",
+        "compile",
+        "run --no-halt"
+      ],
+      "cyb.test": ["test", "run test/system_validation.exs"],
+      "cyb.reset": ["deps.clean --all", "deps.get", "compile"],
+      "cyb.docker": ["cmd docker-compose up -d"]
+    ]
+  end
 end
