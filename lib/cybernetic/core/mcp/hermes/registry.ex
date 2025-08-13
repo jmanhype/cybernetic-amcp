@@ -166,60 +166,67 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   # Private functions
 
   defp register_builtin_tools do
-    # VSM Tools
-    register_tool(
-      "vsm_query",
-      "Query VSM system state",
-      %{system: :string, query: :string},
-      {Cybernetic.Apps.VSM.Query, :execute},
-      capabilities: ["vsm", "query", "state"]
-    )
+    tools = [
+      # VSM Tools
+      {"vsm_query", %Tool{
+        name: "vsm_query",
+        description: "Query VSM system state",
+        parameters: %{system: :string, query: :string},
+        handler: {Cybernetic.Apps.VSM.Query, :execute},
+        capabilities: ["vsm", "query", "state"]
+      }},
+      
+      # CRDT Tools
+      {"crdt_merge", %Tool{
+        name: "crdt_merge",
+        description: "Merge CRDT states",
+        parameters: %{state1: :map, state2: :map},
+        handler: {Cybernetic.Core.CRDT.Graph, :merge},
+        capabilities: ["crdt", "merge", "distributed"]
+      }},
+      
+      {"crdt_query", %Tool{
+        name: "crdt_query",
+        description: "Query CRDT graph",
+        parameters: %{query: :string, params: :map},
+        handler: {Cybernetic.Core.CRDT.Graph, :query},
+        capabilities: ["crdt", "query", "graph"]
+      }},
+      
+      # Telemetry Tools
+      {"telemetry_emit", %Tool{
+        name: "telemetry_emit",
+        description: "Emit telemetry event",
+        parameters: %{event: :string, measurements: :map, metadata: :map},
+        handler: {Cybernetic.Core.Telemetry, :emit},
+        capabilities: ["telemetry", "metrics", "events"]
+      }},
+      
+      # Security Tools
+      {"generate_nonce", %Tool{
+        name: "generate_nonce",
+        description: "Generate cryptographic nonce",
+        parameters: %{},
+        handler: {Cybernetic.Core.Security.NonceBloom, :generate_nonce},
+        capabilities: ["security", "nonce", "crypto"]
+      }},
+      
+      # Telegram Tools
+      {"send_telegram", %Tool{
+        name: "send_telegram",
+        description: "Send message via Telegram",
+        parameters: %{chat_id: :string, text: :string, options: :map},
+        handler: {Cybernetic.Apps.Telegram.Client, :send_message},
+        capabilities: ["telegram", "messaging", "notification"]
+      }}
+    ]
     
-    # CRDT Tools
-    register_tool(
-      "crdt_merge",
-      "Merge CRDT states",
-      %{state1: :map, state2: :map},
-      {Cybernetic.Core.CRDT.Graph, :merge},
-      capabilities: ["crdt", "merge", "distributed"]
-    )
+    # Insert directly into ETS to avoid self-call
+    Enum.each(tools, fn {name, tool} ->
+      :ets.insert(@registry_table, {name, tool})
+    end)
     
-    register_tool(
-      "crdt_query",
-      "Query CRDT graph",
-      %{query: :string, params: :map},
-      {Cybernetic.Core.CRDT.Graph, :query},
-      capabilities: ["crdt", "query", "graph"]
-    )
-    
-    # Telemetry Tools
-    register_tool(
-      "telemetry_emit",
-      "Emit telemetry event",
-      %{event: :string, measurements: :map, metadata: :map},
-      {Cybernetic.Core.Telemetry, :emit},
-      capabilities: ["telemetry", "metrics", "events"]
-    )
-    
-    # Security Tools
-    register_tool(
-      "generate_nonce",
-      "Generate cryptographic nonce",
-      %{},
-      {Cybernetic.Core.Security.NonceBloom, :generate_nonce},
-      capabilities: ["security", "nonce", "crypto"]
-    )
-    
-    # Telegram Tools
-    register_tool(
-      "send_telegram",
-      "Send message via Telegram",
-      %{chat_id: :string, text: :string, options: :map},
-      {Cybernetic.Apps.Telegram.Client, :send_message},
-      capabilities: ["telegram", "messaging", "notification"]
-    )
-    
-    Logger.info("Registered #{:ets.info(@registry_table, :size)} builtin MCP tools")
+    Logger.info("Registered #{length(tools)} builtin MCP tools")
   end
 
   defp invoke_handler(%Tool{handler: {module, function}}, params, context) do
