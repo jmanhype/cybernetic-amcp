@@ -251,7 +251,7 @@ defmodule Cybernetic.Integration.VSMPathTest do
   defmodule TestCollector do
     use GenServer
     
-    def init(_) do
+    def init(test_pid) do
       # Subscribe to telemetry events
       :telemetry.attach_many(
         "test-collector",
@@ -267,6 +267,7 @@ defmodule Cybernetic.Integration.VSMPathTest do
       )
       
       {:ok, %{
+        test_pid: test_pid,
         s1_events: 0,
         s2_coordinations: 0,
         s4_intelligence: 0,
