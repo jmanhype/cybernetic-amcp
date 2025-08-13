@@ -38,7 +38,7 @@ defmodule Cybernetic.MixProject do
       {:goldrush_plugins, git: "https://github.com/DeadZen/goldrush", branch: "develop-plugins", optional: true},
       
       # Telegram bot integration
-      {:nadia, "~> 0.7"},
+      {:ex_gram, "~> 0.52"},  # More modern Telegram bot library
       
       # Security and utilities
       {:bloomex, "~> 1.0"},  # Bloom filter for replay protection
