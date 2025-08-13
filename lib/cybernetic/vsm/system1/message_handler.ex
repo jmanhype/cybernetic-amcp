@@ -17,6 +17,8 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
       "resource_request" -> handle_resource_request(payload, meta)
       "coordination" -> handle_coordination(payload, meta)
       "telemetry" -> handle_telemetry(payload, meta)
+      "error" -> handle_error(payload, meta)
+      "success" -> handle_success(payload, meta)
       "default" -> handle_default(payload, meta)
       _ -> 
         Logger.warn("Unknown operation for System1: #{operation}")
