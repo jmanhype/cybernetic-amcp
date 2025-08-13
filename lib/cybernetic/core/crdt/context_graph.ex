@@ -55,10 +55,47 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
     {:noreply, state}
   end
 
-  def handle_call({:query, _criteria}, _from, %{crdt: crdt} = state) do
-    # Simple implementation - get all values for now
-    # Could be optimized with indexing
-    values = DeltaCrdt.read(crdt) |> Map.values()
-    {:reply, values, state}
+  def handle_call({:query, criteria}, _from, %{crdt: crdt} = state) do
+    all_triples = DeltaCrdt.read(crdt) |> Map.values()
+    
+    # Filter triples based on criteria
+    filtered_triples = filter_triples(all_triples, normalize_criteria(criteria))
+    
+    {:reply, filtered_triples, state}
+  end
+
+  # Private helper functions
+
+  defp normalize_criteria(criteria) when is_list(criteria), do: Enum.into(criteria, %{})
+  defp normalize_criteria(criteria) when is_map(criteria), do: criteria
+  defp normalize_criteria(_), do: %{}
+
+  defp filter_triples(triples, criteria) when map_size(criteria) == 0, do: triples
+  defp filter_triples(triples, criteria) do
+    Enum.filter(triples, &matches_criteria?(&1, criteria))
+  end
+
+  defp matches_criteria?(triple, criteria) do
+    Enum.all?(criteria, fn
+      {:subject, value} -> triple.subject == value
+      {"subject", value} -> triple.subject == value
+      {:predicate, value} -> triple.predicate == value  
+      {"predicate", value} -> triple.predicate == value
+      {:object, value} -> triple.object == value
+      {"object", value} -> triple.object == value
+      {key, value} when key in [:meta, "meta"] -> 
+        matches_meta_criteria?(triple.meta, value)
+      _ -> true  # Unknown criteria are ignored
+    end)
+  end
+
+  defp matches_meta_criteria?(meta, criteria) when is_map(criteria) do
+    Enum.all?(criteria, fn {key, value} ->
+      Map.get(meta, key) == value or Map.get(meta, to_string(key)) == value
+    end)
+  end
+  defp matches_meta_criteria?(meta, value) do
+    # Simple equality check for non-map criteria
+    meta == value
   end
 end
