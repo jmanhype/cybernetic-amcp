@@ -5,11 +5,18 @@ defmodule Cybernetic.MCP.CoreTest do
 
   describe "MCP Core" do
     setup do
-      # MCP Core and Registry are started by the application
-      # Just wait for initial discovery
+      # Registry is started by the application
+      # Start MCP Core for testing
+      {:ok, pid} = Core.start_link([])
+      
+      # Wait for initial discovery
       Process.sleep(200)
       
-      {:ok, mcp: Process.whereis(Cybernetic.MCP.Core)}
+      on_exit(fn ->
+        if Process.alive?(pid), do: GenServer.stop(pid)
+      end)
+      
+      {:ok, mcp: pid}
     end
 
     test "discovers and registers tools on startup", %{mcp: _mcp} do
