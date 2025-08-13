@@ -114,39 +114,37 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
   defp check_condition(_, _), do: false
 
   defp setup_goldrush_patterns do
-    # Security anomaly detector
-    register_pattern("security_anomaly", %{
-      match_all: [
-        {:eq, :event, [:cybernetic, :agent, :event]},
-        {:gt, [:metadata, :failures], 3}
-      ],
-      action: fn event ->
-        # Emit algedonic pain signal to S3
-        emit_algedonic_signal(:pain, :security, event)
-      end
-    })
+    patterns = %{
+      "security_anomaly" => %{
+        match_all: [
+          {:eq, :event, [:cybernetic, :agent, :event]},
+          {:gt, [:metadata, :failures], 3}
+        ],
+        action: fn event ->
+          # Emit algedonic pain signal to S3
+          emit_algedonic_signal(:pain, :security, event)
+        end
+      },
+      "high_latency" => %{
+        match_all: [
+          {:gt, [:measurements, :latency], 1000}
+        ],
+        action: fn event ->
+          emit_algedonic_signal(:pain, :performance, event)
+        end
+      },
+      "success_flow" => %{
+        match_all: [
+          {:eq, [:metadata, :status], :success}
+        ],
+        action: fn event ->
+          emit_algedonic_signal(:pleasure, :achievement, event)
+        end
+      }
+    }
     
-    # High latency detector
-    register_pattern("high_latency", %{
-      match_all: [
-        {:gt, [:measurements, :latency], 1000}
-      ],
-      action: fn event ->
-        emit_algedonic_signal(:pain, :performance, event)
-      end
-    })
-    
-    # Success pattern
-    register_pattern("success_flow", %{
-      match_all: [
-        {:eq, [:metadata, :status], :success}
-      ],
-      action: fn event ->
-        emit_algedonic_signal(:pleasure, :achievement, event)
-      end
-    })
-    
-    Logger.info("Registered 3 Goldrush patterns")
+    Logger.info("Registered #{map_size(patterns)} Goldrush patterns")
+    patterns
   end
 
   def register_pattern(name, pattern) do
