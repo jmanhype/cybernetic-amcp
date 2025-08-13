@@ -299,22 +299,22 @@ defmodule Cybernetic.Integration.VSMPathTest do
     end
     
     def handle_cast({:s1_event, metadata}, state) do
-      send(self(), {:s1_message, metadata})
+      send(state.test_pid, {:s1_message, metadata})
       {:noreply, Map.update!(state, :s1_events, &(&1 + 1))}
     end
     
     def handle_cast({:s2_event, metadata}, state) do
-      send(self(), {:s2_message, metadata})
+      send(state.test_pid, {:s2_message, metadata})
       {:noreply, Map.update!(state, :s2_coordinations, &(&1 + 1))}
     end
     
     def handle_cast({:s4_event, metadata}, state) do
-      send(self(), {:s4_message, metadata})
+      send(state.test_pid, {:s4_message, metadata})
       
       # Check for interventions and optimizations
       case metadata["type"] do
-        "vsm.s4.intervention" -> send(self(), {:s4_intervention, metadata})
-        "vsm.s4.optimization" -> send(self(), {:s4_optimization, metadata})
+        "vsm.s4.intervention" -> send(state.test_pid, {:s4_intervention, metadata})
+        "vsm.s4.optimization" -> send(state.test_pid, {:s4_optimization, metadata})
         _ -> :ok
       end
       
@@ -322,7 +322,7 @@ defmodule Cybernetic.Integration.VSMPathTest do
     end
     
     def handle_cast({:telegram_event, metadata}, state) do
-      send(self(), {:telegram_response, metadata})
+      send(state.test_pid, {:telegram_response, metadata})
       {:noreply, Map.update!(state, :telegram_commands, &(&1 + 1))}
     end
     
