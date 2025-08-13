@@ -35,23 +35,48 @@ defmodule RealMCPTest do
   end
   
   defp test_real_connection do
-    IO.puts("\n2. Testing ping...")
+    IO.puts("\n2. Initializing client...")
     try do
-      result = ping()
-      IO.puts("   🎯 PING SUCCESS: #{inspect(result)}")
-      
-      IO.puts("\n3. Listing available tools...")
-      case list_tools() do
-        {:ok, %{result: %{"tools" => tools}}} ->
-          IO.puts("   🎯 FOUND #{length(tools)} TOOLS!")
+      # First initialize the client properly
+      case initialize() do
+        {:ok, _} ->
+          IO.puts("   ✅ Client initialized successfully")
           
-          Enum.each(tools, fn tool ->
-            IO.puts("      - #{tool["name"]}: #{tool["description"]}")
-          end)
+          IO.puts("\n3. Testing ping...")
+          case ping() do
+            :pong ->
+              IO.puts("   🎯 PING SUCCESS: :pong")
+            {:ok, result} ->
+              IO.puts("   🎯 PING SUCCESS: #{inspect(result)}")
+            error ->
+              IO.puts("   ⚠️  PING failed: #{inspect(error)}")
+          end
           
-          test_tool_execution(tools)
+          IO.puts("\n4. Getting server info...")
+          case get_server_info() do
+            {:ok, info} ->
+              IO.puts("   🎯 SERVER INFO: #{inspect(info)}")
+            error ->
+              IO.puts("   ⚠️  Server info failed: #{inspect(error)}")
+          end
+          
+          IO.puts("\n5. Listing available tools...")
+          case list_tools() do
+            {:ok, %{result: %{"tools" => tools}}} ->
+              IO.puts("   🎯 FOUND #{length(tools)} TOOLS!")
+              
+              Enum.each(tools, fn tool ->
+                IO.puts("      - #{tool["name"]}: #{tool["description"]}")
+              end)
+              
+              test_tool_execution(tools)
+            {:ok, result} ->
+              IO.puts("   🎯 Tools response: #{inspect(result)}")
+            error ->
+              IO.puts("   ❌ Failed to list tools: #{inspect(error)}")
+          end
         error ->
-          IO.puts("   ❌ Failed to list tools: #{inspect(error)}")
+          IO.puts("   ❌ Client initialization failed: #{inspect(error)}")
       end
     rescue
       error ->
