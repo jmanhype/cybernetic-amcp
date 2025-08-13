@@ -388,7 +388,6 @@ defmodule Cybernetic.Integration.VSMPathTest do
 
     # Catch-all for unexpected messages
     def handle_info(msg, state) do
-      require Logger
       Logger.debug("TestCollector received unexpected message: #{inspect(msg)}")
       {:noreply, state}
     end
