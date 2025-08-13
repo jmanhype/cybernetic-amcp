@@ -21,7 +21,7 @@ defmodule RealMCPTest do
     client_info = %{name: "CyberneticTest", version: "0.1.0"}
     
     IO.puts("\n1. Starting Hermes client with Claude Code MCP server...")
-    case start_link(transport: transport_config, client_info: client_info, name: __MODULE__) do
+    case start_link(transport: transport_config, name: __MODULE__) do
       {:ok, pid} ->
         IO.puts("   ✅ Client started successfully: #{inspect(pid)}")
         test_real_connection()
