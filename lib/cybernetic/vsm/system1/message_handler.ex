@@ -203,8 +203,8 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
       "timestamp" => DateTime.utc_now()
     }
     
-    # Send via AMQP to S2
-    case Cybernetic.Core.Transport.AMQP.Publisher.publish(
+    # Send via configured transport to S2
+    case Cybernetic.Transport.Behaviour.publish(
       "cyb.commands",
       "s2.coordinate", 
       coordination_msg,
