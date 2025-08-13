@@ -80,7 +80,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     # Also emit telemetry that the test collector will receive
     :telemetry.execute([:telegram, :response, :sent], %{count: 1}, %{
       chat_id: chat_id,
-      text: "System Status: OK"
+      text: "System Status: All VSM systems operational"
     })
     
     # For testing, return a simple success response
