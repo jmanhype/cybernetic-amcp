@@ -244,9 +244,10 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
   end
   
   defp emit_pleasure_signal(success_rate, avg_latency, metrics) do
+    intensity = calculate_pleasure_intensity(success_rate)
     signal = %{
       type: "algedonic.pleasure",
-      intensity: calculate_pleasure_intensity(success_rate),
+      intensity: intensity,
       success_rate: success_rate,
       avg_latency: avg_latency,
       metrics: metrics,
@@ -254,11 +255,28 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       recommendations: generate_pleasure_recommendations(success_rate, avg_latency)
     }
     
-    # Send to S4 (Intelligence) via AMQP
-    Publisher.publish("vsm.s4", signal, routing_key: "vsm.s4.algedonic.pleasure")
+    # Get exchange names from config
+    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
+    events_exchange = Map.get(exchanges, :events, "cyb.events")
     
-    # Log for visibility
-    Logger.info("PLEASURE signal emitted: success_rate=#{success_rate}, intensity=#{signal.intensity}")
+    # Route pleasure signals based on intensity
+    case intensity do
+      :euphoric ->
+        # Euphoric pleasure: Route to S5 (Policy) for optimization opportunities
+        Publisher.publish(events_exchange, signal, routing_key: "vsm.s5.algedonic.pleasure.euphoric")
+        Logger.info("EUPHORIC PLEASURE signal sent to S5 Policy: success_rate=#{success_rate}")
+        
+      :high ->
+        # High pleasure: Route to both S4 (Intelligence) and S5 (Policy)
+        Publisher.publish(events_exchange, signal, routing_key: "vsm.s4.algedonic.pleasure.high")
+        Publisher.publish(events_exchange, signal, routing_key: "vsm.s5.algedonic.pleasure.high")
+        Logger.info("HIGH PLEASURE signal sent to S4 Intelligence & S5 Policy: success_rate=#{success_rate}")
+        
+      _ ->
+        # Moderate/mild pleasure: Route to S4 (Intelligence) for analysis
+        Publisher.publish(events_exchange, signal, routing_key: "vsm.s4.algedonic.pleasure")
+        Logger.info("PLEASURE signal sent to S4 Intelligence: success_rate=#{success_rate}, intensity=#{intensity}")
+    end
     
     # Emit telemetry event
     :telemetry.execute(
