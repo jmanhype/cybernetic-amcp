@@ -278,17 +278,37 @@ defmodule Cybernetic.Integration.VSMPathTest do
     require Logger
     
     def init(test_pid) do
-      # Subscribe to telemetry events
+      # Subscribe to telemetry events using an anonymous function
+      handler = fn event_name, measurements, metadata, _config ->
+        case event_name do
+          [:vsm, :s1, _] ->
+            GenServer.cast(__MODULE__, {:s1_event, metadata})
+          [:vsm, :s2, _] ->
+            GenServer.cast(__MODULE__, {:s2_event, metadata})
+          [:vsm, :s4, _] ->
+            GenServer.cast(__MODULE__, {:s4_event, metadata})
+          [:telegram, _, _] ->
+            GenServer.cast(__MODULE__, {:telegram_event, metadata})
+          [:goldrush, :algedonic, _] ->
+            GenServer.cast(__MODULE__, {:algedonic_event, metadata})
+          _ ->
+            :ok
+        end
+      end
+      
       :telemetry.attach_many(
         "test-collector",
         [
-          [:vsm, :s1, :*],
-          [:vsm, :s2, :*],
-          [:vsm, :s4, :*],
-          [:telegram, :*, :*],
-          [:goldrush, :algedonic, :*]
+          [:vsm, :s1, :operation],
+          [:vsm, :s1, :error],
+          [:vsm, :s1, :success],
+          [:vsm, :s2, :coordination],
+          [:vsm, :s4, :intelligence],
+          [:telegram, :command, :processed],
+          [:telegram, :response, :sent],
+          [:goldrush, :algedonic, :signal]
         ],
-        &handle_event/4,
+        handler,
         nil
       )
       
@@ -302,26 +322,6 @@ defmodule Cybernetic.Integration.VSMPathTest do
         path_latency: 0,
         start_time: System.monotonic_time(:millisecond)
       }}
-    end
-    
-    def handle_event([:vsm, :s1, _], _measurements, metadata, _config) do
-      GenServer.cast(__MODULE__, {:s1_event, metadata})
-    end
-    
-    def handle_event([:vsm, :s2, _], _measurements, metadata, _config) do
-      GenServer.cast(__MODULE__, {:s2_event, metadata})
-    end
-    
-    def handle_event([:vsm, :s4, _], _measurements, metadata, _config) do
-      GenServer.cast(__MODULE__, {:s4_event, metadata})
-    end
-    
-    def handle_event([:telegram, _, _], _measurements, metadata, _config) do
-      GenServer.cast(__MODULE__, {:telegram_event, metadata})
-    end
-    
-    def handle_event([:goldrush, :algedonic, _], _measurements, metadata, _config) do
-      GenServer.cast(__MODULE__, {:algedonic_event, metadata})
     end
     
     def handle_cast({:s1_event, metadata}, state) do
