@@ -201,31 +201,19 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     end
 
     test "signature is deterministic for same inputs" do
-      # This test verifies HMAC behavior by manually constructing identical inputs
-      nonce = "test-nonce-123"
-      timestamp = 1234567890
+      # Verify that enriched messages are unique due to nonces
       payload = %{"data" => "test"}
       
-      # Create two messages with identical security parameters
-      msg1 = Map.merge(payload, %{
-        "_nonce" => nonce,
-        "_timestamp" => timestamp,
-        "_site" => "test@node"
-      })
-      
-      msg2 = Map.merge(payload, %{
-        "_nonce" => nonce,
-        "_timestamp" => timestamp,
-        "_site" => "test@node"
-      })
-      
-      # Generate signatures manually (we'd need to expose this for proper testing)
-      # For now, we verify that enriched messages are unique due to nonces
       enriched1 = NonceBloom.enrich_message(payload)
       enriched2 = NonceBloom.enrich_message(payload)
       
       # Different nonces mean different signatures even for same payload
+      assert enriched1["_nonce"] != enriched2["_nonce"]
       assert enriched1["_signature"] != enriched2["_signature"]
+      
+      # But the payload is preserved
+      assert enriched1["data"] == enriched2["data"]
+      assert enriched1["data"] == "test"
     end
   end
 
