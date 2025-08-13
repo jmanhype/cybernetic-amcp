@@ -62,21 +62,21 @@ InMemory.publish("test", "s1.operation", %{
   type: "vsm.s1.operation",
   operation: "memory_test",
   timestamp: DateTime.utc_now()
-})
+}, [])
 IO.puts("  ✅ Published to InMemory transport")
 
 InMemory.publish("test", "s2.coordinate", %{
   type: "vsm.s2.coordinate",
   source_system: "s1",
   operation: "coordinate_test"
-})
+}, [])
 IO.puts("  ✅ Triggered S2 coordination")
 
 InMemory.publish("test", "s4.intelligence", %{
   type: "vsm.s4.intelligence",
   analysis_request: "pattern_detection",
   source_system: "s2"
-})
+}, [])
 IO.puts("  ✅ Triggered S4 intelligence analysis")
 
 Process.sleep(100)
