@@ -46,9 +46,18 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
   defp handle_coordinate(payload, meta) do
     Logger.info("System2: Coordinating systems - #{inspect(payload)}")
     
-    # Send coordination messages to specified systems
+    # Process coordination and forward intelligence to S4
+    coordination_result = coordinate_operation(payload, meta)
+    
+    # Create intelligence signal for S4
+    forward_to_intelligence(payload, meta, coordination_result)
+    
+    # Emit telemetry
+    :telemetry.execute([:vsm, :s2, :coordination], %{count: 1}, payload)
+    
+    # Send coordination messages to specified systems if any
     case Map.get(payload, "target_systems") do
-      nil -> {:error, :no_target_systems}
+      nil -> :ok  # No specific target systems needed for S1→S2→S4 flow
       systems when is_list(systems) ->
         coordinate_systems(systems, payload, meta)
         :ok
