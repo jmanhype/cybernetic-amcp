@@ -20,25 +20,33 @@ defmodule Cybernetic.MCP.HermesClient do
   end
 
   @impl true
-  def process(%{tool: tool, params: params}, state) do
+  def process(%{tool: tool, params: params}, state) when is_binary(tool) and is_map(params) do
     Logger.debug("Hermes MCP tool call: #{tool} with #{inspect(params)}")
     
-    case call_tool(tool, params, timeout: 30_000) do
-      {:ok, %{is_error: false, result: result}} ->
-        {:ok, %{tool: tool, result: result, success: true}, state}
-      
-      {:ok, %{is_error: true, result: error}} ->
-        Logger.warning("Hermes MCP tool error: #{inspect(error)}")
-        {:error, %{tool: tool, error: :tool_error, message: error["message"]}, state}
-      
-      {:error, reason} ->
-        Logger.warning("Hermes MCP call failed: #{inspect(reason)}")
-        {:error, %{tool: tool, error: :client_error, reason: reason}, state}
+    try do
+      case call_tool(tool, params, timeout: 30_000) do
+        {:ok, %{is_error: false, result: result}} ->
+          {:ok, %{tool: tool, result: result, success: true}, state}
+        
+        {:ok, %{is_error: true, result: error}} ->
+          Logger.warning("Hermes MCP tool error: #{inspect(error)}")
+          {:error, %{tool: tool, error: :tool_error, message: error["message"]}, state}
+        
+        {:error, reason} ->
+          Logger.warning("Hermes MCP call failed: #{inspect(reason)}")
+          {:error, %{tool: tool, error: :client_error, reason: reason}, state}
+      end
+    rescue
+      error ->
+        Logger.error("Hermes MCP client error: #{inspect(error)}")
+        {:error, %{tool: tool, error: :client_error, details: inspect(error)}, state}
     end
-  rescue
-    error ->
-      Logger.error("Hermes MCP client error: #{inspect(error)}")
-      {:error, %{tool: tool, error: :client_error, details: inspect(error)}, state}
+  end
+  
+  # Handle malformed input gracefully
+  def process(input, state) do
+    Logger.warning("Hermes MCP invalid input structure: #{inspect(input)}")
+    {:error, %{error: :client_error, details: "Invalid input structure", input: input}, state}
   end
 
   @impl true
