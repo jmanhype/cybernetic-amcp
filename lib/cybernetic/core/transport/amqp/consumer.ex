@@ -9,8 +9,8 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   alias Cybernetic.Core.Security.NonceBloom
   alias Cybernetic.Core.Transport.AMQP.Connection
 
-  @exchange "cybernetic.events"
-  @queue "cybernetic.consumer"
+  @exchange "cyb.events"
+  @queue "cyb.consumer"
   @prefetch_count 10
 
   def start_link(opts) do
