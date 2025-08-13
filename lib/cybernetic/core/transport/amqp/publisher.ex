@@ -98,7 +98,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
   end
 
   defp setup_exchanges(channel) do
-    Enum.each(@exchanges, fn {name, type} ->
+    Enum.each(get_exchanges(), fn {name, type} ->
       AMQP.Exchange.declare(channel, name, type, durable: true)
       Logger.info("Declared exchange: #{name} (#{type})")
     end)
