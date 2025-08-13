@@ -68,7 +68,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
 
     test "handles concurrent updates", %{graph: _graph} do
       # Simulate concurrent updates
-      tasks = for i <- 1..10 do
+      tasks = for i <- 0..9 do
         Task.async(fn ->
           ContextGraph.put_triple(
             "Node#{i}", 
