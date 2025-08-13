@@ -10,8 +10,7 @@ Mix.install([])
 :timer.sleep(1000)
 
 # Test the transport system
-alias Cybernetic.Transport.GenStageAdapter
-alias Cybernetic.Transport.GenStageSupervisor
+alias Cybernetic.Core.Transport.AMQP.Publisher
 
 IO.puts("=== Cybernetic Transport System Test ===")
 
