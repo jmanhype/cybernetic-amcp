@@ -38,8 +38,8 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
         Logger.warn("System1 operational supervisor not found")
         {:error, :supervisor_not_found}
       pid -> 
-        # Send message to supervisor for processing
-        send(pid, {:operation, payload, meta})
+        # Use the public handle_message interface
+        Cybernetic.VSM.System1.Operational.handle_message(payload, meta)
         :ok
     end
   end
