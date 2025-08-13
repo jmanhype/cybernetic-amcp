@@ -7,7 +7,9 @@ defmodule Cybernetic.Integration.VSMPathTest do
   import ExUnit.CaptureLog
   alias Cybernetic.Core.Transport.AMQP.Publisher
   alias Cybernetic.VSM.System1.Agents.TelegramAgent
-  alias Cybernetic.VSM.{System1, System2, System4}
+  alias Cybernetic.VSM.System1.Operational, as: System1
+  alias Cybernetic.VSM.System2.Coordinator, as: System2
+  alias Cybernetic.VSM.System4.Intelligence, as: System4
   
   @test_timeout 10_000
   
