@@ -69,8 +69,18 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
 
   describe "validate_message/1" do
     test "validates properly enriched message" do
-      original = %{"data" => "test", "type" => "vsm.test"}
-      enriched = NonceBloom.enrich_message(original)
+      # Manually create a message with fresh nonce that hasn't been tracked yet
+      nonce = NonceBloom.generate_nonce()
+      timestamp = System.system_time(:millisecond)
+      payload = %{"data" => "test", "type" => "vsm.test"}
+      
+      # We need to manually build the enriched message without tracking the nonce
+      enriched = Map.merge(payload, %{
+        "_nonce" => nonce,
+        "_timestamp" => timestamp,
+        "_site" => node(),
+        "_signature" => generate_test_signature(payload, nonce, timestamp)
+      })
       
       assert {:ok, validated} = NonceBloom.validate_message(enriched)
       assert validated["data"] == "test"
