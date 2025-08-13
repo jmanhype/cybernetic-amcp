@@ -160,7 +160,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     }
     
     # Send via AMQP to S4
-    case Cybernetic.Core.Transport.AMQP.Publisher.publish(
+    case Cybernetic.Transport.Behaviour.publish(
       "cyb.commands",
       "s4.intelligence",
       intelligence_msg,
