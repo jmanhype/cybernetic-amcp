@@ -299,9 +299,22 @@ defmodule ProductionTest do
     s1_pid = Process.whereis(Cybernetic.VSM.System1.Operational)
     
     if s1_pid do
-      # Kill a process
-      Process.exit(s1_pid, :kill)
-      Process.sleep(500)  # Wait for supervisor to restart
+      # Monitor the process
+      ref = Process.monitor(s1_pid)
+      
+      # Kill the process with a normal exit (simulating crash)
+      Process.exit(s1_pid, :shutdown)
+      
+      # Wait for the DOWN message
+      receive do
+        {:DOWN, ^ref, :process, ^s1_pid, _reason} ->
+          IO.puts("  📍 System1 crashed (PID: #{inspect(s1_pid)})")
+      after
+        1000 -> IO.puts("  ⚠️ Didn't receive DOWN message")
+      end
+      
+      # Wait for supervisor to restart it
+      Process.sleep(1000)
       
       # Check if restarted
       new_s1_pid = Process.whereis(Cybernetic.VSM.System1.Operational)
@@ -313,6 +326,7 @@ defmodule ProductionTest do
         {"Fault Tolerance", true}
       else
         IO.puts("  ❌ System1 failed to restart")
+        IO.puts("    Current PID: #{inspect(new_s1_pid)}")
         {"Fault Tolerance", false}
       end
     else
