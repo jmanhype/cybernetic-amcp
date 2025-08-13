@@ -33,6 +33,13 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
       {:error, :invalid_analysis_type}
     else
       Logger.info("System4: Processing intelligence - #{inspect(payload)}")
+      
+      # Process the intelligence and emit telemetry
+      process_intelligence_analysis(payload, meta)
+      
+      # Emit telemetry for S4 intelligence processing
+      :telemetry.execute([:vsm, :s4, :intelligence], %{count: 1}, payload)
+      
       :ok
     end
   end
