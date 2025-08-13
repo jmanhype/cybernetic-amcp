@@ -63,7 +63,7 @@ defmodule CyberneticMCPClient do
       
       {:error, reason} ->
         IO.puts("❌ Ping failed: #{inspect(reason)}")
-        return {:error, :ping_failed}
+        {:error, :ping_failed}
     end
     
     # Test tool discovery
