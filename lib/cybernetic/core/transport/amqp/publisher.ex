@@ -61,12 +61,15 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
 
   def handle_call({:publish, exchange, routing_key, payload, opts}, _from, %{channel: channel} = state) do
     headers = build_headers(opts)
-    message = %{
+    base_message = %{
       "headers" => headers,
       "payload" => payload
     }
     
-    case Jason.encode(message) do
+    # Add security envelope using NonceBloom
+    secured_message = NonceBloom.enrich_message(base_message, site: node())
+    
+    case Jason.encode(secured_message) do
       {:ok, json} ->
         result = Basic.publish(
           channel,
