@@ -8,7 +8,20 @@ defmodule Cybernetic.Application do
   def start(_type, _args) do
     children = [
       {Cluster.Supervisor, [Application.get_env(:libcluster, :topologies, []), [name: Cybernetic.ClusterSupervisor]]},
+      
+      # Core Security
+      Cybernetic.Core.Security.NonceBloom,
+      
+      # AMQP Transport
       Cybernetic.Transport.AMQP.Connection,
+      
+      # MCP Registry  
+      Cybernetic.Core.MCP.Hermes.Registry,
+      
+      # Goldrush Plugin
+      {Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic, []},
+      
+      # VSM Supervisor (includes S1-S5)
       Cybernetic.VSM.Supervisor
     ]
     opts = [strategy: :one_for_one, name: Cybernetic.Supervisor]
