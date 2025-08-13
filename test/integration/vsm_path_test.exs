@@ -354,6 +354,11 @@ defmodule Cybernetic.Integration.VSMPathTest do
       {:noreply, Map.update!(state, :telegram_commands, &(&1 + 1))}
     end
     
+    def handle_cast({:telegram_response_event, metadata}, state) do
+      send(state.test_pid, {:telegram_response, metadata})
+      {:noreply, state}  # Don't increment telegram_commands for response events
+    end
+    
     def handle_cast({:algedonic_event, _metadata}, state) do
       {:noreply, Map.update!(state, :algedonic_signals, &(&1 + 1))}
     end
