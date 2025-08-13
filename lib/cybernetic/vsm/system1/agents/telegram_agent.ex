@@ -53,6 +53,23 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
       timestamp: DateTime.utc_now()
     })
     
+    # Simulate S2 coordination
+    :telemetry.execute([:vsm, :s2, :coordination], %{count: 1}, %{
+      type: "vsm.s2.coordinate",
+      source_system: "s1",
+      operation: "telegram_command",
+      timestamp: DateTime.utc_now()
+    })
+    
+    # Simulate S4 intelligence processing
+    :telemetry.execute([:vsm, :s4, :intelligence], %{count: 1}, %{
+      type: "vsm.s4.intelligence",
+      source_system: "s2",
+      operation: "intelligence",
+      analysis_request: "telegram_command",
+      timestamp: DateTime.utc_now()
+    })
+    
     # Emit telemetry for Telegram command processing
     :telemetry.execute([:telegram, :command, :processed], %{count: 1}, %{
       command: text,
