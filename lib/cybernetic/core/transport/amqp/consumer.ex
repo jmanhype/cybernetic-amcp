@@ -8,6 +8,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   require Logger
   alias Cybernetic.Core.Security.NonceBloom
   alias Cybernetic.Core.Transport.AMQP.Connection
+  alias Cybernetic.Transport.Message
 
   @exchange "cyb.events"
   @queue "cyb.consumer"
