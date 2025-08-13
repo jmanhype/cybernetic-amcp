@@ -6,8 +6,8 @@ defmodule Cybernetic.MCP.CoreTest do
   describe "MCP Core" do
     setup do
       # Start MCP Core and Registry
-      {:ok, _registry} = Registry.start_link()
-      {:ok, pid} = Core.start_link()
+      {:ok, _registry} = Registry.start_link([])
+      {:ok, pid} = Core.start_link([])
       
       # Wait for initial discovery
       Process.sleep(200)
