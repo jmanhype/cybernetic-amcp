@@ -4,17 +4,12 @@ defmodule Cybernetic.MCP.HermesClient do
   Real Hermes MCP client implementation for Cybernetic VSM.
   Provides access to external MCP tools and capabilities.
   """
-  use Hermes.Client,
-    name: "Cybernetic",
-    version: "0.1.0",
-    protocol_version: "2024-11-05"
-  
   use GenServer
   require Logger
   
   @behaviour Cybernetic.Plugin
 
-  def start_link(opts) do
+  def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
