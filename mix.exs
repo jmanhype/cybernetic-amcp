@@ -21,15 +21,34 @@ defmodule Cybernetic.MixProject do
 
   defp deps do
     [
+      # Core dependencies
       {:amqp, "~> 4.1"},
       {:jason, ">= 0.0.0"},
       {:telemetry, ">= 0.0.0"},
       {:libcluster, ">= 0.0.0"},
       {:delta_crdt, ">= 0.0.0"},
-      {:rustler, ">= 0.0.0"}
-      # Goldrush and Hermes-MCP can be added as Git deps once you wire them:
-      # {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "develop-elixir"},
-      # {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp"}
+      {:rustler, ">= 0.0.0"},
+      
+      # MCP integration
+      {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main", optional: true},
+      
+      # Goldrush branches for reactive stream processing
+      {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "develop-elixir", optional: true},
+      {:goldrush_telemetry, git: "https://github.com/DeadZen/goldrush", branch: "develop-telemetry", optional: true},
+      {:goldrush_plugins, git: "https://github.com/DeadZen/goldrush", branch: "develop-plugins", optional: true},
+      
+      # Telegram bot integration
+      {:nadia, "~> 0.7"},
+      
+      # Security and utilities
+      {:bloomex, "~> 1.0"},  # Bloom filter for replay protection
+      {:nanoid, "~> 2.0"},    # Nonce generation
+      
+      # Web UI (Phoenix)
+      {:phoenix, "~> 1.7"},
+      {:phoenix_live_view, "~> 0.20"},
+      {:phoenix_live_dashboard, "~> 0.8"},
+      {:plug_cowboy, "~> 2.5"}
     ]
   end
 end
