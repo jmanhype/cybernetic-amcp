@@ -123,7 +123,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
     # Rebuild bloom filter if we removed many entries
     new_bloom = if map_size(new_seen) < map_size(state.seen_nonces) * 0.7 do
       # Rebuild bloom with only active nonces
-      Enum.reduce(Map.keys(new_seen), Bloomex.scalable(@bloom_size, @bloom_error_rate), fn nonce, bloom ->
+      Enum.reduce(Map.keys(new_seen), Bloomex.new(@bloom_size), fn nonce, bloom ->
         Bloomex.add(bloom, nonce)
       end)
     else
