@@ -15,4 +15,10 @@ defmodule Cybernetic.VSM.System2.Coordinator do
     att = Map.update(state.attention, task_id, %{weight: 1.1, last: System.monotonic_time()}, fn a -> %{a | weight: a.weight * 1.05, last: System.monotonic_time()} end)
     {:noreply, %{state | attention: att}}
   end
+  
+  # Test interface - routes messages through the message handler
+  def handle_message(message, meta \\ %{}) do
+    operation = Map.get(message, :operation, "unknown")
+    Cybernetic.VSM.System2.MessageHandler.handle_message(operation, message, meta)
+  end
 end
