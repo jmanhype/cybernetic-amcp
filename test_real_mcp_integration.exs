@@ -96,7 +96,7 @@ defmodule CyberneticMCPClient do
       
       {:error, reason} ->
         IO.puts("❌ Add tool failed: #{inspect(reason)}")
-        return {:error, :add_failed}
+        {:error, :add_failed}
     end
     
     {:ok, :all_tests_passed}
