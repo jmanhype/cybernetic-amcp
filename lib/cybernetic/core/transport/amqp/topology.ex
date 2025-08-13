@@ -113,19 +113,26 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   end
   
   @doc """
-  Declare all exchanges
+  Declare all exchanges using standardized config
   """
   def declare_exchanges(channel) do
-    Enum.reduce_while(@exchanges, :ok, fn {name, type, opts}, _acc ->
-      case Exchange.declare(channel, Atom.to_string(name), type, opts) do
-        :ok ->
-          Logger.debug("Declared #{type} exchange: #{name}")
-          {:cont, :ok}
+    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
+    
+    for {key, exchange_name} <- exchanges do
+      case Exchange.declare(channel, exchange_name, :topic, durable: true, auto_delete: false) do
+        :ok -> 
+          Logger.debug("Declared exchange: #{key}=#{exchange_name}")
+          :ok
+        {:error, {:resource_locked, _}} -> 
+          Logger.debug("Exchange already exists: #{exchange_name}")
+          :ok
         {:error, reason} = error ->
-          Logger.error("Failed to declare exchange #{name}: #{inspect(reason)}")
-          {:halt, error}
+          Logger.error("Failed to declare exchange #{key}=#{exchange_name}: #{inspect(reason)}")
+          error
       end
-    end)
+    end
+    
+    :ok
   end
   
   @doc """
