@@ -119,17 +119,6 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     }
   end
 
-  defp wait_for_confirm(channel, timeout \\ 1500) do
-    receive do
-      {:basic_ack, _delivery_tag, _multiple} ->
-        :ok
-      {:basic_nack, _delivery_tag, _multiple} ->
-        {:error, :nack}
-    after
-      timeout ->
-        {:error, :confirm_timeout}
-    end
-  end
 
   defp generate_correlation_id do
     "corr_#{System.unique_integer([:positive, :monotonic])}_#{:rand.uniform(999999)}"
