@@ -281,6 +281,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
 
   defp emit_algedonic_signal(type, data) do
     signal = %{
+      "operation" => "algedonic",
       "type" => "algedonic.#{type}",
       "source_system" => "s1",
       "data" => data,
