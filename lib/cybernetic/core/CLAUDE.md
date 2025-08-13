@@ -1,16 +1,36 @@
-# Directory Context
+# Core Directory - Foundation Components
 
 ## Purpose
-This directory contains [FILL IN PURPOSE]
+Core functionality that the entire Cybernetic system depends on.
 
-## Key Files
-- List important files here
+## Components
 
-## Dependencies
-- List key dependencies
+### CRDT (Conflict-free Replicated Data Types)
+- `crdt/context_graph.ex` - Semantic graph with causal metadata
+- `crdt/graph.ex` - Graph data structure
+- Uses DeltaCRDT for efficient synchronization
 
-## Testing
-- How to test this module
+### MCP (Model Context Protocol)
+- `mcp/core.ex` - Core MCP functionality
+- `mcp/transports/` - Transport adapters (Hermes, MAGG)
+- Enables AI tool integration
 
-## Notes
-- Important implementation details
+### Security
+- `security/security.ex` - Security utilities
+- Nonce generation and validation
+- Bloom filter for replay prevention
+
+### Transport
+- `transport/amqp/` - AMQP implementation
+- `transport/amqp/causality.ex` - Causal ordering
+- `transport/amqp/topology.ex` - Queue topology
+
+### Goldrush
+- `goldrush/elixir/engine.ex` - Elixir engine
+- `goldrush/plugins/behaviour.ex` - Plugin behavior
+- `goldrush/telemetry/collector.ex` - Metrics collection
+
+## Key Patterns
+- Behaviors for extensibility
+- GenServer for stateful processes
+- Supervisors for fault tolerance
