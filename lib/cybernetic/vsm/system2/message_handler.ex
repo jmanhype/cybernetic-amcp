@@ -11,6 +11,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     case operation do
       "coordination" -> handle_coordination(payload, meta)
       "coordinate" -> handle_coordinate(payload, meta)
+      "coordination_complete" -> handle_coordination_complete(payload, meta)
       "sync" -> handle_sync(payload, meta)
       "status_request" -> handle_status_request(payload, meta)
       "priority_update" -> handle_priority_update(payload, meta)
