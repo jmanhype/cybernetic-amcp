@@ -86,6 +86,68 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     :ok
   end
 
+  defp handle_pain_signal(payload, meta) do
+    # Process pain signal and generate intervention
+    data = Map.get(payload, "data", %{})
+    severity = Map.get(data, :severity, :moderate)
+    
+    Logger.warning("System4: Pain signal received - severity: #{severity}")
+    
+    # Determine intervention strategy based on severity
+    action = case severity do
+      :critical -> "alert_s5"
+      :severe -> "scale_resources"
+      _ -> "throttle_operations"
+    end
+    
+    # Generate intervention message
+    intervention = %{
+      "type" => "vsm.s4.intervention",
+      "action" => action,
+      "severity" => severity,
+      "reason" => "algedonic_pain_response",
+      "data" => data,
+      "timestamp" => DateTime.utc_now()
+    }
+    
+    # Send intervention (for test purposes, we'll emit telemetry)
+    :telemetry.execute([:vsm, :s4, :intervention], %{severity: severity}, intervention)
+    Logger.info("System4: Generated intervention - #{action}")
+    
+    :ok
+  end
+
+  defp handle_pleasure_signal(payload, meta) do
+    # Process pleasure signal and generate optimization
+    data = Map.get(payload, "data", %{})
+    intensity = Map.get(data, :intensity, :mild)
+    
+    Logger.info("System4: Pleasure signal received - intensity: #{intensity}")
+    
+    # Determine optimization strategy
+    strategy = case intensity do
+      :euphoric -> "increase_throughput"
+      :high -> "reduce_resources"
+      _ -> "maintain_state"
+    end
+    
+    # Generate optimization message
+    optimization = %{
+      "type" => "vsm.s4.optimization",
+      "strategy" => strategy,
+      "intensity" => intensity,
+      "reason" => "algedonic_pleasure_response",
+      "data" => data,
+      "timestamp" => DateTime.utc_now()
+    }
+    
+    # Send optimization (for test purposes, we'll emit telemetry)
+    :telemetry.execute([:vsm, :s4, :optimization], %{intensity: intensity}, optimization)
+    Logger.info("System4: Generated optimization - #{strategy}")
+    
+    :ok
+  end
+
   defp process_intelligence_analysis(payload, meta) do
     # Analyze the intelligence data from S2
     coordination_id = Map.get(payload, "coordination_id")
