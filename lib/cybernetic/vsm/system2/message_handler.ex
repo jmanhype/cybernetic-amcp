@@ -30,17 +30,17 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     unless Map.has_key?(payload, "action") || Map.has_key?(payload, :action) do
       {:error, :missing_action}
     else
-    
-    action = Map.get(payload, "action") || Map.get(payload, :action)
-    Logger.info("System2: Coordination with action=#{action}")
-    
-    # Process based on action type
-    case action do
-      "coordinate" -> coordinate_systems(Map.get(payload, :systems, []), payload, meta)
-      _ -> :ok
+      action = Map.get(payload, "action") || Map.get(payload, :action)
+      Logger.info("System2: Coordination with action=#{action}")
+      
+      # Process based on action type
+      case action do
+        "coordinate" -> coordinate_systems(Map.get(payload, :systems, []), payload, meta)
+        _ -> :ok
+      end
+      
+      :ok
     end
-    
-    :ok
   end
 
   defp handle_coordinate(payload, meta) do
