@@ -128,6 +128,11 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     {:reply, {:ok, state.stats}, state}
   end
 
+  def handle_info(:register_builtin_tools, state) do
+    register_builtin_tools()
+    {:noreply, state}
+  end
+  
   def handle_info({:invocation_complete, invocation_id, result}, state) do
     case Map.get(state.invocations, invocation_id) do
       nil ->
