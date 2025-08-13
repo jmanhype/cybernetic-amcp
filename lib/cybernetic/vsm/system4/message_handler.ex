@@ -65,6 +65,22 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     :ok
   end
 
+  defp handle_algedonic(payload, meta) do
+    # Handle algedonic (pain/pleasure) signals from S1
+    signal_type = Map.get(payload, "type")
+    Logger.info("System4: Processing algedonic signal - #{signal_type}")
+    
+    case signal_type do
+      "algedonic.pain" ->
+        handle_pain_signal(payload, meta)
+      "algedonic.pleasure" -> 
+        handle_pleasure_signal(payload, meta)
+      _ ->
+        Logger.warning("System4: Unknown algedonic signal type - #{signal_type}")
+        {:error, :unknown_algedonic_type}
+    end
+  end
+
   defp handle_default(payload, _meta) do
     Logger.debug("System4: Default handler - #{inspect(payload)}")
     :ok
