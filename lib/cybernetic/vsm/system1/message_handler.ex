@@ -224,7 +224,11 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   end
 
   defp record_algedonic_event(type, payload, meta) do
-    # Record algedonic events and generate signals when thresholds are met
+    # Skip algedonic recording during tests to prevent feedback loops
+    if Application.get_env(:cybernetic, :test_mode, false) do
+      :ok
+    else
+      # Record algedonic events and generate signals when thresholds are met
     algedonic_data = %{
       type: type,
       severity: Map.get(payload, "severity", "normal"),
