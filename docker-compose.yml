@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: cybernetic-rabbitmq
+    ports:
+      - "5672:5672"     # AMQP port
+      - "15672:15672"   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - cybernetic-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cybernetic-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: cybernetic
+      POSTGRES_PASSWORD: cybernetic123
+      POSTGRES_DB: cybernetic_dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cybernetic"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - cybernetic-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: cybernetic-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - cybernetic-network
+
+volumes:
+  rabbitmq-data:
+  postgres-data:
+  redis-data:
+
+networks:
+  cybernetic-network:
+    driver: bridge
