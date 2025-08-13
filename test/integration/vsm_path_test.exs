@@ -40,9 +40,11 @@ defmodule Cybernetic.Integration.VSMPathTest do
       }
       
       # Simulate S1 receiving and processing the event
+      # Note: System1.Operational is a Supervisor, not a GenServer with handle_message
+      # The actual message handling happens in System1.MessageHandler
       capture_log(fn ->
-        System1.handle_message(operational_event, %{})
-      end) =~ "S1 processing operational event"
+        Cybernetic.VSM.System1.MessageHandler.handle_message("operation", operational_event, %{})
+      end)
       
       # Wait for S1 to process and forward to S2
       Process.sleep(100)
