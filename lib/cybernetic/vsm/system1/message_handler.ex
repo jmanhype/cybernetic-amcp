@@ -106,6 +106,32 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     :ok
   end
 
+  defp handle_error(payload, meta) do
+    # Handle error events and trigger algedonic pain signals
+    Logger.warn("System1: Error event - #{inspect(payload)}")
+    
+    # Record error for algedonic analysis
+    record_algedonic_event(:pain, payload, meta)
+    
+    # Emit telemetry for error
+    :telemetry.execute([:vsm, :s1, :error], %{count: 1, severity: Map.get(payload, "severity", "unknown")}, payload)
+    
+    :ok
+  end
+
+  defp handle_success(payload, meta) do
+    # Handle success events and trigger algedonic pleasure signals
+    Logger.debug("System1: Success event - #{inspect(payload)}")
+    
+    # Record success for algedonic analysis
+    record_algedonic_event(:pleasure, payload, meta)
+    
+    # Emit telemetry for success
+    :telemetry.execute([:vsm, :s1, :success], %{count: 1, latency: Map.get(payload, "latency", 0)}, payload)
+    
+    :ok
+  end
+
   defp handle_default(payload, meta) do
     # Handle default/unknown messages
     Logger.debug("System1: Default handler - #{inspect(payload)}")
