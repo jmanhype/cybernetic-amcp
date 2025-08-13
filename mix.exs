@@ -33,9 +33,8 @@ defmodule Cybernetic.MixProject do
       {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main", optional: true},
       
       # Goldrush branches for reactive stream processing
-      {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "develop-elixir", optional: true},
-      {:goldrush_telemetry, git: "https://github.com/DeadZen/goldrush", branch: "develop-telemetry", optional: true},
-      {:goldrush_plugins, git: "https://github.com/DeadZen/goldrush", branch: "develop-plugins", optional: true},
+      # Note: Goldrush branches have naming conflicts, using master for now
+      {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "master", optional: true},
       
       # Telegram bot integration
       {:ex_gram, "~> 0.52"},  # More modern Telegram bot library
