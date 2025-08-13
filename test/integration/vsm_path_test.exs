@@ -351,7 +351,7 @@ defmodule Cybernetic.Integration.VSMPathTest do
     end
     
     def handle_cast({:telegram_event, metadata}, state) do
-      send(state.test_pid, {:telegram_response, metadata})
+      send(state.test_pid, {:telegram_command, metadata})
       {:noreply, Map.update!(state, :telegram_commands, &(&1 + 1))}
     end
     
