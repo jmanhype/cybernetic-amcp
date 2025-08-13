@@ -164,4 +164,35 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     Logger.info("System1: Updating coordination task - #{Map.get(payload, "task_id", "unknown")}")
     :ok
   end
+
+  defp forward_to_coordination(payload, meta) do
+    # Create coordination message for S2
+    coordination_msg = %{
+      "type" => "vsm.s2.coordinate",
+      "source_system" => "s1", 
+      "operation" => Map.get(payload, "operation", Map.get(payload, :operation, "unknown")),
+      "coordination_id" => generate_coordination_id(),
+      "original_payload" => payload,
+      "timestamp" => DateTime.utc_now()
+    }
+    
+    # Send via AMQP to S2
+    case Cybernetic.Core.Transport.AMQP.Publisher.publish(
+      "cyb.commands",
+      "s2.coordinate", 
+      coordination_msg,
+      [source: :system1, meta: meta]
+    ) do
+      :ok -> 
+        Logger.debug("System1: Forwarded operation to S2 for coordination")
+        :ok
+      error -> 
+        Logger.warn("System1: Failed to forward to S2: #{inspect(error)}")
+        error
+    end
+  end
+
+  defp generate_coordination_id do
+    "coord_#{:os.system_time(:millisecond)}_#{:rand.uniform(1000)}"
+  end
 end
