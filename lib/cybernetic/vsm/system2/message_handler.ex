@@ -120,4 +120,6 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
         )
     end
   end
+  
+  defp return(value), do: value
 end
