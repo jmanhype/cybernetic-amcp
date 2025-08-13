@@ -20,10 +20,15 @@ defmodule Cybernetic.Integration.VSMPathTest do
     # Set up test message collector
     {:ok, collector} = start_test_collector()
     
+    # Configure in-memory transport to send messages to the collector
+    Cybernetic.Transport.InMemory.set_test_collector(collector)
+    
     on_exit(fn ->
       if Process.alive?(collector) do
         GenServer.stop(collector, :normal, 1000)
       end
+      # Clear test collector
+      Cybernetic.Transport.InMemory.set_test_collector(nil)
     end)
     
     {:ok, collector: collector}
