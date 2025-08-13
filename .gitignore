@@ -1,0 +1,44 @@
+# Elixir/Mix artifacts
+/_build/
+/deps/
+/.fetch
+erl_crash.dump
+*.ez
+*.beam
+/config/*.secret.exs
+.elixir_ls/
+
+# Test coverage
+/cover/
+
+# Documentation
+/doc/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml
+
+# Logs
+/log/
+*.log
+
+# Database
+*.db
+*.sqlite3
+
+# Environment variables
+.env
+.env.local
+
+# Temporary files
+*.tmp
+/tmp/
+EOF < /dev/null

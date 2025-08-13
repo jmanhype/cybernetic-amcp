@@ -1,0 +1,18 @@
+
+defmodule Cybernetic.VSM.System2.Coordinator do
+  use GenServer
+  @moduledoc """
+  S2: Attention/coordination engine (Layer 6B analog).
+  """
+
+  def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+
+  def init(state), do: {:ok, Map.put(state, :attention, %{})}
+
+  def focus(task_id), do: GenServer.cast(__MODULE__, {:focus, task_id})
+
+  def handle_cast({:focus, task_id}, state) do
+    att = Map.update(state.attention, task_id, %{weight: 1.1, last: System.monotonic_time()}, fn a -> %{a | weight: a.weight * 1.05, last: System.monotonic_time()} end)
+    {:noreply, %{state | attention: att}}
+  end
+end
