@@ -218,7 +218,7 @@ defmodule Cybernetic.Integration.VSMPathTest do
     test "AMQP connection failure triggers reconnection", %{collector: collector} do
       # This would require mocking AMQP connection
       # For now, we'll test the reconnection logic exists
-      assert function_exported?(Cybernetic.Transport.AMQP.Connection, :reconnect, 0)
+      assert function_exported?(Cybernetic.Core.Transport.AMQP.Connection, :reconnect, 0)
     end
   end
   
