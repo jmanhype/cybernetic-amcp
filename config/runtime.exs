@@ -1,19 +1,21 @@
 import Config
 
-# GenStage/Broadway Configuration for distributed message passing
-config :cybernetic, :transport,
-  adapter: :gen_stage,
-  producer_concurrency: 5,
-  consumer_concurrency: 10,
-  topics: [
+# Transport Configuration for VSM message passing
+# Use AMQP transport in production, can be overridden in test.exs
+config :cybernetic, :transport, Cybernetic.Transport.AMQP
+
+# AMQP Configuration for production transport
+config :cybernetic, :amqp,
+  url: System.get_env("AMQP_URL") || "amqp://guest:guest@localhost:5672",
+  exchange: System.get_env("AMQP_EXCHANGE") || "cyb.commands",
+  exchange_type: :topic,
+  queues: [
     system1: "vsm.system1.operations",
-    system2: "vsm.system2.coordination",
+    system2: "vsm.system2.coordination", 
     system3: "vsm.system3.control",
     system4: "vsm.system4.intelligence",
     system5: "vsm.system5.policy"
-  ],
-  buffer_size: 1000,
-  batch_size: 10
+  ]
 
 # VSM System Configuration
 config :cybernetic, :vsm,
