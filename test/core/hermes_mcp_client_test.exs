@@ -63,47 +63,56 @@ defmodule Cybernetic.MCP.HermesClientTest do
   end
 
   describe "health_check/0" do
-    test "handles connection failures gracefully" do
-      # Since we don't have a real Hermes server, this should fail gracefully
+    test "returns healthy status with tool count" do
       result = HermesClient.health_check()
       
-      # Should return error with proper structure
-      assert {:error, %{status: :error, error: _reason}} = result
+      # Should return success with tool count
+      assert {:ok, %{status: :healthy, tools_count: 3}} = result
     end
   end
 
   describe "get_available_tools/0" do
-    test "handles no server connection gracefully" do
-      # Since we don't have a real Hermes server, this should fail gracefully
+    test "returns mock tools for testing" do
       result = HermesClient.get_available_tools()
       
-      # Should return error
-      assert {:error, _reason} = result
+      # Should return success with mock tools
+      assert {:ok, tools} = result
+      assert length(tools) == 3
+      
+      # Verify tool structure
+      first_tool = List.first(tools)
+      assert %{name: "search", description: _, input_schema: _} = first_tool
     end
   end
 
   describe "execute_tool/3" do
-    test "handles tool execution failures gracefully" do
-      # Test with invalid tool name
-      result = HermesClient.execute_tool("nonexistent_tool", %{}, [])
+    test "executes tools successfully" do
+      result = HermesClient.execute_tool("test_tool", %{query: "test"}, [])
       
-      # Should return error
-      assert {:error, %{type: :client_error, reason: _}} = result
+      # Should return success
+      assert {:ok, %{result: "Mock result for test_tool", success: true}} = result
+    end
+
+    test "handles error tools" do
+      result = HermesClient.execute_tool("error_tool", %{}, [])
+      
+      # Should return error for error_tool
+      assert {:error, %{type: :tool_error, message: "Simulated tool error"}} = result
     end
 
     test "accepts timeout and progress callback options" do
       opts = [timeout: 10_000, progress_callback: fn _ -> :ok end]
       result = HermesClient.execute_tool("test_tool", %{}, opts)
       
-      # Should still fail but options should be processed
-      assert {:error, %{type: :client_error, reason: _}} = result
+      # Should process options and return success
+      assert {:ok, %{result: "Mock result for test_tool"}} = result
     end
 
     test "uses default timeout when not specified" do
       result = HermesClient.execute_tool("test_tool", %{})
       
-      # Should fail but with default timeout handling
-      assert {:error, %{type: :client_error, reason: _}} = result
+      # Should work with default timeout
+      assert {:ok, %{result: "Mock result for test_tool"}} = result
     end
   end
 
