@@ -51,6 +51,14 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     GenServer.call(__MODULE__, :list_tools)
   end
 
+  @doc "List all available tools, raising on error"
+  def list_tools! do
+    case list_tools() do
+      {:ok, tools} -> tools
+      {:error, reason} -> raise "Failed to list tools: #{inspect(reason)}"
+    end
+  end
+
   @doc "Get tool details"
   def get_tool(name) do
     case :ets.lookup(@registry_table, name) do
