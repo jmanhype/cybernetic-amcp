@@ -130,6 +130,54 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
         )
     end
   end
+
+  defp coordinate_operation(payload, meta) do
+    # Simulate coordination logic
+    coordination_id = Map.get(payload, "coordination_id", generate_coordination_id())
+    
+    result = %{
+      "coordination_id" => coordination_id,
+      "status" => "coordinated",
+      "resources_allocated" => ["worker_1", "worker_2"],
+      "priority" => "normal",
+      "timestamp" => DateTime.utc_now()
+    }
+    
+    Logger.debug("System2: Coordination complete - #{coordination_id}")
+    result
+  end
+
+  defp forward_to_intelligence(payload, meta, coordination_result) do
+    # Create intelligence message for S4
+    intelligence_msg = %{
+      "type" => "vsm.s4.intelligence",
+      "source_system" => "s2",
+      "coordination_id" => Map.get(coordination_result, "coordination_id"),
+      "operation" => Map.get(payload, "operation", "unknown"),
+      "coordination_data" => coordination_result,
+      "analysis_request" => "pattern_detection",
+      "timestamp" => DateTime.utc_now()
+    }
+    
+    # Send via AMQP to S4
+    case Cybernetic.Core.Transport.AMQP.Publisher.publish(
+      "cyb.commands",
+      "s4.intelligence",
+      intelligence_msg,
+      [source: :system2, meta: meta]
+    ) do
+      :ok ->
+        Logger.debug("System2: Forwarded intelligence to S4")
+        :ok
+      error ->
+        Logger.warn("System2: Failed to forward to S4: #{inspect(error)}")
+        error
+    end
+  end
+
+  defp generate_coordination_id do
+    "coord_#{:os.system_time(:millisecond)}_#{:rand.uniform(1000)}"
+  end
   
   defp return(value), do: value
 end
