@@ -240,7 +240,8 @@ defmodule Cybernetic.Integration.VSMPathTest do
   end
   
   defp start_test_collector do
-    GenServer.start_link(__MODULE__.TestCollector, [], name: __MODULE__.TestCollector)
+    test_pid = self()
+    GenServer.start_link(__MODULE__.TestCollector, test_pid, name: __MODULE__.TestCollector)
   end
   
   defp get_path_metrics(collector) do
