@@ -202,9 +202,10 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
   end
   
   defp emit_pain_signal(success_rate, avg_latency, metrics) do
+    severity = calculate_pain_severity(success_rate)
     signal = %{
       type: "algedonic.pain",
-      severity: calculate_pain_severity(success_rate),
+      severity: severity,
       success_rate: success_rate,
       avg_latency: avg_latency,
       metrics: metrics,
@@ -212,11 +213,27 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       recommendations: generate_pain_recommendations(success_rate, avg_latency)
     }
     
-    # Send to S4 (Intelligence) via AMQP
-    Publisher.publish("vsm.s4", signal, routing_key: "vsm.s4.algedonic.pain")
+    # Get exchange names from config
+    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
+    events_exchange = Map.get(exchanges, :events, "cyb.events")
     
-    # Log for visibility
-    Logger.warn("PAIN signal emitted: success_rate=#{success_rate}, severity=#{signal.severity}")
+    # Route pain signals based on severity
+    case severity do
+      :critical ->
+        # Critical pain: Route to S5 (Policy) for system-wide changes
+        Publisher.publish(events_exchange, signal, routing_key: "vsm.s5.algedonic.pain.critical")
+        Logger.error("CRITICAL PAIN signal sent to S5 Policy: success_rate=#{success_rate}")
+        
+      :severe ->
+        # Severe pain: Route to S3 (Control) for intervention
+        Publisher.publish(events_exchange, signal, routing_key: "vsm.s3.algedonic.pain.severe")
+        Logger.warn("SEVERE PAIN signal sent to S3 Control: success_rate=#{success_rate}")
+        
+      _ ->
+        # Mild/moderate pain: Route to S4 (Intelligence) for analysis
+        Publisher.publish(events_exchange, signal, routing_key: "vsm.s4.algedonic.pain")
+        Logger.warn("PAIN signal sent to S4 Intelligence: success_rate=#{success_rate}, severity=#{severity}")
+    end
     
     # Emit telemetry event
     :telemetry.execute(
