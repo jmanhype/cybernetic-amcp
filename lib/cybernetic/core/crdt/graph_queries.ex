@@ -244,7 +244,7 @@ defmodule Cybernetic.Core.CRDT.GraphQueries do
     }}
   end
   
-  defp run_query(%Query{type: :connected_components} = _query) do
+  defp run_query(%Query{type: :connected_components} = query) do
     components = find_connected_components()
     
     {:ok, %Result{
@@ -257,7 +257,7 @@ defmodule Cybernetic.Core.CRDT.GraphQueries do
     }}
   end
   
-  defp run_query(%Query{type: type} = query) do
+  defp run_query(%Query{type: type}) do
     {:error, "Unsupported query type: #{type}"}
   end
   
