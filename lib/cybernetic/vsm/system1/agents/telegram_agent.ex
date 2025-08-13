@@ -43,6 +43,16 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     # Process the command synchronously for testing
     {routing_key, enhanced_payload} = classify_and_route(text, chat_id, from)
     
+    # Emit VSM S1 telemetry event for the test collector
+    :telemetry.execute([:vsm, :s1, :operation], %{count: 1}, %{
+      type: "vsm.s1.operation",
+      operation: "telegram_command",
+      command: text,
+      chat_id: chat_id,
+      routing_key: routing_key,
+      timestamp: DateTime.utc_now()
+    })
+    
     # Emit telemetry for Telegram command processing
     :telemetry.execute([:telegram, :command, :processed], %{count: 1}, %{
       command: text,
