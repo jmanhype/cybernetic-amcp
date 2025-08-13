@@ -1,11 +1,194 @@
 
-defmodule Cybernetic.Transport.AMQP.Topology do
+defmodule Cybernetic.Core.Transport.AMQP.Topology do
   @moduledoc """
-  Declare exchanges/queues/bindings for aMCP flows.
+  AMQP topology setup for Cybernetic framework.
+  Defines durable exchanges, queues, and bindings for VSM systems.
+  """
+  
+  require Logger
+  alias AMQP.{Channel, Exchange, Queue}
+  
+  @exchanges [
+    # Core event bus for all systems
+    {:events, :topic, durable: true, auto_delete: false},
+    
+    # Telemetry data from all components
+    {:telemetry, :topic, durable: true, auto_delete: false},
+    
+    # MCP tool invocations and results
+    {:mcp, :direct, durable: true, auto_delete: false},
+    
+    # VSM inter-system communication
+    {:vsm, :topic, durable: true, auto_delete: false},
+    
+    # Priority messages (algedonic channel)
+    {:priority, :direct, durable: true, auto_delete: false},
+    
+    # Dead letter exchange for failed messages
+    {:dlx, :fanout, durable: true, auto_delete: false}
+  ]
+  
+  @queues [
+    # VSM System queues
+    {"vsm.s1.operations", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
+    {"vsm.s2.coordination", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
+    {"vsm.s3.control", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
+    {"vsm.s4.intelligence", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
+    {"vsm.s5.policy", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
+    
+    # MCP queues
+    {"mcp.requests", durable: true},
+    {"mcp.responses", durable: true},
+    
+    # Telemetry aggregation
+    {"telemetry.metrics", durable: true},
+    {"telemetry.logs", durable: true},
+    
+    # Event processing
+    {"events.stream", durable: true},
+    
+    # Priority/algedonic messages
+    {"priority.alerts", durable: true, arguments: [{"x-priority", :byte, 10}]},
+    
+    # Dead letter queue
+    {"dlq", durable: true}
+  ]
+  
+  @bindings [
+    # VSM bindings to event exchange
+    {:events, "vsm.s1.operations", "vsm.s1.*"},
+    {:events, "vsm.s2.coordination", "vsm.s2.*"},
+    {:events, "vsm.s3.control", "vsm.s3.*"},
+    {:events, "vsm.s4.intelligence", "vsm.s4.*"},
+    {:events, "vsm.s5.policy", "vsm.s5.*"},
+    
+    # VSM internal communication
+    {:vsm, "vsm.s1.operations", "s1.#"},
+    {:vsm, "vsm.s2.coordination", "s2.#"},
+    {:vsm, "vsm.s3.control", "s3.#"},
+    {:vsm, "vsm.s4.intelligence", "s4.#"},
+    {:vsm, "vsm.s5.policy", "s5.#"},
+    
+    # MCP bindings
+    {:mcp, "mcp.requests", "request"},
+    {:mcp, "mcp.responses", "response"},
+    
+    # Telemetry bindings
+    {:telemetry, "telemetry.metrics", "metrics.#"},
+    {:telemetry, "telemetry.logs", "logs.#"},
+    
+    # Event stream binding
+    {:events, "events.stream", "#"},
+    
+    # Priority messages direct to alerts
+    {:priority, "priority.alerts", "alert"},
+    
+    # Dead letter bindings
+    {:dlx, "dlq", ""}
+  ]
+  
+  @doc """
+  Set up the complete AMQP topology - legacy entry point
   """
   def declare(chan) do
-    # Example durable topic for context events
-    AMQP.Exchange.declare(chan, "amcp.context", :topic, durable: true)
-    :ok
+    setup(chan)
+  end
+  
+  @doc """
+  Set up the complete AMQP topology
+  """
+  def setup(channel) do
+    Logger.info("Setting up AMQP topology...")
+    
+    with :ok <- declare_exchanges(channel),
+         :ok <- declare_queues(channel),
+         :ok <- create_bindings(channel) do
+      Logger.info("AMQP topology setup complete")
+      :ok
+    else
+      {:error, reason} = error ->
+        Logger.error("Failed to set up AMQP topology: #{inspect(reason)}")
+        error
+    end
+  end
+  
+  @doc """
+  Declare all exchanges
+  """
+  def declare_exchanges(channel) do
+    Enum.reduce_while(@exchanges, :ok, fn {name, type, opts}, _acc ->
+      case Exchange.declare(channel, Atom.to_string(name), type, opts) do
+        :ok ->
+          Logger.debug("Declared #{type} exchange: #{name}")
+          {:cont, :ok}
+        {:error, reason} = error ->
+          Logger.error("Failed to declare exchange #{name}: #{inspect(reason)}")
+          {:halt, error}
+      end
+    end)
+  end
+  
+  @doc """
+  Declare all queues
+  """
+  def declare_queues(channel) do
+    Enum.reduce_while(@queues, :ok, fn queue_spec, _acc ->
+      {name, opts} = case queue_spec do
+        {n, opts} -> {n, opts}
+        n -> {n, []}
+      end
+      
+      case Queue.declare(channel, name, opts) do
+        {:ok, _} ->
+          Logger.debug("Declared queue: #{name}")
+          {:cont, :ok}
+        {:error, reason} = error ->
+          Logger.error("Failed to declare queue #{name}: #{inspect(reason)}")
+          {:halt, error}
+      end
+    end)
+  end
+  
+  @doc """
+  Create all bindings between exchanges and queues
+  """
+  def create_bindings(channel) do
+    Enum.reduce_while(@bindings, :ok, fn {exchange, queue, routing_key}, _acc ->
+      case Queue.bind(channel, queue, Atom.to_string(exchange), routing_key: routing_key) do
+        :ok ->
+          Logger.debug("Bound #{queue} to #{exchange} with key: #{routing_key}")
+          {:cont, :ok}
+        {:error, reason} = error ->
+          Logger.error("Failed to bind #{queue} to #{exchange}: #{inspect(reason)}")
+          {:halt, error}
+      end
+    end)
+  end
+  
+  @doc """
+  Get exchange name for a given component
+  """
+  def exchange_for(:vsm), do: "vsm"
+  def exchange_for(:events), do: "events"
+  def exchange_for(:telemetry), do: "telemetry"
+  def exchange_for(:mcp), do: "mcp"
+  def exchange_for(:priority), do: "priority"
+  def exchange_for(_), do: "events"
+  
+  @doc """
+  Get queue name for a VSM system
+  """
+  def queue_for_system(1), do: "vsm.s1.operations"
+  def queue_for_system(2), do: "vsm.s2.coordination"
+  def queue_for_system(3), do: "vsm.s3.control"
+  def queue_for_system(4), do: "vsm.s4.intelligence"
+  def queue_for_system(5), do: "vsm.s5.policy"
+  def queue_for_system(_), do: "events.stream"
+  
+  @doc """
+  Get routing key for VSM system messages
+  """
+  def routing_key_for_system(system_num, action \\ "update") do
+    "s#{system_num}.#{action}"
   end
 end
