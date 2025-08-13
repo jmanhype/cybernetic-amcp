@@ -108,6 +108,14 @@ defmodule Cybernetic.Integration.VSMPathTest do
     end
     
     test "algedonic pain signal triggers S4 intervention", %{collector: collector} do
+      # Temporarily enable algedonic signals for this test
+      original_test_mode = Application.get_env(:cybernetic, :test_mode)
+      Application.put_env(:cybernetic, :test_mode, false)
+      
+      on_exit(fn ->
+        Application.put_env(:cybernetic, :test_mode, original_test_mode)
+      end)
+      
       # Simulate multiple failures to trigger pain signal
       Enum.each(1..10, fn i ->
         error_event = %{
