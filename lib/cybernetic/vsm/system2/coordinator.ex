@@ -30,7 +30,18 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   
   # Test interface - routes messages through the message handler
   def handle_message(message, meta \\ %{}) do
-    operation = Map.get(message, :operation, "unknown")
+    # Extract operation from type field or operation field
+    operation = case Map.get(message, :type) || Map.get(message, "type") do
+      "vsm.s2.coordination" -> "coordination"
+      "vsm.s2.coordination_complete" -> "coordination_complete"
+      "vsm.s2.coordinate" -> "coordinate"
+      "vsm.s2.sync" -> "sync"
+      "vsm.s2.status_request" -> "status_request"
+      _ ->
+        # Fallback to operation field
+        Map.get(message, :operation, Map.get(message, "operation", "unknown"))
+    end
+    
     Cybernetic.VSM.System2.MessageHandler.handle_message(operation, message, meta)
   end
 end
