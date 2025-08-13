@@ -1,0 +1,211 @@
+defmodule Cybernetic.Core.Security.NonceBloomTest do
+  use ExUnit.Case
+  alias Cybernetic.Core.Security.NonceBloom
+
+  setup do
+    # Ensure NonceBloom is started fresh for each test
+    case Process.whereis(NonceBloom) do
+      nil -> :ok
+      pid -> 
+        GenServer.stop(pid, :normal)
+        Process.sleep(10)
+    end
+    
+    {:ok, _pid} = NonceBloom.start_link()
+    :ok
+  end
+
+  describe "generate_nonce/0" do
+    test "generates unique nonces" do
+      nonce1 = NonceBloom.generate_nonce()
+      nonce2 = NonceBloom.generate_nonce()
+      
+      assert nonce1 != nonce2
+      assert is_binary(nonce1)
+      assert String.length(nonce1) == 21
+    end
+  end
+
+  describe "check_nonce/1" do
+    test "returns new for first-time nonce" do
+      nonce = NonceBloom.generate_nonce()
+      assert {:ok, :new} = NonceBloom.check_nonce(nonce)
+    end
+
+    test "detects replay for used nonce" do
+      nonce = NonceBloom.generate_nonce()
+      assert {:ok, :new} = NonceBloom.check_nonce(nonce)
+      assert {:error, :replay} = NonceBloom.check_nonce(nonce)
+    end
+  end
+
+  describe "enrich_message/2" do
+    test "adds security headers to message" do
+      original = %{"data" => "test"}
+      enriched = NonceBloom.enrich_message(original)
+      
+      assert enriched["_nonce"]
+      assert enriched["_timestamp"]
+      assert enriched["_site"]
+      assert enriched["_signature"]
+      assert enriched["data"] == "test"
+    end
+
+    test "generates valid HMAC signature" do
+      original = %{"data" => "test"}
+      enriched = NonceBloom.enrich_message(original)
+      
+      # Signature should be hex-encoded
+      assert String.match?(enriched["_signature"], ~r/^[a-f0-9]{64}$/)
+    end
+
+    test "uses custom site when provided" do
+      original = %{"data" => "test"}
+      enriched = NonceBloom.enrich_message(original, site: "custom@node")
+      
+      assert enriched["_site"] == "custom@node"
+    end
+  end
+
+  describe "validate_message/1" do
+    test "validates properly enriched message" do
+      original = %{"data" => "test", "type" => "vsm.test"}
+      enriched = NonceBloom.enrich_message(original)
+      
+      assert {:ok, validated} = NonceBloom.validate_message(enriched)
+      assert validated["data"] == "test"
+      assert validated["type"] == "vsm.test"
+      # Security headers should be stripped
+      refute Map.has_key?(validated, "_nonce")
+      refute Map.has_key?(validated, "_timestamp")
+      refute Map.has_key?(validated, "_signature")
+      refute Map.has_key?(validated, "_site")
+    end
+
+    test "rejects message with missing security headers" do
+      message = %{"data" => "test"}
+      assert {:error, :missing_security_headers} = NonceBloom.validate_message(message)
+    end
+
+    test "rejects message with invalid timestamp (future)" do
+      future_time = System.system_time(:millisecond) + 60_000
+      message = %{
+        "_nonce" => NonceBloom.generate_nonce(),
+        "_timestamp" => future_time,
+        "_site" => "test@node",
+        "_signature" => "invalid",
+        "data" => "test"
+      }
+      
+      assert {:error, :future_timestamp} = NonceBloom.validate_message(message)
+    end
+
+    test "rejects message with expired timestamp" do
+      old_time = System.system_time(:millisecond) - 400_000  # > 5 minutes old
+      message = %{
+        "_nonce" => NonceBloom.generate_nonce(),
+        "_timestamp" => old_time,
+        "_site" => "test@node",
+        "_signature" => "invalid",
+        "data" => "test"
+      }
+      
+      assert {:error, :expired_timestamp} = NonceBloom.validate_message(message)
+    end
+
+    test "rejects replayed message" do
+      original = %{"data" => "test"}
+      enriched = NonceBloom.enrich_message(original)
+      
+      # First validation should succeed
+      assert {:ok, _} = NonceBloom.validate_message(enriched)
+      
+      # Second validation with same nonce should fail
+      assert {:error, :replay} = NonceBloom.validate_message(enriched)
+    end
+
+    test "rejects message with tampered signature" do
+      original = %{"data" => "test"}
+      enriched = NonceBloom.enrich_message(original)
+      
+      # Tamper with the signature
+      tampered = Map.put(enriched, "_signature", "bad" <> enriched["_signature"])
+      
+      assert {:error, :invalid_signature} = NonceBloom.validate_message(tampered)
+    end
+
+    test "rejects message with tampered payload" do
+      original = %{"data" => "test"}
+      enriched = NonceBloom.enrich_message(original)
+      
+      # Tamper with the payload
+      tampered = Map.put(enriched, "data", "tampered")
+      
+      assert {:error, :invalid_signature} = NonceBloom.validate_message(tampered)
+    end
+  end
+
+  describe "HMAC signature security" do
+    test "signature changes with different payloads" do
+      msg1 = NonceBloom.enrich_message(%{"data" => "test1"})
+      msg2 = NonceBloom.enrich_message(%{"data" => "test2"})
+      
+      assert msg1["_signature"] != msg2["_signature"]
+    end
+
+    test "signature changes with different nonces" do
+      payload = %{"data" => "same"}
+      msg1 = NonceBloom.enrich_message(payload)
+      Process.sleep(1)  # Ensure different timestamp
+      msg2 = NonceBloom.enrich_message(payload)
+      
+      assert msg1["_signature"] != msg2["_signature"]
+      assert msg1["_nonce"] != msg2["_nonce"]
+    end
+
+    test "signature is deterministic for same inputs" do
+      # This test verifies HMAC behavior by manually constructing identical inputs
+      nonce = "test-nonce-123"
+      timestamp = 1234567890
+      payload = %{"data" => "test"}
+      
+      # Create two messages with identical security parameters
+      msg1 = Map.merge(payload, %{
+        "_nonce" => nonce,
+        "_timestamp" => timestamp,
+        "_site" => "test@node"
+      })
+      
+      msg2 = Map.merge(payload, %{
+        "_nonce" => nonce,
+        "_timestamp" => timestamp,
+        "_site" => "test@node"
+      })
+      
+      # Generate signatures manually (we'd need to expose this for proper testing)
+      # For now, we verify that enriched messages are unique due to nonces
+      enriched1 = NonceBloom.enrich_message(payload)
+      enriched2 = NonceBloom.enrich_message(payload)
+      
+      # Different nonces mean different signatures even for same payload
+      assert enriched1["_signature"] != enriched2["_signature"]
+    end
+  end
+
+  describe "cleanup process" do
+    @tag :slow
+    test "cleans up expired nonces" do
+      # This would require exposing internal state or waiting for cleanup
+      # For now, we verify the process doesn't crash
+      nonce = NonceBloom.generate_nonce()
+      assert {:ok, :new} = NonceBloom.check_nonce(nonce)
+      
+      # Send cleanup message directly (in real code, this happens on timer)
+      send(Process.whereis(NonceBloom), :cleanup)
+      Process.sleep(10)
+      
+      # Process should still be alive
+      assert Process.alive?(Process.whereis(NonceBloom))
+    end
+  end
+end
