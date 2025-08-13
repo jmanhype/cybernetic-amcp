@@ -14,6 +14,7 @@ defmodule Cybernetic.Application do
       
       # AMQP Transport
       Cybernetic.Transport.AMQP.Connection,
+      {Cybernetic.Core.Transport.AMQP.Topology, []},
       Cybernetic.Core.Transport.AMQP.Publisher,
       
       # MCP Registry  
