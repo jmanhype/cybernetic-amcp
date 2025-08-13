@@ -40,6 +40,21 @@ defmodule Cybernetic.Transport.AMQP.Connection do
     {:reply, {:error, :not_connected}, state}
   end
   
+  def handle_cast(:reconnect, state) do
+    # Force reconnection by closing current connection if exists
+    if state.connection do
+      try do
+        AMQP.Connection.close(state.connection)
+      catch
+        _, _ -> :ok
+      end
+    end
+    
+    # Trigger immediate reconnection
+    Process.send_after(self(), :connect, 100)
+    {:noreply, %{state | connection: nil, channel: nil, status: :reconnecting}}
+  end
+  
   def handle_info(:connect, state) do
     case establish_connection(state.config) do
       {:ok, conn, chan} ->
