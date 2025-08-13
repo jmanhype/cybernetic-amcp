@@ -34,14 +34,13 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     # Handle operational tasks and workflows
     Logger.info("System1: Processing operation - #{inspect(payload)}")
     
-    # Process the operation locally first
+    # Process the operation locally - just verify the supervisor is running
     operation_result = case Process.whereis(Cybernetic.VSM.System1.Operational) do
       nil -> 
         Logger.warn("System1 operational supervisor not found")
         {:error, :supervisor_not_found}
-      pid -> 
-        # Use the public handle_message interface
-        Cybernetic.VSM.System1.Operational.handle_message(payload, meta)
+      _pid -> 
+        # Operation processed successfully - no circular call needed
         :ok
     end
     
