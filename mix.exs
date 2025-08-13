@@ -34,9 +34,9 @@ defmodule Cybernetic.MixProject do
       
       # Goldrush branches for reactive stream processing
       {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "master"},
-      # Additional Goldrush features from develop branches
-      # These would need to be separate packages or merged into one branch to avoid conflicts
-      # For now using master which has the core functionality
+      {:goldrush_elixir, git: "https://github.com/DeadZen/goldrush", branch: "develop-elixir", app: false},
+      {:goldrush_telemetry, git: "https://github.com/DeadZen/goldrush", branch: "develop-telemetry", app: false},
+      {:goldrush_plugins, git: "https://github.com/DeadZen/goldrush", branch: "develop-plugins", app: false}
       
       # Telegram bot integration
       {:ex_gram, "~> 0.52"},  # More modern Telegram bot library
