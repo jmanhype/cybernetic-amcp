@@ -7,11 +7,10 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
   alias Cybernetic.Core.Security.NonceBloom
   require Logger
 
-  @exchanges [
-    {"cyb.events", :topic},
-    {"cyb.commands", :topic},
-    {"cyb.telemetry", :fanout}
-  ]
+  defp get_exchanges do
+    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
+    Enum.map(exchanges, fn {_key, name} -> {name, :topic} end)
+  end
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
