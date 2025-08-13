@@ -173,9 +173,17 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   end
   
   defp generate_signature(payload, nonce, timestamp) do
-    # Simple HMAC-like signature (in production, use proper HMAC with secret)
+    # Proper HMAC signature using a secret key
+    secret = get_hmac_secret()
     data = Jason.encode!({payload, nonce, timestamp})
-    :crypto.hash(:sha256, data) |> Base.encode16(case: :lower)
+    :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode16(case: :lower)
+  end
+
+  defp get_hmac_secret do
+    # In production, rotate this secret regularly and store securely
+    Application.get_env(:cybernetic, :security)[:hmac_secret] ||
+    System.get_env("CYBERNETIC_HMAC_SECRET") ||
+    "default-insecure-key-change-in-production"
   end
   
   defp strip_security_headers(message) do
