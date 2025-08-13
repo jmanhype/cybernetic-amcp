@@ -80,7 +80,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
     Process.send_after(self(), :cleanup, @cleanup_interval)
     
     state = %__MODULE__{
-      bloom: Bloomex.new(@bloom_size),
+      bloom: Bloomex.plain(@bloom_size, @bloom_error_rate),
       seen_nonces: %{},
       last_cleanup: System.system_time(:millisecond)
     }
