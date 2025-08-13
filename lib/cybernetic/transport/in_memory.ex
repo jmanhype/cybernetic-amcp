@@ -73,10 +73,12 @@ defmodule Cybernetic.Transport.InMemory do
   Set the test collector process for receiving messages during tests.
   """
   def set_test_collector(collector_pid) when is_pid(collector_pid) do
-    Process.put(:test_collector, collector_pid)
+    :persistent_term.put({:test_collector, __MODULE__}, collector_pid)
   end
   
   def set_test_collector(nil) do
-    Process.delete(:test_collector)
+    :persistent_term.erase({:test_collector, __MODULE__})
+  catch
+    :error, :badarg -> :ok # Key doesn't exist
   end
 end
