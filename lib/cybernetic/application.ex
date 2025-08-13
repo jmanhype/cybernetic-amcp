@@ -29,7 +29,12 @@ defmodule Cybernetic.Application do
       # Telegram Agent (S1)
       Cybernetic.VSM.System1.Agents.TelegramAgent
     ]
-    opts = [strategy: :one_for_one, name: Cybernetic.Supervisor]
+    opts = [
+      strategy: :one_for_one, 
+      name: Cybernetic.Supervisor,
+      max_restarts: 10,
+      max_seconds: 60
+    ]
     Supervisor.start_link(children, opts)
   end
 end
