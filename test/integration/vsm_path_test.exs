@@ -21,7 +21,9 @@ defmodule Cybernetic.Integration.VSMPathTest do
     {:ok, collector} = start_test_collector()
     
     on_exit(fn ->
-      GenServer.stop(collector)
+      if Process.alive?(collector) do
+        GenServer.stop(collector, :normal, 1000)
+      end
     end)
     
     {:ok, collector: collector}
