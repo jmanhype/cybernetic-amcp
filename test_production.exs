@@ -302,8 +302,8 @@ defmodule ProductionTest do
       # Monitor the process
       ref = Process.monitor(s1_pid)
       
-      # Kill the process with a normal exit (simulating crash)
-      Process.exit(s1_pid, :shutdown)
+      # Kill the process with an abnormal exit (simulating crash)
+      Process.exit(s1_pid, :kill)
       
       # Wait for the DOWN message
       receive do
