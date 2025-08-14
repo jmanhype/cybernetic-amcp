@@ -220,6 +220,14 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   """
   def canonical_string(payload, nonce, timestamp, site \\ nil, meta \\ %{}) do
     # Deterministic order for signing - includes routing keys
+    # Safely encode payload - handle binary data
+    encoded_payload = case Jason.encode(payload) do
+      {:ok, json} -> json
+      {:error, _} -> 
+        # If payload can't be encoded (contains binary), convert to inspected string
+        inspect(payload)
+    end
+    
     [
       nonce,
       timestamp,
@@ -227,7 +235,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
       Map.get(meta, :exchange, ""),
       Map.get(meta, :routing_key, ""),
       Map.get(meta, :content_type, "application/json"),
-      Jason.encode!(payload)
+      encoded_payload
     ]
     |> Enum.join("|")
   end
