@@ -46,6 +46,12 @@ defmodule Cybernetic.MixProject do
       {:bloomex, "~> 1.0"},  # Bloom filter for replay protection
       {:nanoid, "~> 2.0"},    # Nonce generation
       
+      # WASM runtime
+      {:wasmex, "~> 0.9.2"},
+      
+      # HTTP client for Claude API
+      {:req, "~> 0.5.0"},
+      
       # Testing
       {:stream_data, "~> 1.0", only: [:test, :dev]},
       
