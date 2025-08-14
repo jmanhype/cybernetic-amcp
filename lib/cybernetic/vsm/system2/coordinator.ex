@@ -7,9 +7,24 @@ defmodule Cybernetic.VSM.System2.Coordinator do
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
-  def init(state), do: {:ok, Map.put(state, :attention, %{})}
+  def init(state) do
+    {:ok, state 
+      |> Map.put(:attention, %{})
+      |> Map.put(:priorities, %{})
+      |> Map.put(:resource_slots, %{})
+      |> Map.put(:max_slots, 8)}
+  end
 
   def focus(task_id), do: GenServer.cast(__MODULE__, {:focus, task_id})
+  
+  @doc "Set priority weight for a topic (higher = more resources)"
+  def set_priority(topic, weight), do: GenServer.cast(__MODULE__, {:set_priority, topic, weight})
+  
+  @doc "Reserve a processing slot (returns :ok | :backpressure)"
+  def reserve_slot(topic), do: GenServer.call(__MODULE__, {:reserve_slot, topic})
+  
+  @doc "Release a processing slot"
+  def release_slot(topic), do: GenServer.cast(__MODULE__, {:release_slot, topic})
 
   def handle_cast({:focus, task_id}, state) do
     att = Map.update(state.attention, task_id, %{weight: 1.1, last: System.monotonic_time()}, fn a -> %{a | weight: a.weight * 1.05, last: System.monotonic_time()} end)
