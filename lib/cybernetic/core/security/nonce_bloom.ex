@@ -82,7 +82,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
       {:ok, strip_security_headers(message)}
     else
       {:error, reason} ->
-        Logger.warn("Message validation failed: #{inspect(reason)}")
+        Logger.warning("Message validation failed: #{inspect(reason)}")
         {:error, reason}
     end
   end
