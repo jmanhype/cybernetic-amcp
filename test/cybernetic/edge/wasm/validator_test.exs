@@ -4,9 +4,11 @@ defmodule Cybernetic.Edge.WASM.ValidatorTest do
 
   describe "validator behaviour" do
     test "implements required callbacks" do
-      # Verify behaviour is properly implemented
-      assert function_exported?(Validator, :init, 1)
-      assert function_exported?(Validator, :validate, 2)
+      # Verify behaviour is properly implemented  
+      assert {:ok, _state} = Validator.init(%{})
+      {:ok, state} = Validator.init(%{})
+      msg = %{"test" => "data"}
+      assert match?({_, _}, Validator.validate(msg, state))
     end
 
     test "init returns proper state" do
