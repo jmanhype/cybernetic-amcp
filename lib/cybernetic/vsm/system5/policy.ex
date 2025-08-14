@@ -6,7 +6,22 @@ defmodule Cybernetic.VSM.System5.Policy do
   """
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
-  def init(state), do: {:ok, Map.put(state, :identity, %{name: "Cybernetic"})}
+  
+  def init(state) do
+    {:ok, state
+      |> Map.put(:identity, %{name: "Cybernetic"})
+      |> Map.put(:policies, %{})
+      |> Map.put(:policy_history, %{})}
+  end
+  
+  @doc "Store a policy with versioning"
+  def put_policy(id, policy), do: GenServer.call(__MODULE__, {:put_policy, id, policy})
+  
+  @doc "Get current policy version"
+  def get_policy(id), do: GenServer.call(__MODULE__, {:get_policy, id})
+  
+  @doc "Get diff between two policy versions"
+  def diff_policy(id, v1, v2), do: GenServer.call(__MODULE__, {:diff_policy, id, v1, v2})
   
   # Handle transport messages from in-memory transport
   def handle_cast({:transport_message, message, opts}, state) do
