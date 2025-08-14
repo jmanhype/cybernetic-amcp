@@ -63,7 +63,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
       
       {:error, reason} ->
         Logger.error("Failed to process message: #{inspect(reason)}")
-        Basic.reject(state.channel, meta.delivery_tag, requeue: true)
+        maybe_retry(normalized_message, state, meta)
         :telemetry.execute([:amqp, :message, :error], %{count: 1}, meta)
     end
     
