@@ -80,14 +80,20 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       :telemetry.detach({__MODULE__, ref})
     end
 
-    test "handles LLM provider errors gracefully" do
-      # Detach any existing handlers to avoid conflicts
+    test "handles LLM provider errors gracefully", %{pid: pid} do
+      # Stop the existing bridge
+      Process.exit(pid, :normal)
+      Process.sleep(10)
+      
+      # Clean up handlers
       :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
-      |> Enum.each(fn %{id: {Bridge, _}} -> :telemetry.detach({Bridge, :facts}) 
-                      _ -> :ok end)
+      |> Enum.each(fn 
+        %{id: {Bridge, _}} -> :telemetry.detach({Bridge, :facts})
+        _ -> :ok 
+      end)
       
       # Start a new Bridge with error response
-      {:ok, _pid} = Bridge.start_link(
+      {:ok, _new_pid} = Bridge.start_link(
         provider: MockProvider, 
         provider_opts: [response: :error]
       )
