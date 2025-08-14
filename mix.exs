@@ -46,8 +46,9 @@ defmodule Cybernetic.MixProject do
       {:bloomex, "~> 1.0"},  # Bloom filter for replay protection
       {:nanoid, "~> 2.0"},    # Nonce generation
       
-      # HTTP client for Claude API
-      {:req, "~> 0.5.0"},
+      # HTTP clients
+      {:req, "~> 0.5.0"},        # For Claude API
+      {:httpoison, "~> 2.2"},    # For Telegram bot
       
       # Environment variable loading
       {:dotenv, "~> 3.1", only: [:dev, :test]},
