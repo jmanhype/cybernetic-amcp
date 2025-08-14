@@ -84,13 +84,20 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   end
 
   defp setup_queue(channel) do
-    {:ok, _} = Queue.declare(channel, @queue, 
-      durable: true,
-      arguments: [
-        {"x-message-ttl", :long, 86_400_000},
-        {"x-dead-letter-exchange", :longstr, "cybernetic.dlx"}
-      ]
-    )
+    # Try passive declare first to check if queue exists
+    case Queue.declare(channel, @queue, passive: true) do
+      {:ok, _} ->
+        Logger.debug("Queue #{@queue} already exists")
+      {:error, _} ->
+        # Queue doesn't exist, create it
+        {:ok, _} = Queue.declare(channel, @queue, 
+          durable: true,
+          arguments: [
+            {"x-message-ttl", :long, 86_400_000},
+            {"x-dead-letter-exchange", :longstr, "vsm.dlx"}
+          ]
+        )
+    end
     
     :ok = Exchange.declare(channel, @exchange, :topic, durable: true)
     :ok = Queue.bind(channel, @queue, @exchange, routing_key: "#")
