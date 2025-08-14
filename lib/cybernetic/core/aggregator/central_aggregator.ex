@@ -23,13 +23,21 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   end
 
   defp attach_sources do
+    # Detach any existing handlers first
+    :telemetry.detach({__MODULE__, :goldrush})
+    
     # Goldrush matches → [:cybernetic, :goldrush, :match]
-    :telemetry.attach_many(
+    result = :telemetry.attach_many(
       {__MODULE__, :goldrush},
       [[:cybernetic, :goldrush, :match], [:cybernetic, :work, :finished], [:cybernetic, :work, :failed]],
       &__MODULE__.handle_source/4,
       %{}
     )
+    
+    case result do
+      :ok -> Logger.info("CentralAggregator telemetry handlers attached")
+      {:error, reason} -> Logger.warning("Failed to attach CentralAggregator handlers: #{inspect(reason)}")
+    end
   end
 
   @doc false
