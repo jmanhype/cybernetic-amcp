@@ -1,0 +1,168 @@
+defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
+  use ExUnit.Case, async: false
+  alias Cybernetic.Core.Aggregator.CentralAggregator
+
+  setup do
+    # Clean up any existing ETS table
+    case :ets.info(:cyb_agg_window) do
+      :undefined -> :ok
+      _ -> :ets.delete(:cyb_agg_window)
+    end
+    
+    {:ok, pid} = CentralAggregator.start_link([])
+    on_exit(fn -> Process.exit(pid, :normal) end)
+    {:ok, pid: pid}
+  end
+
+  describe "event ingestion" do
+    test "handles telemetry events", %{pid: _pid} do
+      # Emit test event
+      :telemetry.execute(
+        [:cybernetic, :work, :finished],
+        %{duration: 100, count: 5},
+        %{severity: "info", labels: %{source: "test"}}
+      )
+
+      # Give aggregator time to process
+      Process.sleep(10)
+
+      # Verify entry in ETS
+      entries = :ets.tab2list(:cyb_agg_window)
+      assert length(entries) > 0
+      
+      {_timestamp, entry} = hd(entries)
+      assert entry.source == [:cybernetic, :work, :finished]
+      assert entry.severity == "info"
+      assert entry.data.duration == 100
+    end
+
+    test "handles goldrush match events" do
+      :telemetry.execute(
+        [:cybernetic, :goldrush, :match],
+        %{pattern: "slow_query", confidence: 0.95},
+        %{severity: "warning", labels: %{db: "postgres"}}
+      )
+
+      Process.sleep(10)
+      
+      entries = :ets.tab2list(:cyb_agg_window)
+      assert length(entries) > 0
+      
+      {_ts, entry} = hd(entries)
+      assert entry.severity == "warning"
+      assert entry.labels.db == "postgres"
+    end
+  end
+
+  describe "fact emission" do
+    test "emits aggregated facts periodically", %{pid: pid} do
+      # Attach listener for facts
+      ref = make_ref()
+      parent = self()
+      
+      :telemetry.attach(
+        {__MODULE__, ref},
+        [:cybernetic, :aggregator, :facts],
+        fn _event, measurements, meta, _config ->
+          send(parent, {:facts_emitted, measurements, meta})
+        end,
+        nil
+      )
+
+      # Inject test events
+      for i <- 1..5 do
+        :telemetry.execute(
+          [:cybernetic, :work, :finished],
+          %{duration: i * 100},
+          %{severity: "info", labels: %{batch: i}}
+        )
+      end
+
+      # Trigger emission
+      send(pid, :emit)
+
+      # Wait for facts
+      assert_receive {:facts_emitted, measurements, meta}, 1_000
+      
+      assert is_list(measurements.facts)
+      assert meta.window == "60s"
+      
+      # Should have aggregated our 5 events
+      assert length(measurements.facts) > 0
+      
+      :telemetry.detach({__MODULE__, ref})
+    end
+
+    test "prunes old entries from window" do
+      now = System.system_time(:millisecond)
+      old_time = now - 70_000  # 70 seconds ago
+      recent_time = now - 30_000  # 30 seconds ago
+
+      # Insert old and recent entries
+      :ets.insert(:cyb_agg_window, {old_time, %{at: old_time, data: "old"}})
+      :ets.insert(:cyb_agg_window, {recent_time, %{at: recent_time, data: "recent"}})
+      :ets.insert(:cyb_agg_window, {now, %{at: now, data: "current"}})
+
+      # Trigger pruning
+      send(Process.whereis(CentralAggregator), :emit)
+      Process.sleep(50)
+
+      # Old entry should be pruned
+      entries = :ets.tab2list(:cyb_agg_window)
+      timestamps = Enum.map(entries, fn {ts, _} -> ts end)
+      
+      refute old_time in timestamps
+      assert recent_time in timestamps
+      assert now in timestamps
+    end
+  end
+
+  describe "fact summarization" do
+    test "groups events by source, severity, and labels" do
+      # Emit similar events
+      for i <- 1..3 do
+        :telemetry.execute(
+          [:cybernetic, :work, :finished],
+          %{duration: 100},
+          %{severity: "info", labels: %{type: "batch"}}
+        )
+      end
+
+      # Emit different event
+      :telemetry.execute(
+        [:cybernetic, :work, :failed],
+        %{error: "timeout"},
+        %{severity: "error", labels: %{type: "batch"}}
+      )
+
+      # Force emission
+      ref = make_ref()
+      parent = self()
+      
+      :telemetry.attach(
+        {__MODULE__, ref},
+        [:cybernetic, :aggregator, :facts],
+        fn _event, measurements, _meta, _config ->
+          send(parent, {:facts, measurements.facts})
+        end,
+        nil
+      )
+
+      send(Process.whereis(CentralAggregator), :emit)
+      
+      assert_receive {:facts, facts}, 1_000
+      
+      # Should have 2 distinct fact groups
+      assert length(facts) >= 2
+      
+      # Find the aggregated batch events
+      batch_fact = Enum.find(facts, fn f -> 
+        f["severity"] == "info" && f["labels"]["type"] == "batch"
+      end)
+      
+      assert batch_fact["count"] == 3
+      
+      :telemetry.detach({__MODULE__, ref})
+    end
+  end
+end
