@@ -184,11 +184,20 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   
   defp validate_timestamp(timestamp) when is_integer(timestamp) do
     now = System.system_time(:millisecond)
-    age = now - timestamp
+    skew = now - timestamp
+    max_skew = Application.get_env(:cybernetic, :max_clock_skew_ms, 90_000)  # 90 seconds default
+    
+    # Emit telemetry for clock skew monitoring
+    :telemetry.execute(
+      @telemetry_ns ++ [:clock_skew],
+      %{skew_ms: abs(skew)},
+      %{direction: if(skew < 0, do: :future, else: :past)}
+    )
     
     cond do
-      age < 0 -> {:error, :future_timestamp}
-      age > @nonce_ttl -> {:error, :expired_timestamp}
+      abs(skew) > max_skew and skew < 0 -> {:error, :clock_skew_future}
+      abs(skew) > max_skew and skew > 0 -> {:error, :clock_skew_past}
+      skew > @nonce_ttl -> {:error, :expired_timestamp}
       true -> {:ok, :valid_timestamp}
     end
   end
