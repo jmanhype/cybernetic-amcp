@@ -5,7 +5,6 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
   alias Cybernetic.Transport.Message
   alias Cybernetic.Core.Security.NonceBloom
   
-  @tag :skip
   property "normalize flattens nested security headers and preserves content" do
     check all payload <- term(),
               nonce <- binary(min_length: 16, max_length: 32),
