@@ -11,6 +11,8 @@ defmodule Cybernetic.MCP.HermesClient do
 
   require Logger
   
+  @behaviour Cybernetic.Plugin
+  
   # Plugin behavior implementation
   def init(opts) do
     # Initialize plugin state
