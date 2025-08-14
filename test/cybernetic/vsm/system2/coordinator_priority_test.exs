@@ -1,6 +1,12 @@
 defmodule Cybernetic.VSM.System2.CoordinatorPriorityTest do
   use ExUnit.Case, async: false
   alias Cybernetic.VSM.System2.Coordinator
+  
+  setup do
+    # Ensure telemetry is started for tests
+    Application.ensure_all_started(:telemetry)
+    :ok
+  end
 
   describe "weighted fair share" do
     test "2:1 split allocation" do
