@@ -17,17 +17,24 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
   end
 
   setup do
-    # Check if Bridge is already running
-    pid = case Process.whereis(Bridge) do
-      nil ->
-        # Start bridge with mock provider
-        {:ok, p} = Bridge.start_link(provider: MockProvider, provider_opts: [])
-        on_exit(fn -> Process.exit(p, :normal) end)
-        p
-      existing_pid ->
-        # Use existing process
-        existing_pid
-    end
+    # Clean up any existing telemetry handlers from Bridge
+    :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
+    |> Enum.each(fn 
+      %{id: {Bridge, _}} -> :telemetry.detach({Bridge, :facts})
+      _ -> :ok 
+    end)
+    
+    # Always start a fresh Bridge for tests
+    {:ok, pid} = Bridge.start_link(provider: MockProvider, provider_opts: [])
+    on_exit(fn -> 
+      Process.exit(pid, :normal)
+      # Clean up handlers
+      :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
+      |> Enum.each(fn 
+        %{id: {Bridge, _}} -> :telemetry.detach({Bridge, :facts})
+        _ -> :ok 
+      end)
+    end)
     
     {:ok, pid: pid}
   end
