@@ -26,7 +26,10 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       _ -> :ets.delete(:cyb_agg_window)
     end
     
-    {:ok, pid} = CentralAggregator.start_link([])
+    {:ok, pid} = case CentralAggregator.start_link([]) do
+      {:ok, p} -> {:ok, p}
+      {:error, {:already_started, p}} -> {:ok, p}
+    end
     on_exit(fn -> 
       Process.exit(pid, :normal)
       # Clean up handlers
