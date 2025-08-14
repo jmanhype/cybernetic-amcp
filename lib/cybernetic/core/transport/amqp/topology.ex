@@ -7,7 +7,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   
   use GenServer
   require Logger
-  alias AMQP.{Channel, Exchange, Queue}
+  alias AMQP.{Exchange, Queue}
   alias Cybernetic.Core.Transport.AMQP.Connection
   
   @exchanges [
@@ -116,7 +116,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
           error -> {:stop, error}
         end
       {:error, reason} ->
-        Logger.warn("Failed to get AMQP channel for topology setup: #{inspect(reason)}")
+        Logger.warning("Failed to get AMQP channel for topology setup: #{inspect(reason)}")
         {:ok, %{channel: nil}}
     end
   end
@@ -225,12 +225,6 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     Map.get(exchanges, key, "cyb.events")
   end
   
-  @doc """
-  Helper to get exchange name by key
-  """
-  defp ex(name) do
-    Application.get_env(:cybernetic, :amqp)[:exchanges][name]
-  end
   
   @doc """
   Get queue name for a VSM system
