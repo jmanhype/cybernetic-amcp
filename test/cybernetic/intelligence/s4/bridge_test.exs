@@ -135,7 +135,6 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
   end
 
   describe "SOP forwarding" do
-    @tag :skip
     test "forwards analysis to SOP Engine when available" do
       # Start SOP Engine or get existing
       sop_pid = case Process.whereis(Cybernetic.Intelligence.S4.SOPEngine) do
