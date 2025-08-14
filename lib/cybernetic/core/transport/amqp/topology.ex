@@ -104,9 +104,9 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     {"cyb.vsm.s4", "vsm.s4.intelligence", "s4.#"},
     {"cyb.vsm.s5", "vsm.s5.policy", "s5.#"},
     
-    # MCP bindings
-    {"cyb.mcp", "mcp.requests", "request"},
-    {"cyb.mcp", "mcp.responses", "response"},
+    # MCP bindings - use cyb.mcp.tools exchange
+    {"cyb.mcp.tools", "mcp.requests", "request"},
+    {"cyb.mcp.tools", "mcp.responses", "response"},
     
     # Telemetry bindings
     {"cyb.telemetry", "telemetry.metrics", "metrics.#"},
@@ -114,9 +114,6 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     
     # Event stream binding
     {"cyb.events", "events.stream", "#"},
-    
-    # Priority messages direct to alerts
-    {"cyb.priority", "priority.alerts", "alert"},
     
     # Dead letter bindings
     {"vsm.dlx", "dlq", ""},
