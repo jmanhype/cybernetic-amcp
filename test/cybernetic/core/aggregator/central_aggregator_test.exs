@@ -81,6 +81,9 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       # List all handlers for this event to check for conflicts
       handlers = :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
       IO.puts("Active handlers for [:cybernetic, :aggregator, :facts]: #{length(handlers)}")
+      
+      # Detach the S4 Bridge handler temporarily to avoid conflicts
+      :telemetry.detach({Cybernetic.Intelligence.S4.Bridge, :facts})
 
       # Inject test events
       for i <- 1..5 do
