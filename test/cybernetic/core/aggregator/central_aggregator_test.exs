@@ -3,14 +3,23 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
   alias Cybernetic.Core.Aggregator.CentralAggregator
 
   setup do
-    # Clean up any existing ETS table
-    case :ets.info(:cyb_agg_window) do
-      :undefined -> :ok
-      _ -> :ets.delete(:cyb_agg_window)
+    # Check if CentralAggregator is already running
+    pid = case Process.whereis(CentralAggregator) do
+      nil ->
+        # Clean up any existing ETS table
+        case :ets.info(:cyb_agg_window) do
+          :undefined -> :ok
+          _ -> :ets.delete(:cyb_agg_window)
+        end
+        
+        {:ok, p} = CentralAggregator.start_link([])
+        on_exit(fn -> Process.exit(p, :normal) end)
+        p
+      existing_pid ->
+        # Use existing process
+        existing_pid
     end
     
-    {:ok, pid} = CentralAggregator.start_link([])
-    on_exit(fn -> Process.exit(pid, :normal) end)
     {:ok, pid: pid}
   end
 
