@@ -71,6 +71,12 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
     DeltaCrdt.mutate(crdt, :add, [key, value])
     {:noreply, state}
   end
+  
+  def handle_cast(:enable_sync, state) do
+    # Manually trigger neighbor wiring
+    send(self(), :wire_neighbors)
+    {:noreply, state}
+  end
 
   def handle_call({:query, criteria}, _from, %{crdt: crdt} = state) do
     all_triples = DeltaCrdt.read(crdt) |> Map.values()
