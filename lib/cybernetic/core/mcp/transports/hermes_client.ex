@@ -13,6 +13,13 @@ defmodule Cybernetic.MCP.HermesClient do
   
   @behaviour Cybernetic.Plugin
   
+  # Wrapper functions to match expected test signatures
+  # The use Hermes.Client macro provides ping/1, list_tools/1, etc. but tests expect different arities
+  def ping(), do: ping([])
+  def list_tools(), do: list_tools([])
+  def call_tool(name, params), do: call_tool(name, params, [])
+  def read_resource(uri), do: read_resource(uri, [])
+  
   # Plugin behavior implementation
   def init(opts) do
     # Initialize plugin state
