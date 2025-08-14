@@ -78,7 +78,6 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   defp do_emit(state) do
     prune()
     facts = summarize()
-    Logger.info("CentralAggregator: Emitting #{length(facts)} facts via telemetry")
     :telemetry.execute([:cybernetic, :aggregator, :facts], %{facts: facts}, %{window: "60s"})
     Process.send_after(self(), :emit, @emit_every_ms)
     %{state | last_emit: now_ms()}
