@@ -4,12 +4,14 @@ defmodule Cybernetic.MCP.HermesClient do
   Real Hermes MCP client implementation for Cybernetic VSM.
   Provides access to external MCP tools and capabilities using the Hermes library.
   """
+  use Hermes.Client,
+    name: "Cybernetic",
+    version: "0.1.0",
+    protocol_version: "2024-11-05"
+
   require Logger
   
   @behaviour Cybernetic.Plugin
-
-  # Import Hermes client functions manually to avoid macro conflicts
-  alias Hermes.Client.Base
 
   @impl true
   def init(opts) do
