@@ -42,7 +42,7 @@ defmodule Cybernetic.Edge.WASM.ValidatorHost do
   end
 
   @impl true
-  def handle_call({:validate, msg}, _from, %{instance: nil} = s) do
+  def handle_call({:validate, _msg}, _from, %{instance: nil} = s) do
     {:reply, {:error, :not_loaded}, s}
   end
 
@@ -64,9 +64,13 @@ defmodule Cybernetic.Edge.WASM.ValidatorHost do
   # ——— internals ———
 
   defp load_instance(path) do
-    with {:ok, bin} <- File.read(path),
-         {:ok, pid} <- Wasmex.start_link(%Wasmex.WasmModule{bytes: bin}, wasi: true) do
-      {:ok, {__MODULE__.Runner, pid}}
+    # Wasmex dependency not yet added - stub for now
+    case File.read(path) do
+      {:ok, _bin} ->
+        Logger.warning("WASM runtime not available - add :wasmex dependency")
+        {:error, :no_wasm_runtime}
+      error -> 
+        error
     end
   end
 
