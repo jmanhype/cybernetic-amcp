@@ -45,12 +45,12 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
       {:error, _} -> Message.normalize(payload)
     end
     
-    with {:ok, validated} <- validate_and_process(normalized_message, meta) do
+    with {:ok, _validated} <- validate_and_process(normalized_message, meta) do
       Basic.ack(state.channel, meta.delivery_tag)
       :telemetry.execute([:amqp, :message, :processed], %{count: 1}, meta)
     else
       {:error, :replay_detected} ->
-        Logger.warn("Replay attack detected, rejecting message")
+        Logger.warning("Replay attack detected, rejecting message")
         Basic.reject(state.channel, meta.delivery_tag, requeue: false)
         :telemetry.execute([:amqp, :message, :replay], %{count: 1}, meta)
       
@@ -69,7 +69,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   end
 
   def handle_info({:basic_cancel, _}, state) do
-    Logger.warn("Consumer cancelled")
+    Logger.warning("Consumer cancelled")
     {:stop, :normal, state}
   end
 
@@ -122,7 +122,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
     if Code.ensure_loaded?(vsm_module) do
       apply(vsm_module, :handle_message, [message, meta])
     else
-      Logger.warn("Unknown VSM system: #{system}")
+      Logger.warning("Unknown VSM system: #{system}")
       {:error, :unknown_system}
     end
   end
@@ -147,14 +147,4 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
     {:ok, :unhandled}
   end
 
-  defp get_header(meta, key) do
-    case meta.headers do
-      headers when is_list(headers) ->
-        Enum.find_value(headers, fn
-          {^key, _, value} -> value
-          _ -> nil
-        end)
-      _ -> nil
-    end
-  end
 end
