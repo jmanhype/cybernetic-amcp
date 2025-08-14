@@ -26,17 +26,41 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     # Priority messages (algedonic channel)
     {:priority, :direct, durable: true, auto_delete: false},
     
-    # Dead letter exchange for failed messages
-    {:dlx, :fanout, durable: true, auto_delete: false}
+    # Dead letter exchange for failed messages (use vsm.dlx to match existing)
+    {:dlx, :fanout, durable: true, auto_delete: false},
+    {"vsm.dlx", :fanout, durable: true, auto_delete: false}
   ]
   
   @queues [
-    # VSM System queues
-    {"vsm.s1.operations", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
-    {"vsm.s2.coordination", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
-    {"vsm.s3.control", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
-    {"vsm.s4.intelligence", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
-    {"vsm.s5.policy", durable: true, arguments: [{"x-message-ttl", :long, 300000}]},
+    # VSM System queues - match existing configuration
+    {"vsm.s1.operations", durable: true, arguments: [
+      {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
+      {"x-max-length", :long, 10000},
+      {"x-message-ttl", :long, 300000},
+      {"x-overflow", :longstr, "drop-head"}
+    ]},
+    {"vsm.s2.coordination", durable: true, arguments: [
+      {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
+      {"x-max-length", :long, 5000},
+      {"x-message-ttl", :long, 600000},
+      {"x-single-active-consumer", :bool, true}
+    ]},
+    {"vsm.s3.control", durable: true, arguments: [
+      {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
+      {"x-max-length", :long, 3000},
+      {"x-max-priority", :byte, 10},
+      {"x-message-ttl", :long, 900000}
+    ]},
+    {"vsm.s4.intelligence", durable: true, arguments: [
+      {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
+      {"x-max-length", :long, 20000},
+      {"x-message-ttl", :long, 3600000}
+    ]},
+    {"vsm.s5.policy", durable: true, arguments: [
+      {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
+      {"x-max-length", :long, 1000},
+      {"x-message-ttl", :long, 86400000}
+    ]},
     
     # MCP queues
     {"mcp.requests", durable: true},
@@ -194,6 +218,16 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
         {:ok, _} ->
           Logger.debug("Declared queue: #{name}")
           {:cont, :ok}
+        {:error, {:resource_locked, _}} ->
+          # Queue exists with different args, try passive declare
+          case Queue.declare(channel, name, passive: true) do
+            {:ok, _} ->
+              Logger.debug("Queue already exists: #{name}")
+              {:cont, :ok}
+            error ->
+              Logger.warning("Queue exists with different args: #{name}")
+              {:cont, :ok}  # Continue anyway since queue exists
+          end
         {:error, reason} = error ->
           Logger.error("Failed to declare queue #{name}: #{inspect(reason)}")
           {:halt, error}
