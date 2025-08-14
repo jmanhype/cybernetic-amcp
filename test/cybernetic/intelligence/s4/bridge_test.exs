@@ -66,11 +66,18 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
         %{"source" => "db", "severity" => "warning", "count" => 2}
       ]
       
+      # Debug: Check if telemetry handlers are attached
+      handlers = :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
+      IO.puts("Attached handlers: #{inspect(handlers)}")
+      
       :telemetry.execute(
         [:cybernetic, :aggregator, :facts],
         %{facts: facts},
         %{window: "60s"}
       )
+      
+      # Give some time for the handler to process
+      Process.sleep(100)
 
       # Should receive S4 analysis
       assert_receive {:s4_analysis, measurements, meta}, 1_000
