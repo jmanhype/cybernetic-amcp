@@ -4,6 +4,11 @@ defmodule Cybernetic.Edge.WASM.ValidatorTest do
 
   describe "validator behaviour" do
     test "implements required callbacks" do
+      # Ensure ValidatorHost is available
+      unless Process.whereis(ValidatorHost) do
+        {:ok, _} = ValidatorHost.start_link(wasm_path: "test.wasm")
+      end
+      
       # Verify behaviour is properly implemented  
       assert {:ok, _state} = Validator.init(%{})
       {:ok, state} = Validator.init(%{})
