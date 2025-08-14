@@ -98,10 +98,28 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       old_time = now - 70_000  # 70 seconds ago
       recent_time = now - 30_000  # 30 seconds ago
 
-      # Insert old and recent entries
-      :ets.insert(:cyb_agg_window, {old_time, %{at: old_time, data: "old"}})
-      :ets.insert(:cyb_agg_window, {recent_time, %{at: recent_time, data: "recent"}})
-      :ets.insert(:cyb_agg_window, {now, %{at: now, data: "current"}})
+      # Insert old and recent entries with proper structure
+      :ets.insert(:cyb_agg_window, {old_time, %{
+        at: old_time, 
+        source: [:test, :old],
+        severity: "info",
+        labels: %{},
+        data: %{value: "old"}
+      }})
+      :ets.insert(:cyb_agg_window, {recent_time, %{
+        at: recent_time,
+        source: [:test, :recent],
+        severity: "info", 
+        labels: %{},
+        data: %{value: "recent"}
+      }})
+      :ets.insert(:cyb_agg_window, {now, %{
+        at: now,
+        source: [:test, :current],
+        severity: "info",
+        labels: %{},
+        data: %{value: "current"}
+      }})
 
       # Trigger pruning
       send(Process.whereis(CentralAggregator), :emit)
