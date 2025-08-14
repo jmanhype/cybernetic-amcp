@@ -29,6 +29,9 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       {:ok, p} -> p
       {:error, {:already_started, p}} -> p
     end
+    
+    # Give Bridge time to attach its telemetry handlers
+    Process.sleep(50)
     on_exit(fn -> 
       Process.exit(pid, :normal)
       # Clean up handlers
