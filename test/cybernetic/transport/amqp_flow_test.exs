@@ -7,11 +7,20 @@ defmodule Cybernetic.Transport.AMQPFlowTest do
   
   @test_exchange "cyb.test.flow"
   @test_queue "cyb.test.flow.queue"
+  @rabbit_host System.get_env("AMQP_HOST", "localhost")
   
   setup_all do
+    # Check if RabbitMQ is available
+    case :gen_tcp.connect(String.to_charlist(@rabbit_host), 5672, [:binary, active: false], 250) do
+      {:ok, sock} ->
+        :gen_tcp.close(sock)
+      {:error, _} ->
+        {:skip, "RabbitMQ not available at #{@rabbit_host}:5672"}
+    end
+    
     # Ensure AMQP connection is available
     {:ok, conn} = AMQP.Connection.open(
-      Application.get_env(:cybernetic, :amqp_url, "amqp://guest:guest@localhost:5672")
+      Application.get_env(:cybernetic, :amqp_url, "amqp://guest:guest@#{@rabbit_host}:5672")
     )
     {:ok, chan} = AMQP.Channel.open(conn)
     
