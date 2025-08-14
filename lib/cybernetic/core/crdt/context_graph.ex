@@ -80,6 +80,10 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
     
     {:reply, filtered_triples, state}
   end
+  
+  def handle_call(:get_neighbors, _from, state) do
+    {:reply, state.neighbors, state}
+  end
 
   # Private helper functions
 
