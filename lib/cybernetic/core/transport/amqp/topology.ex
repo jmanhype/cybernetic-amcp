@@ -53,7 +53,16 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     {"priority.alerts", durable: true, arguments: [{"x-priority", :byte, 10}]},
     
     # Dead letter queue
-    {"dlq", durable: true}
+    {"dlq", durable: true},
+    
+    # Retry queue with TTL and dead-letter back to main exchange
+    {"cyb.events.retry", durable: true, arguments: [
+      {"x-dead-letter-exchange", :longstr, "cyb.events"},
+      {"x-message-ttl", :signedint, 15000}  # 15 second retry delay
+    ]},
+    
+    # Failed messages after max retries
+    {"cyb.events.failed", durable: true}
   ]
   
   @bindings [
