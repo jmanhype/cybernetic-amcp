@@ -31,7 +31,7 @@ defmodule Cybernetic.MixProject do
       {:rustler, ">= 0.0.0"},
       
       # MCP integration
-      {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main", optional: true},
+      {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main"},
       
       # Goldrush branches for reactive stream processing
       {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "master"},
