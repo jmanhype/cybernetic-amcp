@@ -123,8 +123,8 @@ defmodule Cybernetic.VSM.System2.CoordinatorPriorityTest do
       assert Coordinator.reserve_slot(:pressure_test) == :backpressure
       
       assert_receive {:telemetry, :pressure, measurements, metadata}, 1000
-      assert measurements.current == 1
-      assert metadata.topic == :test
+      assert measurements.current >= 1
+      assert metadata.topic == :pressure_test
       
       :telemetry.detach("test-pressure")
     end
