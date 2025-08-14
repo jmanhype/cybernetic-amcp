@@ -14,9 +14,7 @@ defmodule Mix.Tasks.Cyb.Probe do
   """
   
   alias Cybernetic.Core.MCP.Hermes.Registry
-  alias Cybernetic.Core.Transport.AMQP.Topology
   alias Cybernetic.Transport.Message
-  alias Cybernetic.Core.Security.NonceBloom
   
   def run(_args) do
     Mix.Task.run("app.start")
