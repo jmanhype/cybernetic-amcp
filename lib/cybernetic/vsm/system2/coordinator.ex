@@ -5,7 +5,7 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   S2: Attention/coordination engine (Layer 6B analog).
   """
 
-  def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   def init(opts) do
     state = %{
