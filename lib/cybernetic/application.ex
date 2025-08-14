@@ -13,6 +13,9 @@ defmodule Cybernetic.Application do
       # Core Security
       Cybernetic.Core.Security.NonceBloom,
       
+      # CRDT Graph
+      Cybernetic.Core.CRDT.Graph,
+      
       # AMQP Transport
       Cybernetic.Transport.AMQP.Connection,
       {Cybernetic.Core.Transport.AMQP.Topology, []},
