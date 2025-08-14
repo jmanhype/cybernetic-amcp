@@ -3,44 +3,22 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
   alias Cybernetic.Core.Aggregator.CentralAggregator
 
   setup do
-    # Force cleanup of any existing handlers
-    :telemetry.list_handlers([:cybernetic, :work, :finished])
-    |> Enum.each(fn handler ->
-      if match?(%{id: {CentralAggregator, _}}, handler) do
-        :telemetry.detach(handler.id)
-      end
-    end)
-    
-    # Check if CentralAggregator is already running and stop it
-    case Process.whereis(CentralAggregator) do
-      nil -> :ok
-      existing_pid -> Process.exit(existing_pid, :normal)
+    # Get or start CentralAggregator
+    pid = case Process.whereis(CentralAggregator) do
+      nil ->
+        {:ok, p} = CentralAggregator.start_link([])
+        p
+      existing_pid -> 
+        existing_pid
     end
     
-    # Wait for process to stop
-    Process.sleep(10)
-    
-    # Clean up any existing ETS table
-    case :ets.info(:cyb_agg_window) do
+    # Clear the ETS table for clean test state
+    case :ets.whereis(:cyb_agg_window) do
       :undefined -> :ok
-      _ -> :ets.delete(:cyb_agg_window)
+      _ -> :ets.delete_all_objects(:cyb_agg_window)
     end
     
-    {:ok, pid} = case CentralAggregator.start_link([]) do
-      {:ok, p} -> {:ok, p}
-      {:error, {:already_started, p}} -> {:ok, p}
-    end
-    on_exit(fn -> 
-      Process.exit(pid, :normal)
-      # Clean up handlers
-      :telemetry.list_handlers([:cybernetic, :work, :finished])
-      |> Enum.each(fn handler ->
-        if match?(%{id: {CentralAggregator, _}}, handler) do
-          :telemetry.detach(handler.id)
-        end
-      end)
-    end)
-    
+    # Don't exit the shared process on test cleanup
     {:ok, pid: pid}
   end
 
