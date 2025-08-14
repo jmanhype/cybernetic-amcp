@@ -1,7 +1,5 @@
 #!/usr/bin/env elixir
 
-Mix.install([], force: true)
-
 # Force compilation of the module
 Code.require_file("lib/cybernetic/core/mcp/transports/hermes_client.ex")
 
