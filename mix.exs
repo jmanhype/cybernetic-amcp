@@ -49,6 +49,9 @@ defmodule Cybernetic.MixProject do
       # HTTP client for Claude API
       {:req, "~> 0.5.0"},
       
+      # Environment variable loading
+      {:dotenv, "~> 3.1", only: [:dev, :test]},
+      
       # WASM runtime - commented out due to rustler version conflict
       # {:wasmex, "~> 0.8.3"},
       
