@@ -10,14 +10,7 @@ defmodule Cybernetic.VSM.System2.CoordinatorPriorityTest do
 
   describe "weighted fair share" do
     test "2:1 split allocation" do
-      # Stop existing coordinator and start fresh with test config
-      case Process.whereis(Coordinator) do
-        nil -> :ok
-        pid -> GenServer.stop(pid, :normal, 100)
-      end
-      Process.sleep(10)
-      
-      {:ok, _pid} = Coordinator.start_link(max_slots: 12)
+      # Use the existing coordinator instance
       
       Coordinator.set_priority(:hi, 2.0)
       Coordinator.set_priority(:lo, 1.0)
