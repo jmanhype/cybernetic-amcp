@@ -119,17 +119,8 @@ defmodule Cybernetic.MCP.HermesClient do
   """
   def execute_tool(tool_name, params, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 30_000)
-    progress_callback = Keyword.get(opts, :progress_callback)
     
-    call_opts = [timeout: timeout]
-    call_opts = if progress_callback do
-      progress_token = Hermes.MCP.ID.generate_progress_token()
-      [{:progress, [token: progress_token, callback: progress_callback]} | call_opts]
-    else
-      call_opts
-    end
-    
-    case call_tool(tool_name, params, call_opts) do
+    case call_tool(tool_name, params, [timeout: timeout]) do
       {:ok, %{is_error: false, result: result}} ->
         {:ok, result}
       
