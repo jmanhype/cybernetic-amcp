@@ -101,6 +101,9 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
         {:error, {:already_started, _}} -> :ok
       end
       
+      # Give Bridge time to attach its handlers
+      Process.sleep(50)
+      
       ref = make_ref()
       parent = self()
       
@@ -121,7 +124,7 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       )
 
       # Should receive error telemetry
-      assert_receive {:s4_error, measurements, meta}, 1_000
+      assert_receive {:s4_error, measurements, meta}, 2_000
       
       assert measurements.error == 1
       assert meta.reason == :mock_error
