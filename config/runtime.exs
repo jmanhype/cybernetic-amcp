@@ -57,6 +57,13 @@ config :cybernetic, :security,
   bloom_size: 100_000,
   bloom_error_rate: 0.001
 
+# NonceBloom specific config
+config :cybernetic, Cybernetic.Core.Security.NonceBloom,
+  replay_window_sec: 90,
+  bloom_bits_per_entry: 10,
+  bloom_error_rate: 0.001,
+  persist_path: System.get_env("CYB_BLOOM_FILE") || "/tmp/cyb.bloom"
+
 # Application configuration
 config :cybernetic,
   environment: config_env(),
