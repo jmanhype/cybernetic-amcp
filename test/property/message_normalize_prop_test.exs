@@ -39,10 +39,8 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
       # Normalize the message
       normalized = Message.normalize(raw)
       
-      # Verify headers were flattened
-      assert Map.has_key?(normalized, "_nonce") or
-             (Map.has_key?(normalized, "headers") and 
-              Map.has_key?(normalized["headers"], "_nonce"))
+      # Verify headers were flattened to top level
+      assert Map.has_key?(normalized, "_nonce")
       
       # Verify payload is preserved
       assert normalized["payload"] == payload
