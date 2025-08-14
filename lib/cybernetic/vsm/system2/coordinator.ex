@@ -47,15 +47,58 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   end
   
   def handle_call({:reserve_slot, topic}, _from, state) do
-    priority = Map.get(state.priorities, topic, 1.0)
-    max_slots = round(state.max_slots * (priority / max(priority, 1.0)))
+    max_slots = calculate_max_slots(topic, state)
     current = Map.get(state.resource_slots, topic, 0)
     
     if current < max_slots do
-      {:reply, :ok, put_in(state.resource_slots[topic], current + 1)}
+      new_state = state
+        |> put_in([:resource_slots, topic], current + 1)
+        |> put_in([:wait_since, topic], System.monotonic_time(:millisecond))
+      
+      :telemetry.execute(
+        [:cybernetic, :s2, :coordinator, :schedule],
+        %{reserved: 1, requested: 1, current: current + 1},
+        %{topic: topic, max_slots: max_slots}
+      )
+      
+      {:reply, :ok, new_state}
     else
-      {:reply, :backpressure, state}
+      :telemetry.execute(
+        [:cybernetic, :s2, :coordinator, :pressure],
+        %{current: current, max_slots: max_slots},
+        %{topic: topic}
+      )
+      
+      # Update wait time if not already waiting
+      new_state = Map.update(state, :wait_since, %{topic => System.monotonic_time(:millisecond)}, fn ws ->
+        Map.put_new(ws, topic, System.monotonic_time(:millisecond))
+      end)
+      
+      {:reply, :backpressure, new_state}
     end
+  end
+  
+  # Fair share calculation with aging to prevent starvation
+  defp calculate_max_slots(topic, state) do
+    # Base weight
+    priority = Map.get(state.priorities, topic, 1.0)
+    total_priority = state.priorities
+      |> Map.values()
+      |> Enum.sum()
+      |> max(1.0)
+    
+    # Aging boost for waiting topics
+    now = System.monotonic_time(:millisecond)
+    waited_ms = now - Map.get(state.wait_since, topic, now)
+    aging_boost = state.aging_boost * min(waited_ms / state.aging_ms, state.aging_cap)
+    
+    # Effective priority with aging
+    effective_priority = max(priority + aging_boost, 0.0)
+    share = effective_priority / (total_priority + state.aging_boost * map_size(state.priorities))
+    slots = share * state.max_slots
+    
+    # Guarantee at least 1 slot to prevent total starvation
+    max(1, round(slots))
   end
   
   # Handle transport messages from in-memory transport
