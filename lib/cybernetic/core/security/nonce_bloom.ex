@@ -11,6 +11,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   @bloom_error_rate 0.001
   @nonce_ttl 300_000  # 5 minutes in milliseconds
   @cleanup_interval 60_000  # 1 minute
+  @telemetry_ns [:cybernetic, :security, :nonce_bloom]
   
   defstruct [:bloom, :seen_nonces, :last_cleanup]
   
