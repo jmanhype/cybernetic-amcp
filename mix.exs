@@ -46,6 +46,9 @@ defmodule Cybernetic.MixProject do
       {:bloomex, "~> 1.0"},  # Bloom filter for replay protection
       {:nanoid, "~> 2.0"},    # Nonce generation
       
+      # Testing
+      {:stream_data, "~> 1.0", only: [:test, :dev]},
+      
       # Web UI (Phoenix)
       {:phoenix, "~> 1.7"},
       {:phoenix_live_view, "~> 0.20"},
