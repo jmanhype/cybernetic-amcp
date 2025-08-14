@@ -147,7 +147,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
   describe "fact summarization" do
     test "groups events by source, severity, and labels" do
       # Emit similar events
-      for i <- 1..3 do
+      for _i <- 1..3 do
         :telemetry.execute(
           [:cybernetic, :work, :finished],
           %{duration: 100},
@@ -162,6 +162,9 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
         %{severity: "error", labels: %{type: "batch"}}
       )
 
+      # Give aggregator time to process
+      Process.sleep(50)
+      
       # Force emission
       ref = make_ref()
       parent = self()
