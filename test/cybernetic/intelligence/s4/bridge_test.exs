@@ -43,7 +43,6 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
   end
 
   describe "fact processing" do
-    @tag :skip
     test "processes aggregator facts and queries LLM", %{pid: _pid} do
       # Attach listener for S4 analysis
       ref = make_ref()
