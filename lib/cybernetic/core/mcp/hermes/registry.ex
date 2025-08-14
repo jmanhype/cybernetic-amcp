@@ -138,7 +138,8 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   end
 
   def handle_info(:register_builtin_tools, state) do
-    register_builtin_tools()
+    tools_registered = register_builtin_tools()
+    :telemetry.execute(@ready_event, %{count: tools_registered}, %{})
     {:noreply, state}
   end
   
