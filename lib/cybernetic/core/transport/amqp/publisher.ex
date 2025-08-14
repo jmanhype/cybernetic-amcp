@@ -8,8 +8,19 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
   require Logger
 
   defp get_exchanges do
-    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
-    Enum.map(exchanges, fn {_key, name} -> {name, :topic} end)
+    # Define exchange types matching existing RabbitMQ setup
+    [
+      {"cyb.events", :topic},
+      {"cyb.commands", :topic},
+      {"cyb.telemetry", :fanout},  # telemetry is fanout, not topic
+      {"cyb.vsm.s1", :topic},
+      {"cyb.vsm.s2", :topic},
+      {"cyb.vsm.s3", :topic},
+      {"cyb.vsm.s4", :topic},
+      {"cyb.vsm.s5", :topic},
+      {"cyb.mcp.tools", :topic},
+      {"vsm.dlx", :fanout}
+    ]
   end
 
   def start_link(opts \\ []) do
