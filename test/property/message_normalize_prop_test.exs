@@ -7,8 +7,9 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
   
   # Helper to generate serializable terms (no references, PIDs, etc)
   defp serializable_term do
+    import StreamData
     one_of([
-      atom(),
+      atom(:alphanumeric),
       string(:alphanumeric),
       integer(),
       float(),
