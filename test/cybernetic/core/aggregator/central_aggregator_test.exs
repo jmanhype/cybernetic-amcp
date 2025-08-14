@@ -30,7 +30,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
     on_exit(fn -> 
       Process.exit(pid, :normal)
       # Clean up handlers
-      :telemetry.list_handlers()
+      :telemetry.list_handlers([:cybernetic, :work, :finished])
       |> Enum.each(fn handler ->
         if match?(%{id: {CentralAggregator, _}}, handler) do
           :telemetry.detach(handler.id)
