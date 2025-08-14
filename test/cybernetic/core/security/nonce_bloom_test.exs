@@ -3,15 +3,14 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
   alias Cybernetic.Core.Security.NonceBloom
 
   setup do
-    # Ensure NonceBloom is started fresh for each test
+    # NonceBloom is started by the application, no need to start it again
+    # Just ensure it's running
     case Process.whereis(NonceBloom) do
-      nil -> :ok
-      pid -> 
-        GenServer.stop(pid, :normal)
-        Process.sleep(10)
+      nil -> 
+        {:ok, _pid} = NonceBloom.start_link()
+      _pid -> 
+        :ok
     end
-    
-    {:ok, _pid} = NonceBloom.start_link()
     :ok
   end
 
