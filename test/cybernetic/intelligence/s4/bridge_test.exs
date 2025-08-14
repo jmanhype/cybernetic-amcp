@@ -117,8 +117,13 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
 
   describe "SOP forwarding" do
     test "forwards analysis to SOP Engine when available" do
-      # Start SOP Engine
-      {:ok, sop_pid} = Cybernetic.Intelligence.S4.SOPEngine.start_link([])
+      # Start SOP Engine or get existing
+      sop_pid = case Process.whereis(Cybernetic.Intelligence.S4.SOPEngine) do
+        nil -> 
+          {:ok, pid} = Cybernetic.Intelligence.S4.SOPEngine.start_link([])
+          pid
+        existing -> existing
+      end
       
       # Track messages to SOP Engine
       :erlang.trace(sop_pid, true, [:receive])
