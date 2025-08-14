@@ -152,10 +152,21 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   def declare_exchanges(channel) do
     exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
     
+    # Exchange types - telemetry is fanout, rest are topic
+    exchange_types = %{
+      telemetry: :fanout,
+      events: :topic,
+      commands: :topic,
+      mcp_tools: :topic,
+      s1: :topic,
+      vsm: :topic
+    }
+    
     for {key, exchange_name} <- exchanges do
-      case Exchange.declare(channel, exchange_name, :topic, durable: true, auto_delete: false) do
+      type = Map.get(exchange_types, key, :topic)
+      case Exchange.declare(channel, exchange_name, type, durable: true, auto_delete: false) do
         :ok -> 
-          Logger.debug("Declared exchange: #{key}=#{exchange_name}")
+          Logger.debug("Declared exchange: #{key}=#{exchange_name} (#{type})")
           :ok
         {:error, {:resource_locked, _}} -> 
           Logger.debug("Exchange already exists: #{exchange_name}")
