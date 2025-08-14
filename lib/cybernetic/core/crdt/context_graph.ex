@@ -90,6 +90,38 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
   def handle_call(:get_neighbors, _from, state) do
     {:reply, state.neighbors, state}
   end
+  
+  # Handle node events for distributed sync
+  def handle_info(:wire_neighbors, %{crdt: crdt} = state) do
+    # Get all nodes in the cluster
+    nodes = Node.list()
+    Logger.info("Wiring CRDT neighbors: #{inspect(nodes)}")
+    
+    # Wire each node as a neighbor for the CRDT
+    neighbors = Enum.map(nodes, fn node ->
+      pid = :rpc.call(node, Process, :whereis, [__MODULE__])
+      if pid && pid != :undefined do
+        DeltaCrdt.set_neighbours(crdt, [pid])
+        pid
+      end
+    end)
+    |> Enum.filter(&(&1))
+    
+    {:noreply, %{state | neighbors: neighbors}}
+  end
+  
+  def handle_info({:nodeup, node, _info}, %{crdt: crdt} = state) do
+    Logger.info("Node joined cluster: #{node}")
+    # Re-wire neighbors when a new node joins
+    Process.send_after(self(), :wire_neighbors, 500)
+    {:noreply, state}
+  end
+  
+  def handle_info({:nodedown, node, _info}, state) do
+    Logger.info("Node left cluster: #{node}")
+    # Clean up neighbors list
+    {:noreply, state}
+  end
 
   # Private helper functions
 
