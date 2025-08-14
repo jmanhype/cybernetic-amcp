@@ -24,8 +24,11 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       _ -> :ok 
     end)
     
-    # Always start a fresh Bridge for tests
-    {:ok, pid} = Bridge.start_link(provider: MockProvider, provider_opts: [])
+    # Start a fresh Bridge for tests (or use existing if already started)
+    pid = case Bridge.start_link(provider: MockProvider, provider_opts: []) do
+      {:ok, p} -> p
+      {:error, {:already_started, p}} -> p
+    end
     on_exit(fn -> 
       Process.exit(pid, :normal)
       # Clean up handlers
