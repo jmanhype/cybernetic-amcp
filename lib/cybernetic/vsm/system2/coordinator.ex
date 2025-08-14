@@ -7,12 +7,18 @@ defmodule Cybernetic.VSM.System2.Coordinator do
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
-  def init(state) do
-    {:ok, state 
-      |> Map.put(:attention, %{})
-      |> Map.put(:priorities, %{})
-      |> Map.put(:resource_slots, %{})
-      |> Map.put(:max_slots, 8)}
+  def init(opts) do
+    state = %{
+      attention: %{},
+      priorities: %{},
+      resource_slots: %{},
+      max_slots: Keyword.get(opts, :max_slots, 8),
+      wait_since: %{},
+      aging_ms: Keyword.get(opts, :aging_ms, 2_000),
+      aging_boost: Keyword.get(opts, :aging_boost, 0.5),
+      aging_cap: Keyword.get(opts, :aging_cap, 3.0)
+    }
+    {:ok, state}
   end
 
   def focus(task_id), do: GenServer.cast(__MODULE__, {:focus, task_id})
