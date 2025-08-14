@@ -54,10 +54,8 @@ defmodule Cybernetic.MCP.HermesClient do
     {:error, %{error: :client_error, details: "Invalid input structure", input: input}, state}
   end
 
-  @impl true
   def metadata(), do: %{name: "hermes_mcp", version: "0.1.0"}
 
-  @impl true
   def handle_event(event, state) do
     Logger.debug("Hermes MCP client received event: #{inspect(event)}")
     {:ok, state}
