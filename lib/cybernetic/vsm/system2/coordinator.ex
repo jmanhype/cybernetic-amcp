@@ -31,6 +31,27 @@ defmodule Cybernetic.VSM.System2.Coordinator do
     {:noreply, %{state | attention: att}}
   end
   
+  def handle_cast({:set_priority, topic, weight}, state) do
+    {:noreply, put_in(state.priorities[topic], weight)}
+  end
+  
+  def handle_cast({:release_slot, topic}, state) do
+    slots = Map.update(state.resource_slots, topic, 0, fn s -> max(s - 1, 0) end)
+    {:noreply, %{state | resource_slots: slots}}
+  end
+  
+  def handle_call({:reserve_slot, topic}, _from, state) do
+    priority = Map.get(state.priorities, topic, 1.0)
+    max_slots = round(state.max_slots * (priority / max(priority, 1.0)))
+    current = Map.get(state.resource_slots, topic, 0)
+    
+    if current < max_slots do
+      {:reply, :ok, put_in(state.resource_slots[topic], current + 1)}
+    else
+      {:reply, :backpressure, state}
+    end
+  end
+  
   # Handle transport messages from in-memory transport
   def handle_cast({:transport_message, message, opts}, state) do
     # Extract operation from type field first (for routing keys), then fallback to operation field
