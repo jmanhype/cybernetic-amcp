@@ -142,7 +142,10 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       {:ok, parsed} = Jason.decode(output)
       assert Map.has_key?(parsed, "sop_updates")
       
-      Process.exit(sop_pid, :normal)
+      # Don't exit if it's the shared instance
+      if Process.whereis(Cybernetic.Intelligence.S4.SOPEngine) != sop_pid do
+        Process.exit(sop_pid, :normal)
+      end
     end
   end
 
