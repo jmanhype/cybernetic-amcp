@@ -78,10 +78,24 @@ defmodule Cybernetic.Core.Security.RateLimiter do
     if refilled.tokens >= tokens do
       new_bucket = %{refilled | tokens: refilled.tokens - tokens}
       new_state = put_in(state.buckets[key], new_bucket)
+      
+      :telemetry.execute(
+        [:cybernetic, :s3, :rate_limiter, :allow],
+        %{cost: tokens, tokens_remaining: new_bucket.tokens},
+        %{key: key}
+      )
+      
       {:reply, {:ok, new_bucket.tokens}, new_state}
     else
       # Update last_refill even on failure
       new_state = put_in(state.buckets[key], refilled)
+      
+      :telemetry.execute(
+        [:cybernetic, :s3, :rate_limiter, :deny],
+        %{cost: tokens, tokens_available: refilled.tokens},
+        %{key: key}
+      )
+      
       {:reply, {:error, :rate_limited}, new_state}
     end
   end
