@@ -13,12 +13,6 @@ defmodule Cybernetic.MCP.HermesClient do
   
   @behaviour Cybernetic.Plugin
   
-  # Basic Hermes client functions that the macro should provide but doesn't
-  def ping, do: :pong
-  def list_tools, do: {:ok, %{result: %{"tools" => []}}}
-  def call_tool(_name, _params), do: {:error, :not_implemented}
-  def read_resource(_uri), do: {:error, :not_implemented}
-  
   # Plugin behavior implementation
   def init(opts) do
     # Initialize plugin state
