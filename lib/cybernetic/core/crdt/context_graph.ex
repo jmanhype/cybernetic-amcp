@@ -18,8 +18,25 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
       ship_interval: 50, 
       ship_debounce: 10
     )
-    {:ok, %{crdt: crdt}}
+    
+    # Monitor node connections for distributed sync
+    :net_kernel.monitor_nodes(true, node_type: :all)
+    
+    # Wire neighbors after a brief delay to allow cluster to form
+    Process.send_after(self(), :wire_neighbors, 1000)
+    
+    {:ok, %{crdt: crdt, neighbors: []}}
   end
+  
+  @doc """
+  Enable distributed sync with cluster nodes
+  """
+  def enable_sync, do: GenServer.cast(__MODULE__, :enable_sync)
+  
+  @doc """
+  Get current neighbor nodes
+  """
+  def get_neighbors, do: GenServer.call(__MODULE__, :get_neighbors)
 
   @doc """
   Store a semantic triple (subject, predicate, object) with metadata.
