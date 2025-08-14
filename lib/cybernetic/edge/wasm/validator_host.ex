@@ -76,9 +76,9 @@ defmodule Cybernetic.Edge.WASM.ValidatorHost do
 
   # Thin wrapper to isolate call mechanics (easy to swap engines later)
   defmodule Runner do
-    def call(pid, func, [json_payload]) do
-      # Assume exported `validate(ptr,len) -> status` writing "OK" or "REJECT:..." to stdout
-      Wasmex.call_function(pid, func, [json_payload])
+    def call(_pid, _func, [_json_payload]) do
+      # Stub until Wasmex is available
+      {:error, :no_wasm_runtime}
     end
   end
 end
