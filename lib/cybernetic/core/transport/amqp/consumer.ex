@@ -20,7 +20,14 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
 
   def init(opts) do
     send(self(), :connect)
-    {:ok, %{channel: nil, consumer_tag: nil, opts: opts}}
+    {:ok, %{
+      channel: nil, 
+      consumer_tag: nil, 
+      opts: opts,
+      max_retries: Keyword.get(opts, :max_retries, 5),
+      retry_exchange: Keyword.get(opts, :retry_exchange, "cyb.events"),
+      retry_routing_key: Keyword.get(opts, :retry_routing_key, "retry")
+    }}
   end
 
   def handle_info(:connect, state) do
