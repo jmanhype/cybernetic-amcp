@@ -1,0 +1,1 @@
+{"checkpoint": "task-20250814-060625", "task": "Short answer: you’ve got a solid core (AMQP/aMCP registry + nonce/bloom + normalization, tests, CI", "timestamp": "2025-08-14T11:06:26Z", "commit": "cca50ec8059565ef60ed2ee6f8135aff8a7252c9", "github_release": "true"}
