@@ -74,12 +74,15 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
     end
 
     test "handles LLM provider errors gracefully" do
-      # Start a new Bridge with error response using unique name
-      name = :"bridge_error_test_#{System.unique_integer([:positive])}"
+      # Detach any existing handlers to avoid conflicts
+      :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
+      |> Enum.each(fn %{id: {Bridge, _}} -> :telemetry.detach({Bridge, :facts}) 
+                      _ -> :ok end)
+      
+      # Start a new Bridge with error response
       {:ok, _pid} = Bridge.start_link(
         provider: MockProvider, 
-        provider_opts: [response: :error],
-        name: name
+        provider_opts: [response: :error]
       )
       
       ref = make_ref()
