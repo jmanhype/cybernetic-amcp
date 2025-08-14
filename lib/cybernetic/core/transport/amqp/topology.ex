@@ -240,7 +240,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   """
   def create_bindings(channel) do
     Enum.reduce_while(@bindings, :ok, fn {exchange, queue, routing_key}, _acc ->
-      case Queue.bind(channel, queue, Atom.to_string(exchange), routing_key: routing_key) do
+      case Queue.bind(channel, queue, exchange, routing_key: routing_key) do
         :ok ->
           Logger.debug("Bound #{queue} to #{exchange} with key: #{routing_key}")
           {:cont, :ok}
