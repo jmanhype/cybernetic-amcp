@@ -79,11 +79,17 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   end
 
   defp prune do
-    cutoff = now_ms() - @window_ms
-    # Simple approach: delete all entries older than cutoff
-    # In production, use ordered_set with efficient range deletion
-    all_keys = :ets.select(@table, [{{:"$1", :_}, [{:<, :"$1", cutoff}], [:"$1"]}])
-    Enum.each(all_keys, &:ets.delete(@table, &1))
+    case :ets.whereis(@table) do
+      :undefined -> 
+        Logger.warning("CentralAggregator: ETS table #{@table} not found during prune")
+        :ok
+      _ ->
+        cutoff = now_ms() - @window_ms
+        # Simple approach: delete all entries older than cutoff
+        # In production, use ordered_set with efficient range deletion
+        all_keys = :ets.select(@table, [{{:"$1", :_}, [{:<, :"$1", cutoff}], [:"$1"]}])
+        Enum.each(all_keys, &:ets.delete(@table, &1))
+    end
   end
 
   defp summarize do
