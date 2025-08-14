@@ -216,10 +216,19 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   
   @doc """
   Generate canonical string for signing - deterministic order
+  Includes routing metadata to prevent cross-topic replay
   """
-  def canonical_string(payload, nonce, timestamp, site \\ nil) do
-    # Deterministic order for signing
-    [nonce, timestamp, site || node(), Jason.encode!(payload)]
+  def canonical_string(payload, nonce, timestamp, site \\ nil, meta \\ %{}) do
+    # Deterministic order for signing - includes routing keys
+    [
+      nonce,
+      timestamp,
+      site || node(),
+      Map.get(meta, :exchange, ""),
+      Map.get(meta, :routing_key, ""),
+      Map.get(meta, :content_type, "application/json"),
+      Jason.encode!(payload)
+    ]
     |> Enum.join("|")
   end
   
