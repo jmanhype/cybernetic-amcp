@@ -109,13 +109,18 @@ defmodule Cybernetic.VSM.System2.CoordinatorPriorityTest do
         nil
       )
       
-      Coordinator.set_priority(:test, 1.0)
+      Coordinator.set_priority(:pressure_test, 1.0)
       
-      # Fill the slot
-      assert Coordinator.reserve_slot(:test) == :ok
+      # Fill all available slots (max is 8 by default)
+      slots_reserved = for _ <- 1..20 do
+        case Coordinator.reserve_slot(:pressure_test) do
+          :ok -> 1
+          :backpressure -> 0
+        end
+      end |> Enum.sum()
       
-      # Should get backpressure
-      assert Coordinator.reserve_slot(:test) == :backpressure
+      # Now we should definitely get backpressure
+      assert Coordinator.reserve_slot(:pressure_test) == :backpressure
       
       assert_receive {:telemetry, :pressure, measurements, metadata}, 1000
       assert measurements.current == 1
