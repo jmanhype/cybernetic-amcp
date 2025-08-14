@@ -136,21 +136,32 @@ defmodule Cybernetic.Core.Security.NonceBloom do
     now = System.system_time(:millisecond)
     cutoff = now - @nonce_ttl
     
+    old_count = map_size(state.seen_nonces)
     new_seen = state.seen_nonces
     |> Enum.filter(fn {_nonce, timestamp} -> timestamp > cutoff end)
     |> Enum.into(%{})
     
+    new_count = map_size(new_seen)
+    dropped_count = old_count - new_count
+    
+    # Emit telemetry metrics
+    :telemetry.execute(
+      @telemetry_ns ++ [:cleanup],
+      %{dropped: dropped_count, kept: new_count, total_before: old_count},
+      %{}
+    )
+    
     # Rebuild bloom filter if we removed many entries
-    new_bloom = if map_size(new_seen) < map_size(state.seen_nonces) * 0.7 do
+    new_bloom = if new_count < old_count * 0.7 do
       # Rebuild bloom with only active nonces
-      Enum.reduce(Map.keys(new_seen), Bloomex.new(@bloom_size), fn nonce, bloom ->
+      Enum.reduce(Map.keys(new_seen), Bloomex.plain(@bloom_size, @bloom_error_rate), fn nonce, bloom ->
         Bloomex.add(bloom, nonce)
       end)
     else
       state.bloom
     end
     
-    Logger.debug("Nonce cleanup: removed #{map_size(state.seen_nonces) - map_size(new_seen)} expired nonces")
+    Logger.debug("Nonce cleanup: removed #{dropped_count} expired nonces")
     
     # Schedule next cleanup
     Process.send_after(self(), :cleanup, @cleanup_interval)
