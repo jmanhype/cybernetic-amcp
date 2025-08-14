@@ -126,4 +126,5 @@ defmodule Cybernetic.MCP.HermesClient do
     
     # Direct implementation since call_tool always returns {:error, :not_implemented}
     {:error, %{type: :client_error, reason: :not_implemented, tool: tool_name, timeout: timeout}}
+  end
 end
