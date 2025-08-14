@@ -89,17 +89,14 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
         )
       end
 
-      # Debug: Check if events were captured
-      Process.sleep(50)  # Give aggregator time to capture events
-      entries = :ets.tab2list(:cyb_agg_window)
-      IO.puts("ETS entries before emit: #{length(entries)}")
+      # Give aggregator time to capture events
+      Process.sleep(50)
       
       # Trigger emission
       send(Process.whereis(CentralAggregator), :emit)
       
-      # Give time for emission processing and add more debug
+      # Give time for emission processing
       Process.sleep(100)
-      IO.puts("Facts emission triggered, waiting for telemetry event...")
 
       # Wait for facts
       assert_receive {:facts_emitted, measurements, meta}, 1_000
