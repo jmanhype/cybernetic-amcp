@@ -177,11 +177,12 @@ defmodule Mix.Tasks.Cyb.Probe do
     end
     
     ref = make_ref()
+    parent = self()
     
     :telemetry.attach(
       {:probe_alg, ref},
       [:cybernetic, :algedonic],
-      fn _e, meas, _meta, _ -> send(self(), {:alg, meas.severity}) end,
+      fn _e, meas, _meta, _ -> send(parent, {:alg, meas.severity}) end,
       nil
     )
     
