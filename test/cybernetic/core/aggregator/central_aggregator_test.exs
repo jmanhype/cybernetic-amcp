@@ -182,6 +182,9 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
 
       send(Process.whereis(CentralAggregator), :emit)
       
+      # Give time for emission processing  
+      Process.sleep(100)
+      
       assert_receive {:facts, facts}, 1_000
       
       # Should have at least 1 fact group (may be aggregated)
