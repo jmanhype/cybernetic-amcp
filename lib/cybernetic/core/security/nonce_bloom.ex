@@ -123,6 +123,13 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   end
   
   @impl true
+  def handle_cast(:prune, state) do
+    # Trigger immediate cleanup
+    send(self(), :cleanup)
+    {:noreply, state}
+  end
+  
+  @impl true
   def handle_info(:cleanup, state) do
     # Remove expired nonces from tracking
     now = System.system_time(:millisecond)
