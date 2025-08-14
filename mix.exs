@@ -62,6 +62,10 @@ defmodule Cybernetic.MixProject do
         "run --no-halt"
       ],
       "cyb.test": ["test", "run test/system_validation.exs"],
+      "cyb.test.core": ["test test/cybernetic/core/security/* test/cybernetic/core/mcp/* test/cybernetic/core/crdt*"],
+      "cyb.test.io": ["test test/cybernetic/transport/*"],
+      "cyb.test.gr": ["test test/cybernetic/core/goldrush/*"],
+      "cyb.probe": ["cyb.probe"],
       "cyb.reset": ["deps.clean --all", "deps.get", "compile"],
       "cyb.docker": ["cmd docker-compose up -d"]
     ]
