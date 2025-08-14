@@ -205,9 +205,9 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   
   defp validate_signature(message) do
     payload = strip_security_headers(message)
-    expected = generate_signature(payload, message["_nonce"], message["_timestamp"])
+    {expected_sig, _key_id} = generate_signature(payload, message["_nonce"], message["_timestamp"])
     
-    if expected == message["_signature"] do
+    if expected_sig == message["_signature"] do
       {:ok, :valid_signature}
     else
       {:error, :invalid_signature}
