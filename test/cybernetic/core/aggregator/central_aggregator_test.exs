@@ -68,7 +68,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       ref = make_ref()
       parent = self()
       
-      :telemetry.attach(
+      result = :telemetry.attach(
         {__MODULE__, ref},
         [:cybernetic, :aggregator, :facts],
         fn _event, measurements, meta, _config ->
@@ -76,6 +76,11 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
         end,
         nil
       )
+      IO.puts("Telemetry handler attach result: #{inspect(result)}")
+      
+      # List all handlers for this event to check for conflicts
+      handlers = :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
+      IO.puts("Active handlers for [:cybernetic, :aggregator, :facts]: #{length(handlers)}")
 
       # Inject test events
       for i <- 1..5 do
