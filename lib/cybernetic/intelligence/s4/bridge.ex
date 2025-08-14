@@ -19,14 +19,25 @@ defmodule Cybernetic.Intelligence.S4.Bridge do
   @impl true
   def init(opts) do
     provider = opts[:provider] || Claude
-    :telemetry.attach_many(
+    
+    # Ensure we detach any existing handler first
+    :telemetry.detach({__MODULE__, :facts})
+    
+    result = :telemetry.attach_many(
       {__MODULE__, :facts},
       [[:cybernetic, :aggregator, :facts]],
       &__MODULE__.handle_fact/4,
       %{provider: provider, provider_opts: opts[:provider_opts] || []}
     )
-
-    {:ok, %{provider: provider, provider_opts: opts[:provider_opts] || []}}
+    
+    case result do
+      :ok -> 
+        Logger.info("S4 Bridge telemetry handler attached successfully")
+        {:ok, %{provider: provider, provider_opts: opts[:provider_opts] || []}}
+      {:error, reason} ->
+        Logger.error("Failed to attach S4 Bridge telemetry handler: #{inspect(reason)}")
+        {:ok, %{provider: provider, provider_opts: opts[:provider_opts] || []}}
+    end
   end
 
   @doc false
