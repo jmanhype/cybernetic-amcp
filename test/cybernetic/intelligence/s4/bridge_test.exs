@@ -159,11 +159,13 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       # Track messages to SOP Engine
       :erlang.trace(sop_pid, true, [:receive])
       
-      # Emit facts to trigger S4
-      :telemetry.execute(
+      # Call Bridge's handle_fact directly to trigger SOP forwarding
+      config = %{provider: MockProvider, provider_opts: []}
+      Bridge.handle_fact(
         [:cybernetic, :aggregator, :facts],
         %{facts: [%{"test" => "sop_trigger"}]},
-        %{window: "60s"}
+        %{window: "60s"},
+        config
       )
 
       # Wait for trace
