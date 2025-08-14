@@ -139,8 +139,12 @@ defmodule Mix.Tasks.Cyb.Probe do
       result = receive do
         {:basic_deliver, payload, _meta} ->
           case Jason.decode(payload) do
-            {:ok, decoded} when decoded["payload"]["probe"] == true ->
-              :ok
+            {:ok, decoded} ->
+              if decoded["payload"]["probe"] == true do
+                :ok
+              else
+                :decode_error
+              end
             _ ->
               :decode_error
           end
