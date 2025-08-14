@@ -8,7 +8,7 @@ defmodule Cybernetic.Intelligence.S4.Bridge do
   use GenServer
   require Logger
 
-  alias Cybernetic.Intelligence.S4.Providers.MCPTool
+  alias Cybernetic.Intelligence.S4.Providers.Claude
   alias Cybernetic.Intelligence.S4.Prompts.Schemas
 
   def start_link(opts) do
@@ -18,7 +18,7 @@ defmodule Cybernetic.Intelligence.S4.Bridge do
 
   @impl true
   def init(opts) do
-    provider = opts[:provider] || MCPTool
+    provider = opts[:provider] || Claude
     :telemetry.attach_many(
       {__MODULE__, :facts},
       [[:cybernetic, :aggregator, :facts]],
