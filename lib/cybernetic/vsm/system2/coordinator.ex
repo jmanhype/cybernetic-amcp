@@ -47,6 +47,7 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   end
   
   def handle_call({:reserve_slot, topic}, _from, state) do
+    start_time = System.monotonic_time(:nanosecond)
     max_slots = calculate_max_slots(topic, state)
     current = Map.get(state.resource_slots, topic, 0)
     
@@ -55,6 +56,16 @@ defmodule Cybernetic.VSM.System2.Coordinator do
         |> put_in([:resource_slots, topic], current + 1)
         |> put_in([:wait_since, topic], System.monotonic_time(:millisecond))
       
+      duration_ns = System.monotonic_time(:nanosecond) - start_time
+      
+      # Golden telemetry emit
+      :telemetry.execute(
+        [:cyb, :s2, :reserve],
+        %{duration: duration_ns, reserved: 1, requested: 1, current: current + 1},
+        %{lane: to_string(topic), granted: true, max_slots: max_slots}
+      )
+      
+      # Legacy telemetry for compatibility
       :telemetry.execute(
         [:cybernetic, :s2, :coordinator, :schedule],
         %{reserved: 1, requested: 1, current: current + 1},
@@ -63,16 +74,26 @@ defmodule Cybernetic.VSM.System2.Coordinator do
       
       {:reply, :ok, new_state}
     else
+      # Update wait time if not already waiting
+      new_state = Map.update(state, :wait_since, %{topic => System.monotonic_time(:millisecond)}, fn ws ->
+        Map.put_new(ws, topic, System.monotonic_time(:millisecond))
+      end)
+      
+      duration_ns = System.monotonic_time(:nanosecond) - start_time
+      
+      # Golden telemetry emit
+      :telemetry.execute(
+        [:cyb, :s2, :reserve],
+        %{duration: duration_ns, current: current, max_slots: max_slots},
+        %{lane: to_string(topic), granted: false}
+      )
+      
+      # Legacy telemetry
       :telemetry.execute(
         [:cybernetic, :s2, :coordinator, :pressure],
         %{current: current, max_slots: max_slots},
         %{topic: topic}
       )
-      
-      # Update wait time if not already waiting
-      new_state = Map.update(state, :wait_since, %{topic => System.monotonic_time(:millisecond)}, fn ws ->
-        Map.put_new(ws, topic, System.monotonic_time(:millisecond))
-      end)
       
       {:reply, :backpressure, new_state}
     end
