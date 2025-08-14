@@ -70,16 +70,28 @@ defmodule Cybernetic.Transport.Message do
   - AMQP headers format: %{"headers" => %{"_nonce" => "...", ...}}
   """
   def flatten_security_headers(message) when is_map(message) do
-    security_keys = ["_nonce", "_timestamp", "_site", "_signature"]
+    security_keys = ["_nonce", "_timestamp", "_site", "_signature", "_retries"]
     
     # Check if security headers are already at top level
-    if Enum.any?(security_keys, &Map.has_key?(message, &1)) do
+    message_with_security = if Enum.any?(security_keys, &Map.has_key?(message, &1)) do
       message
     else
       # Try to find security headers in nested structures
       flattened_security = extract_security_from_nested(message, security_keys)
       Map.merge(message, flattened_security)
     end
+    
+    # Ensure _retries is normalized to an integer
+    Map.update(message_with_security, "_retries", 0, fn
+      nil -> 0
+      n when is_integer(n) -> n
+      s when is_binary(s) -> 
+        case Integer.parse(s) do
+          {n, _} -> n
+          _ -> 0
+        end
+      _ -> 0
+    end)
   end
 
   defp extract_security_from_nested(message, security_keys) do
