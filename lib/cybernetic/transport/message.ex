@@ -81,17 +81,21 @@ defmodule Cybernetic.Transport.Message do
       Map.merge(message, flattened_security)
     end
     
-    # Ensure _retries is normalized to an integer
-    Map.update(message_with_security, "_retries", 0, fn
-      nil -> 0
-      n when is_integer(n) -> n
-      s when is_binary(s) -> 
-        case Integer.parse(s) do
-          {n, _} -> n
-          _ -> 0
-        end
-      _ -> 0
-    end)
+    # Only normalize _retries if it already exists
+    if Map.has_key?(message_with_security, "_retries") do
+      Map.update(message_with_security, "_retries", 0, fn
+        nil -> 0
+        n when is_integer(n) -> n
+        s when is_binary(s) -> 
+          case Integer.parse(s) do
+            {n, _} -> n
+            _ -> 0
+          end
+        _ -> 0
+      end)
+    else
+      message_with_security
+    end
   end
 
   defp extract_security_from_nested(message, security_keys) do
