@@ -78,9 +78,10 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       
       # If no handlers, ensure Bridge is still alive and re-attach if needed
       if Enum.empty?(handlers) do
-        if Process.alive?(pid) do
+        {:ok, working_pid} = if Process.alive?(pid) do
           IO.puts("Re-attaching Bridge handlers for test...")
           GenServer.call(pid, {:reattach_handlers})
+          {:ok, pid}
         else
           IO.puts("Bridge process is dead, restarting...")
           # Restart Bridge if it died
@@ -88,9 +89,12 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
             {:ok, p} -> p
             {:error, {:already_started, p}} -> p
           end
-          pid = new_pid
           Process.sleep(100)
+          {:ok, new_pid}
         end
+        
+        # Additional sleep to ensure handlers are properly attached
+        Process.sleep(50)
       end
       
       :telemetry.execute(
