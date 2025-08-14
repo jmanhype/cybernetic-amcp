@@ -73,18 +73,14 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       :telemetry.detach({__MODULE__, ref})
     end
 
-    test "handles LLM provider errors gracefully", %{pid: _pid} do
-      # Restart with error response
-      if pid = Process.whereis(Bridge) do
-        Process.exit(pid, :normal)
-        Process.sleep(10)
-      end
-      
-      # Ensure Bridge is started with error response
-      case Bridge.start_link(provider: MockProvider, provider_opts: [response: :error]) do
-        {:ok, _} -> :ok
-        {:error, {:already_started, _}} -> :ok
-      end
+    test "handles LLM provider errors gracefully" do
+      # Start a new Bridge with error response using unique name
+      name = :"bridge_error_test_#{System.unique_integer([:positive])}"
+      {:ok, _pid} = Bridge.start_link(
+        provider: MockProvider, 
+        provider_opts: [response: :error],
+        name: name
+      )
       
       ref = make_ref()
       parent = self()
