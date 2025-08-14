@@ -26,6 +26,16 @@ defmodule Cybernetic.Application do
       Cybernetic.Core.Goldrush.Bridge,
       Cybernetic.Core.Goldrush.Pipeline,
       
+      # Central Aggregator (must be before S4 Bridge)
+      {Cybernetic.Core.Aggregator.CentralAggregator, []},
+      
+      # S4 Intelligence Layer
+      {Cybernetic.Intelligence.S4.Bridge, [provider: Cybernetic.Intelligence.S4.Providers.MCPTool]},
+      {Cybernetic.Intelligence.S4.SOPEngine, [exchange: "cyb.events"]},
+      
+      # Edge WASM Validator (optional, comment out if no WASM runtime)
+      # {Cybernetic.Edge.WASM.ValidatorHost, [wasm_path: System.get_env("CYB_WASM_VALIDATOR")]},
+      
       # VSM Supervisor (includes S1-S5)
       Cybernetic.VSM.Supervisor,
       
