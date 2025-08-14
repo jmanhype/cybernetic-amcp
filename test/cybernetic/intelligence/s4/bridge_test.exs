@@ -17,9 +17,18 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
   end
 
   setup do
-    # Start bridge with mock provider
-    {:ok, pid} = Bridge.start_link(provider: MockProvider, provider_opts: [])
-    on_exit(fn -> Process.exit(pid, :normal) end)
+    # Check if Bridge is already running
+    pid = case Process.whereis(Bridge) do
+      nil ->
+        # Start bridge with mock provider
+        {:ok, p} = Bridge.start_link(provider: MockProvider, provider_opts: [])
+        on_exit(fn -> Process.exit(p, :normal) end)
+        p
+      existing_pid ->
+        # Use existing process
+        existing_pid
+    end
+    
     {:ok, pid: pid}
   end
 
