@@ -61,7 +61,7 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     
     # Clean up
     Process.unlink(crdt)
-    DeltaCrdt.stop(crdt)
+    GenServer.stop(crdt)
   end
   
   test "commutative merge" do
@@ -98,7 +98,7 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     Process.unlink(c)
     GenServer.stop(a)
     GenServer.stop(b)
-    DeltaCrdt.stop(c)
+    GenServer.stop(c)
   end
   
   test "remove operations converge" do
