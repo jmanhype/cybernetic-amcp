@@ -33,7 +33,23 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   Returns {:ok, remaining_tokens} or {:error, :rate_limited}
   """
   def check(key, tokens \\ 1) do
-    GenServer.call(__MODULE__, {:check, key, tokens})
+    start_time = System.monotonic_time(:nanosecond)
+    result = GenServer.call(__MODULE__, {:check, key, tokens})
+    elapsed_ns = System.monotonic_time(:nanosecond) - start_time
+    
+    # Emit golden telemetry
+    {allow, tokens_remaining} = case result do
+      {:ok, remaining} -> {true, remaining}
+      {:error, :rate_limited} -> {false, 0}
+    end
+    
+    :telemetry.execute(
+      [:cyb, :ratelimiter, :decision],
+      %{ns: elapsed_ns, tokens: tokens_remaining},
+      %{allow: allow, key: to_string(key)}
+    )
+    
+    result
   end
 
   @doc """
@@ -41,7 +57,23 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   Returns {:ok, remaining} or {:error, :rate_limited}
   """
   def consume(key, tokens \\ 1) do
-    GenServer.call(__MODULE__, {:consume, key, tokens})
+    start_time = System.monotonic_time(:nanosecond)
+    result = GenServer.call(__MODULE__, {:consume, key, tokens})
+    elapsed_ns = System.monotonic_time(:nanosecond) - start_time
+    
+    # Emit golden telemetry
+    {allow, tokens_remaining} = case result do
+      {:ok, remaining} -> {true, remaining}
+      {:error, :rate_limited} -> {false, 0}
+    end
+    
+    :telemetry.execute(
+      [:cyb, :ratelimiter, :decision],
+      %{ns: elapsed_ns, tokens: tokens_remaining},
+      %{allow: allow, key: to_string(key)}
+    )
+    
+    result
   end
 
   @doc """
