@@ -236,7 +236,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
     # Proper HMAC signature using a secret key
     {key_id, secret} = get_current_key()
     data = canonical_string(payload, nonce, timestamp)
-    sig = :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode64()
+    sig = :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode16(case: :lower)
     {sig, key_id}
   end
 
