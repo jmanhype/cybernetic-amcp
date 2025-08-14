@@ -160,5 +160,43 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
     Logger.debug("Unhandled message type: #{inspect(message)}")
     {:ok, :unhandled}
   end
+  
+  defp maybe_retry(message, state, meta) do
+    retries = Map.get(message, "_retries", 0)
+    
+    if retries < state.max_retries do
+      # Increment retry counter and republish to retry queue
+      updated_message = Map.put(message, "_retries", retries + 1)
+      
+      case Jason.encode(updated_message) do
+        {:ok, payload} ->
+          Basic.publish(
+            state.channel, 
+            state.retry_exchange, 
+            state.retry_routing_key, 
+            payload,
+            headers: [{"_retries", :signedint, retries + 1}]
+          )
+          Basic.ack(state.channel, meta.delivery_tag)
+          Logger.info("Message sent to retry queue, attempt #{retries + 1}/#{state.max_retries}")
+          
+        {:error, _} ->
+          # Can't encode, give up
+          Basic.reject(state.channel, meta.delivery_tag, requeue: false)
+          Logger.error("Failed to encode message for retry, sending to DLQ")
+      end
+    else
+      # Max retries exhausted, send to DLQ
+      Basic.reject(state.channel, meta.delivery_tag, requeue: false)
+      
+      :telemetry.execute(
+        [:cybernetic, :amqp, :retry_exhausted], 
+        %{retries: retries}, 
+        %{routing_key: meta.routing_key}
+      )
+      
+      Logger.error("Message exhausted #{state.max_retries} retries, sent to DLQ")
+    end
+  end
 
 end
