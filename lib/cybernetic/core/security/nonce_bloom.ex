@@ -203,11 +203,33 @@ defmodule Cybernetic.Core.Security.NonceBloom do
     end
   end
   
+  @doc """
+  Generate canonical string for signing - deterministic order
+  """
+  def canonical_string(payload, nonce, timestamp, site \\ nil) do
+    # Deterministic order for signing
+    [nonce, timestamp, site || node(), Jason.encode!(payload)]
+    |> Enum.join("|")
+  end
+  
   defp generate_signature(payload, nonce, timestamp) do
     # Proper HMAC signature using a secret key
-    secret = get_hmac_secret()
-    data = Jason.encode!({payload, nonce, timestamp})
-    :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode16(case: :lower)
+    {key_id, secret} = get_current_key()
+    data = canonical_string(payload, nonce, timestamp)
+    sig = :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode64()
+    {sig, key_id}
+  end
+
+  defp get_current_key do
+    # Support key rotation with key IDs
+    case Application.get_env(:cybernetic, :security)[:signing_keys] do
+      %{active: %{id: id, secret: secret}} -> 
+        {id, secret}
+      _ ->
+        # Fallback to single key
+        secret = get_hmac_secret()
+        {"default", secret}
+    end
   end
 
   defp get_hmac_secret do
