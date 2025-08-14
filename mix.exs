@@ -29,6 +29,7 @@ defmodule Cybernetic.MixProject do
       {:libcluster, ">= 0.0.0"},
       {:delta_crdt, ">= 0.0.0"},
       {:rustler, ">= 0.0.0"},
+      {:gen_stage, "~> 1.2"},
       
       # MCP integration
       {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main"},
