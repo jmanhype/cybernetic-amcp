@@ -13,19 +13,19 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     DeltaCrdt.set_neighbours(b, [a])
     
     # Add conflicting data to both
-    DeltaCrdt.mutate(a, :add, ["session:42", %{token: 1, user: "alice"}])
-    DeltaCrdt.mutate(b, :add, ["session:42", %{token: 2, user: "bob"}])
+    DeltaCrdt.put(a, "session:42", %{token: 1, user: "alice"})
+    DeltaCrdt.put(b, "session:42", %{token: 2, user: "bob"})
     
     # Add non-conflicting data
-    DeltaCrdt.mutate(a, :add, ["config:db", %{host: "localhost"}])
-    DeltaCrdt.mutate(b, :add, ["config:cache", %{ttl: 300}])
+    DeltaCrdt.put(a, "config:db", %{host: "localhost"})
+    DeltaCrdt.put(b, "config:cache", %{ttl: 300})
     
     # Wait for sync
     Process.sleep(50)
     
     # Read both states
-    state_a = DeltaCrdt.read(a)
-    state_b = DeltaCrdt.read(b)
+    state_a = DeltaCrdt.to_map(a)
+    state_b = DeltaCrdt.to_map(b)
     
     # They should have converged to the same state
     assert state_a == state_b
