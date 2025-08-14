@@ -22,10 +22,94 @@ defmodule Cybernetic.Telemetry.Metrics do
   end
   
   @doc """
-  Core metrics for system observability
+  Core metrics for system observability - Golden Set for Day 1
   """
   def metrics do
     [
+      # === GOLDEN SET METRICS ===
+      
+      # S2 Coordinator - Resource allocation
+      counter("cyb.s2.reserve",
+        event_name: [:cyb, :s2, :reserve],
+        description: "Slot reservation attempts",
+        tags: [:lane, :granted]
+      ),
+      distribution("cyb.s2.reserve.duration_ns",
+        event_name: [:cyb, :s2, :reserve], 
+        measurement: :duration,
+        description: "Time to reserve slot in nanoseconds",
+        tags: [:lane],
+        reporter_options: [buckets: [1000, 5000, 10000, 50000, 100000, 500000, 1000000]]
+      ),
+      
+      # Rate Limiter - S3 Control
+      counter("cyb.ratelimiter.decision",
+        event_name: [:cyb, :ratelimiter, :decision],
+        description: "Rate limit decisions",
+        tags: [:allow, :key]
+      ),
+      last_value("cyb.ratelimiter.tokens",
+        event_name: [:cyb, :ratelimiter, :decision],
+        measurement: :tokens,
+        description: "Remaining tokens in bucket",
+        tags: [:key]
+      ),
+      distribution("cyb.ratelimiter.decision.ns",
+        event_name: [:cyb, :ratelimiter, :decision],
+        measurement: :ns,
+        description: "Decision time in nanoseconds"
+      ),
+      
+      # AMQP Transport - Message flow
+      counter("cyb.amqp.publish",
+        event_name: [:cyb, :amqp, :publish],
+        description: "Messages published",
+        tags: [:exchange, :routing_key]
+      ),
+      distribution("cyb.amqp.publish.bytes",
+        event_name: [:cyb, :amqp, :publish],
+        measurement: :bytes,
+        description: "Message size in bytes",
+        tags: [:exchange]
+      ),
+      counter("cyb.amqp.consume",
+        event_name: [:cyb, :amqp, :consume],
+        description: "Messages consumed",
+        tags: [:queue]
+      ),
+      distribution("cyb.amqp.consume.latency",
+        event_name: [:cyb, :amqp, :consume],
+        measurement: :latency,
+        description: "Consume latency in milliseconds",
+        tags: [:queue]
+      ),
+      
+      # Retry and Poison routing
+      counter("cyb.amqp.retry",
+        event_name: [:cyb, :amqp, :retry],
+        description: "Message retries",
+        tags: [:reason]
+      ),
+      counter("cyb.amqp.poison",
+        event_name: [:cyb, :amqp, :poison],
+        description: "Poisoned messages sent to DLQ",
+        tags: [:message_type]
+      ),
+      
+      # Security - NonceBloom
+      counter("cyb.security.nonce_bloom.cleanup.dropped",
+        event_name: [:cyb, :security, :nonce_bloom, :cleanup],
+        measurement: :dropped,
+        description: "Nonces dropped during cleanup"
+      ),
+      counter("cyb.security.nonce_bloom.cleanup.kept",
+        event_name: [:cyb, :security, :nonce_bloom, :cleanup],
+        measurement: :kept,
+        description: "Nonces kept during cleanup"  
+      ),
+      
+      # === END GOLDEN SET ===
+      
       # MCP Registry
       summary("cybernetic.mcp_registry.ready.count",
         description: "Number of MCP tools registered",
