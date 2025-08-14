@@ -60,7 +60,9 @@ defmodule Cybernetic.Edge.WASM.ValidatorTest do
     end
 
     test "handles missing WASM file gracefully" do
-      {:ok, pid} = ValidatorHost.start_link(wasm_path: "/nonexistent/file.wasm")
+      # Use a unique name to avoid conflicts
+      name = :"validator_host_#{System.unique_integer([:positive])}"
+      {:ok, pid} = ValidatorHost.start_link(wasm_path: "/nonexistent/file.wasm", name: name)
       
       # Should start but with no instance
       assert Process.alive?(pid)
