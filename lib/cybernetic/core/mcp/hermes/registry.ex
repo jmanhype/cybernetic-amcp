@@ -8,6 +8,7 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
 
   @registry_table :hermes_tools
   @default_timeout 30_000
+  @ready_event [:cybernetic, :mcp_registry, :ready]
 
   defmodule Tool do
     @type t :: %__MODULE__{
