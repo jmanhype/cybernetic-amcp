@@ -5,6 +5,19 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
   alias Cybernetic.Transport.Message
   alias Cybernetic.Core.Security.NonceBloom
   
+  # Helper to generate serializable terms (no references, PIDs, etc)
+  defp serializable_term do
+    one_of([
+      atom(),
+      string(:alphanumeric),
+      integer(),
+      float(),
+      boolean(),
+      list_of(string(:alphanumeric), max_length: 3),
+      map_of(string(:alphanumeric), one_of([string(:alphanumeric), integer(), boolean()]), max_length: 3)
+    ])
+  end
+  
   property "normalize flattens nested security headers and preserves content" do
     check all payload <- serializable_term(),
               nonce <- binary(min_length: 16, max_length: 32),
@@ -36,7 +49,7 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
   end
   
   property "message signing and verification round-trip" do
-    check all payload <- map_of(string(:alphanumeric), term()),
+    check all payload <- map_of(string(:alphanumeric), serializable_term()),
               max_runs: 50 do
       
       # Enrich message with security headers
@@ -57,7 +70,7 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
   property "flatten_security_headers is idempotent" do
     check all nonce <- binary(min_length: 16, max_length: 32),
               timestamp <- positive_integer(),
-              payload <- term() do
+              payload <- serializable_term() do
       
       msg = %{
         "_nonce" => Base.encode64(nonce),
@@ -75,7 +88,7 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
   end
   
   property "canonical string generation is deterministic" do
-    check all payload <- map_of(string(:alphanumeric), term()),
+    check all payload <- map_of(string(:alphanumeric), serializable_term()),
               nonce <- binary(min_length: 16, max_length: 32),
               timestamp <- positive_integer() do
       
@@ -96,7 +109,7 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
   end
   
   property "messages with different nonces have different signatures" do
-    check all payload <- map_of(string(:alphanumeric), term()),
+    check all payload <- map_of(string(:alphanumeric), serializable_term()),
               nonce1 <- binary(min_length: 16, max_length: 32),
               nonce2 <- binary(min_length: 16, max_length: 32),
               nonce1 != nonce2 do
