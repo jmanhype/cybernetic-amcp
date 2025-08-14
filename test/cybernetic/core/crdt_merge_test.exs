@@ -38,8 +38,8 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     # Clean up
     Process.unlink(a)
     Process.unlink(b)
-    DeltaCrdt.stop(a)
-    DeltaCrdt.stop(b)
+    GenServer.stop(a)
+    GenServer.stop(b)
   end
   
   test "idempotent operations" do
@@ -96,8 +96,8 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     Process.unlink(a)
     Process.unlink(b)
     Process.unlink(c)
-    DeltaCrdt.stop(a)
-    DeltaCrdt.stop(b)
+    GenServer.stop(a)
+    GenServer.stop(b)
     DeltaCrdt.stop(c)
   end
   
@@ -130,7 +130,7 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     # Clean up
     Process.unlink(a)
     Process.unlink(b)
-    DeltaCrdt.stop(a)
-    DeltaCrdt.stop(b)
+    GenServer.stop(a)
+    GenServer.stop(b)
   end
 end
