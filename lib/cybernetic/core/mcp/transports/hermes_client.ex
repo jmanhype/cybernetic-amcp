@@ -124,15 +124,6 @@ defmodule Cybernetic.MCP.HermesClient do
   def execute_tool(tool_name, params, opts) do
     timeout = Keyword.get(opts, :timeout, 30_000)
     
-    case call_tool(tool_name, params, [timeout: timeout]) do
-      {:ok, %{is_error: false, result: result}} ->
-        {:ok, result}
-      
-      {:ok, %{is_error: true, result: error}} ->
-        {:error, %{type: :tool_error, message: error["message"]}}
-      
-      {:error, reason} ->
-        {:error, %{type: :client_error, reason: reason}}
-    end
-  end
+    # Direct implementation since call_tool always returns {:error, :not_implemented}
+    {:error, %{type: :client_error, reason: :not_implemented, tool: tool_name, timeout: timeout}}
 end
