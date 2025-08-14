@@ -1,0 +1,148 @@
+defmodule Cybernetic.Intelligence.S4.BridgeTest do
+  use ExUnit.Case, async: false
+  alias Cybernetic.Intelligence.S4.Bridge
+
+  # Mock provider for testing
+  defmodule MockProvider do
+    @behaviour Cybernetic.Intelligence.S4.Providers.LLMProvider
+
+    @impl true
+    def complete(_prompt, opts) do
+      case opts[:response] do
+        nil -> {:ok, ~s({"sop_updates": [{"action": "test", "priority": "high"}], "risk_score": 42})}
+        :error -> {:error, :mock_error}
+        response -> {:ok, response}
+      end
+    end
+  end
+
+  setup do
+    # Start bridge with mock provider
+    {:ok, pid} = Bridge.start_link(provider: MockProvider, provider_opts: [])
+    on_exit(fn -> Process.exit(pid, :normal) end)
+    {:ok, pid: pid}
+  end
+
+  describe "fact processing" do
+    test "processes aggregator facts and queries LLM", %{pid: _pid} do
+      # Attach listener for S4 analysis
+      ref = make_ref()
+      parent = self()
+      
+      :telemetry.attach(
+        {__MODULE__, ref},
+        [:cybernetic, :s4, :analysis],
+        fn _event, measurements, meta, _config ->
+          send(parent, {:s4_analysis, measurements, meta})
+        end,
+        nil
+      )
+
+      # Simulate aggregator emitting facts
+      facts = [
+        %{"source" => "test", "severity" => "error", "count" => 5},
+        %{"source" => "db", "severity" => "warning", "count" => 2}
+      ]
+      
+      :telemetry.execute(
+        [:cybernetic, :aggregator, :facts],
+        %{facts: facts},
+        %{window: "60s"}
+      )
+
+      # Should receive S4 analysis
+      assert_receive {:s4_analysis, measurements, meta}, 1_000
+      
+      assert measurements.ok == 1
+      assert is_binary(meta.raw)
+      
+      # Verify it's valid JSON
+      {:ok, parsed} = Jason.decode(meta.raw)
+      assert parsed["risk_score"] == 42
+      assert length(parsed["sop_updates"]) > 0
+      
+      :telemetry.detach({__MODULE__, ref})
+    end
+
+    test "handles LLM provider errors gracefully", %{pid: _pid} do
+      # Restart with error response
+      Process.exit(Process.whereis(Bridge), :normal)
+      Process.sleep(10)
+      {:ok, _} = Bridge.start_link(provider: MockProvider, provider_opts: [response: :error])
+      
+      ref = make_ref()
+      parent = self()
+      
+      :telemetry.attach(
+        {__MODULE__, ref},
+        [:cybernetic, :s4, :analysis],
+        fn _event, measurements, meta, _config ->
+          send(parent, {:s4_error, measurements, meta})
+        end,
+        nil
+      )
+
+      # Emit facts
+      :telemetry.execute(
+        [:cybernetic, :aggregator, :facts],
+        %{facts: [%{"test" => "data"}]},
+        %{window: "60s"}
+      )
+
+      # Should receive error telemetry
+      assert_receive {:s4_error, measurements, meta}, 1_000
+      
+      assert measurements.error == 1
+      assert meta.reason == :mock_error
+      
+      :telemetry.detach({__MODULE__, ref})
+    end
+  end
+
+  describe "SOP forwarding" do
+    test "forwards analysis to SOP Engine when available" do
+      # Start SOP Engine
+      {:ok, sop_pid} = Cybernetic.Intelligence.S4.SOPEngine.start_link([])
+      
+      # Track messages to SOP Engine
+      :erlang.trace(sop_pid, true, [:receive])
+      
+      # Emit facts to trigger S4
+      :telemetry.execute(
+        [:cybernetic, :aggregator, :facts],
+        %{facts: [%{"test" => "sop_trigger"}]},
+        %{window: "60s"}
+      )
+
+      # Wait for trace
+      assert_receive {:trace, ^sop_pid, :receive, {:s4_output, output}}, 1_000
+      
+      assert is_binary(output)
+      {:ok, parsed} = Jason.decode(output)
+      assert Map.has_key?(parsed, "sop_updates")
+      
+      Process.exit(sop_pid, :normal)
+    end
+  end
+
+  describe "prompt generation" do
+    test "creates structured prompts from observations" do
+      observations = %{
+        window: "5m",
+        facts: [
+          %{"source" => "api", "severity" => "error", "count" => 10},
+          %{"source" => "db", "severity" => "warning", "count" => 3}
+        ]
+      }
+
+      prompt = Cybernetic.Intelligence.S4.Prompts.Schemas.policy_gap_prompt(observations)
+      
+      # Verify prompt structure
+      assert String.contains?(prompt, "System-4 policy analyst")
+      assert String.contains?(prompt, "5m")
+      assert String.contains?(prompt, "error")
+      assert String.contains?(prompt, "SOP updates")
+      assert String.contains?(prompt, "risk_score")
+    end
+  end
+end
