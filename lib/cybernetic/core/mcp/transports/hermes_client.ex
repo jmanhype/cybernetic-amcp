@@ -117,7 +117,11 @@ defmodule Cybernetic.MCP.HermesClient do
   @doc """
   Execute an MCP tool with progress tracking.
   """
-  def execute_tool(tool_name, params, opts \\ []) do
+  def execute_tool(tool_name, params) do
+    execute_tool(tool_name, params, [])
+  end
+  
+  def execute_tool(tool_name, params, opts) do
     timeout = Keyword.get(opts, :timeout, 30_000)
     
     case call_tool(tool_name, params, [timeout: timeout]) do
