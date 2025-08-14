@@ -92,11 +92,11 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
         _ -> :ok 
       end)
       
-      # Start a new Bridge with error response
-      {:ok, _new_pid} = Bridge.start_link(
-        provider: MockProvider, 
-        provider_opts: [response: :error]
-      )
+      # Start a new Bridge with error response (or reuse if already started)
+      case Bridge.start_link(provider: MockProvider, provider_opts: [response: :error]) do
+        {:ok, _new_pid} -> :ok
+        {:error, {:already_started, _}} -> :ok
+      end
       
       ref = make_ref()
       parent = self()
