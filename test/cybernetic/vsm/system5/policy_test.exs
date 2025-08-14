@@ -3,8 +3,8 @@ defmodule Cybernetic.VSM.System5.PolicyTest do
   alias Cybernetic.VSM.System5.Policy
 
   setup do
-    {:ok, pid} = Policy.start_link()
-    {:ok, policy: pid}
+    # Policy is started by the application, just use it
+    {:ok, policy: Process.whereis(Policy)}
   end
 
   describe "policy versioning" do
