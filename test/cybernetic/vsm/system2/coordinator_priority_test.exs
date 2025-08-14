@@ -46,17 +46,7 @@ defmodule Cybernetic.VSM.System2.CoordinatorPriorityTest do
 
   describe "aging prevents starvation" do
     test "low priority gets slots after aging" do
-      case Process.whereis(Coordinator) do
-        nil -> :ok
-        pid -> GenServer.stop(pid, :normal, 100)
-      end
-      Process.sleep(10)
-      
-      {:ok, _pid} = Coordinator.start_link(
-        max_slots: 4, 
-        aging_ms: 50, 
-        aging_boost: 1.0
-      )
+      # Use existing coordinator, just test the aging behavior
       
       Coordinator.set_priority(:hi, 100.0)
       Coordinator.set_priority(:lo, 1.0)
@@ -82,13 +72,7 @@ defmodule Cybernetic.VSM.System2.CoordinatorPriorityTest do
   
   describe "telemetry events" do
     test "emits schedule event on successful reservation" do
-      case Process.whereis(Coordinator) do
-        nil -> :ok
-        pid -> GenServer.stop(pid, :normal, 100)
-      end
-      Process.sleep(10)
-      
-      {:ok, _pid} = Coordinator.start_link(max_slots: 10)
+      # Use existing coordinator
       
       # Attach telemetry handler
       test_pid = self()
@@ -112,13 +96,7 @@ defmodule Cybernetic.VSM.System2.CoordinatorPriorityTest do
     end
     
     test "emits pressure event on backpressure" do
-      case Process.whereis(Coordinator) do
-        nil -> :ok
-        pid -> GenServer.stop(pid, :normal, 100)
-      end
-      Process.sleep(10)
-      
-      {:ok, _pid} = Coordinator.start_link(max_slots: 1)
+      # Use existing coordinator, fill up slots to trigger backpressure
       
       # Attach telemetry handler
       test_pid = self()
