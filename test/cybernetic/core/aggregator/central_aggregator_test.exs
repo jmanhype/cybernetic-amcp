@@ -94,8 +94,9 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       # Trigger emission
       send(Process.whereis(CentralAggregator), :emit)
       
-      # Give time for emission processing
+      # Give time for emission processing and add more debug
       Process.sleep(100)
+      IO.puts("Facts emission triggered, waiting for telemetry event...")
 
       # Wait for facts
       assert_receive {:facts_emitted, measurements, meta}, 1_000
