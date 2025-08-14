@@ -40,6 +40,32 @@ defmodule Cybernetic.Intelligence.S4.Bridge do
     end
   end
 
+  @impl true
+  def handle_call({:reattach_handlers}, _from, state) do
+    provider = state[:provider] || Claude
+    provider_opts = state[:provider_opts] || []
+    
+    # Detach existing handlers
+    :telemetry.detach({__MODULE__, :facts})
+    
+    # Re-attach handlers
+    result = :telemetry.attach_many(
+      {__MODULE__, :facts},
+      [[:cybernetic, :aggregator, :facts]],
+      &__MODULE__.handle_fact/4,
+      %{provider: provider, provider_opts: provider_opts}
+    )
+    
+    case result do
+      :ok -> 
+        Logger.info("S4 Bridge telemetry handler re-attached successfully")
+        {:reply, :ok, state}
+      {:error, reason} ->
+        Logger.error("Failed to re-attach S4 Bridge telemetry handler: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
   @doc false
   def handle_fact(_event, measurements, meta, %{provider: provider, provider_opts: p_opts}) do
     observations = %{
