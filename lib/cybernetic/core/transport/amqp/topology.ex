@@ -91,38 +91,38 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   
   @bindings [
     # VSM bindings to event exchange
-    {:events, "vsm.s1.operations", "vsm.s1.*"},
-    {:events, "vsm.s2.coordination", "vsm.s2.*"},
-    {:events, "vsm.s3.control", "vsm.s3.*"},
-    {:events, "vsm.s4.intelligence", "vsm.s4.*"},
-    {:events, "vsm.s5.policy", "vsm.s5.*"},
+    {"cyb.events", "vsm.s1.operations", "vsm.s1.*"},
+    {"cyb.events", "vsm.s2.coordination", "vsm.s2.*"},
+    {"cyb.events", "vsm.s3.control", "vsm.s3.*"},
+    {"cyb.events", "vsm.s4.intelligence", "vsm.s4.*"},
+    {"cyb.events", "vsm.s5.policy", "vsm.s5.*"},
     
     # VSM internal communication
-    {:vsm, "vsm.s1.operations", "s1.#"},
-    {:vsm, "vsm.s2.coordination", "s2.#"},
-    {:vsm, "vsm.s3.control", "s3.#"},
-    {:vsm, "vsm.s4.intelligence", "s4.#"},
-    {:vsm, "vsm.s5.policy", "s5.#"},
+    {"cyb.vsm", "vsm.s1.operations", "s1.#"},
+    {"cyb.vsm", "vsm.s2.coordination", "s2.#"},
+    {"cyb.vsm", "vsm.s3.control", "s3.#"},
+    {"cyb.vsm", "vsm.s4.intelligence", "s4.#"},
+    {"cyb.vsm", "vsm.s5.policy", "s5.#"},
     
     # MCP bindings
-    {:mcp, "mcp.requests", "request"},
-    {:mcp, "mcp.responses", "response"},
+    {"cyb.mcp", "mcp.requests", "request"},
+    {"cyb.mcp", "mcp.responses", "response"},
     
     # Telemetry bindings
-    {:telemetry, "telemetry.metrics", "metrics.#"},
-    {:telemetry, "telemetry.logs", "logs.#"},
+    {"cyb.telemetry", "telemetry.metrics", "metrics.#"},
+    {"cyb.telemetry", "telemetry.logs", "logs.#"},
     
     # Event stream binding
-    {:events, "events.stream", "#"},
+    {"cyb.events", "events.stream", "#"},
     
     # Priority messages direct to alerts
-    {:priority, "priority.alerts", "alert"},
+    {"cyb.priority", "priority.alerts", "alert"},
     
     # Dead letter bindings
-    {:dlx, "dlq", ""},
+    {"vsm.dlx", "dlq", ""},
     
     # Retry queue binding to DLX
-    {:dlx, "cyb.events.retry", "retry"}
+    {"vsm.dlx", "cyb.events.retry", "retry"}
   ]
   
   # GenServer callbacks
