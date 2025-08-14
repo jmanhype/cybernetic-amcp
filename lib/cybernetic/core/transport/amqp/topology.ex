@@ -95,7 +95,10 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     {:priority, "priority.alerts", "alert"},
     
     # Dead letter bindings
-    {:dlx, "dlq", ""}
+    {:dlx, "dlq", ""},
+    
+    # Retry queue binding to DLX
+    {:dlx, "cyb.events.retry", "retry"}
   ]
   
   # GenServer callbacks
