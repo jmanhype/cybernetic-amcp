@@ -40,4 +40,54 @@ defmodule Cybernetic.VSM.System5.Policy do
     operation = Map.get(message, :operation, "unknown")
     Cybernetic.VSM.System5.MessageHandler.handle_message(operation, message, meta)
   end
+  
+  def handle_call({:put_policy, id, policy}, _from, state) do
+    version = get_in(state.policies, [id, :version]) || 0
+    new_version = version + 1
+    
+    versioned_policy = Map.merge(policy, %{
+      version: new_version,
+      timestamp: System.system_time(:millisecond),
+      id: id
+    })
+    
+    state = state
+      |> put_in([:policies, id], versioned_policy)
+      |> update_in([:policy_history, id], fn history ->
+        [versioned_policy | (history || [])] |> Enum.take(10)  # Keep last 10 versions
+      end)
+    
+    {:reply, {:ok, versioned_policy}, state}
+  end
+  
+  def handle_call({:get_policy, id}, _from, state) do
+    {:reply, Map.get(state.policies, id), state}
+  end
+  
+  def handle_call({:diff_policy, id, v1, v2}, _from, state) do
+    history = Map.get(state.policy_history, id, [])
+    p1 = Enum.find(history, &(&1[:version] == v1))
+    p2 = Enum.find(history, &(&1[:version] == v2))
+    
+    diff = case {p1, p2} do
+      {nil, _} -> {:error, "Version #{v1} not found"}
+      {_, nil} -> {:error, "Version #{v2} not found"}
+      {policy1, policy2} -> compute_diff(policy1, policy2)
+    end
+    
+    {:reply, diff, state}
+  end
+  
+  defp compute_diff(p1, p2) do
+    keys = Map.keys(p1) ++ Map.keys(p2) |> Enum.uniq()
+    
+    Enum.reduce(keys, %{added: %{}, removed: %{}, changed: %{}}, fn key, acc ->
+      case {Map.get(p1, key), Map.get(p2, key)} do
+        {nil, value} -> put_in(acc.added[key], value)
+        {value, nil} -> put_in(acc.removed[key], value)
+        {v1, v2} when v1 != v2 -> put_in(acc.changed[key], {v1, v2})
+        _ -> acc
+      end
+    end)
+  end
 end
