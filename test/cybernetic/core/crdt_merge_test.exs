@@ -46,14 +46,14 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     {:ok, crdt} = DeltaCrdt.start_link(AWLWWMap, sync_interval: 1000)
     
     # Add the same value multiple times
-    DeltaCrdt.mutate(crdt, :add, ["key1", %{value: "test"}])
-    state1 = DeltaCrdt.read(crdt)
+    DeltaCrdt.put(crdt, "key1", %{value: "test"})
+    state1 = DeltaCrdt.to_map(crdt)
     
-    DeltaCrdt.mutate(crdt, :add, ["key1", %{value: "test"}])
-    state2 = DeltaCrdt.read(crdt)
+    DeltaCrdt.put(crdt, "key1", %{value: "test"})
+    state2 = DeltaCrdt.to_map(crdt)
     
-    DeltaCrdt.mutate(crdt, :add, ["key1", %{value: "test"}])
-    state3 = DeltaCrdt.read(crdt)
+    DeltaCrdt.put(crdt, "key1", %{value: "test"})
+    state3 = DeltaCrdt.to_map(crdt)
     
     # State should be identical after repeated operations
     assert state1 == state2
@@ -70,11 +70,11 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     {:ok, c} = DeltaCrdt.start_link(AWLWWMap, sync_interval: 10)
     
     # Add data in different order
-    DeltaCrdt.mutate(a, :add, ["x", 1])
-    DeltaCrdt.mutate(a, :add, ["y", 2])
+    DeltaCrdt.put(a, "x", 1)
+    DeltaCrdt.put(a, "y", 2)
     
-    DeltaCrdt.mutate(b, :add, ["y", 2])
-    DeltaCrdt.mutate(b, :add, ["x", 1])
+    DeltaCrdt.put(b, "y", 2)
+    DeltaCrdt.put(b, "x", 1)
     
     # C merges from both A and B
     DeltaCrdt.set_neighbours(c, [a, b])
@@ -84,9 +84,9 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     # Wait for convergence
     Process.sleep(50)
     
-    state_a = DeltaCrdt.read(a)
-    state_b = DeltaCrdt.read(b)
-    state_c = DeltaCrdt.read(c)
+    state_a = DeltaCrdt.to_map(a)
+    state_b = DeltaCrdt.to_map(b)
+    state_c = DeltaCrdt.to_map(c)
     
     # All should converge to same state
     assert state_a == state_b
@@ -109,20 +109,20 @@ defmodule Cybernetic.Core.CRDTMergeTest do
     DeltaCrdt.set_neighbours(b, [a])
     
     # Both add the same key
-    DeltaCrdt.mutate(a, :add, ["temp", %{data: "value"}])
+    DeltaCrdt.put(a, "temp", %{data: "value"})
     Process.sleep(20)
     
     # A removes it
-    DeltaCrdt.mutate(a, :remove, ["temp"])
+    DeltaCrdt.delete(a, "temp")
     
     # B updates it (concurrent with remove)
-    DeltaCrdt.mutate(b, :add, ["temp", %{data: "updated"}])
+    DeltaCrdt.put(b, "temp", %{data: "updated"})
     
     # Wait for convergence
     Process.sleep(50)
     
-    state_a = DeltaCrdt.read(a)
-    state_b = DeltaCrdt.read(b)
+    state_a = DeltaCrdt.to_map(a)
+    state_b = DeltaCrdt.to_map(b)
     
     # Should converge (last-write-wins or remove-wins depending on timestamps)
     assert state_a == state_b
