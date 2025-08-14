@@ -11,15 +11,12 @@ defmodule Cybernetic.MCP.HermesClient do
 
   require Logger
   
-  @behaviour Cybernetic.Plugin
-
-  @impl true
+  # Plugin behavior implementation
   def init(opts) do
     # Initialize plugin state
     {:ok, %{opts: opts, initialized: true}}
   end
 
-  @impl true
   def process(%{tool: tool, params: params}, state) when is_binary(tool) and is_map(params) do
     Logger.debug("Hermes MCP tool call: #{tool} with #{inspect(params)}")
     
