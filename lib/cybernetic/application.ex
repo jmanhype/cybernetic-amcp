@@ -36,6 +36,19 @@ defmodule Cybernetic.Application do
       max_restarts: 10,
       max_seconds: 60
     ]
-    Supervisor.start_link(children, opts)
+    
+    {:ok, sup} = Supervisor.start_link(children, opts)
+    
+    # Block on MCP tools so S1-S5 workers can assume availability
+    Task.start(fn ->
+      case Cybernetic.Core.MCP.Hermes.Registry.await_ready(2_000) do
+        :ok -> 
+          Logger.info("MCP Registry ready with builtin tools")
+        {:error, :timeout} -> 
+          Logger.error("MCP registry not ready in time")
+      end
+    end)
+    
+    {:ok, sup}
   end
 end
