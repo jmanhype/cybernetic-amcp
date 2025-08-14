@@ -28,9 +28,9 @@ defmodule Cybernetic.Property.MessageNormalizePropTest do
       raw = %{
         "headers" => %{
           "security" => %{
-            "nonce" => Base.encode64(nonce),
-            "timestamp" => timestamp,
-            "site" => "test_node"
+            "_nonce" => Base.encode64(nonce),
+            "_timestamp" => timestamp,
+            "_site" => "test_node"
           }
         },
         "payload" => payload
