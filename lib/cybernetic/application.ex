@@ -29,8 +29,11 @@ defmodule Cybernetic.Application do
       # Central Aggregator (must be before S4 Bridge)
       {Cybernetic.Core.Aggregator.CentralAggregator, []},
       
-      # S4 Intelligence Layer
-      {Cybernetic.Intelligence.S4.Bridge, [provider: Cybernetic.Intelligence.S4.Providers.MCPTool]},
+      # S4 Intelligence Layer (using Claude provider)
+      {Cybernetic.Intelligence.S4.Bridge, [
+        provider: Cybernetic.Intelligence.S4.Providers.Claude,
+        provider_opts: [api_key: System.get_env("ANTHROPIC_API_KEY")]
+      ]},
       {Cybernetic.Intelligence.S4.SOPEngine, [exchange: "cyb.events"]},
       
       # Edge WASM Validator (optional, comment out if no WASM runtime)
