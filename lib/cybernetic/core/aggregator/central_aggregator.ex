@@ -58,7 +58,12 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
       data: meas
     }
 
-    :ets.insert(@table, {entry.at, entry})
+    case :ets.whereis(@table) do
+      :undefined -> 
+        Logger.warning("CentralAggregator: ETS table #{@table} not found during handle_source")
+      _ ->
+        :ets.insert(@table, {entry.at, entry})
+    end
   end
 
   @impl true
