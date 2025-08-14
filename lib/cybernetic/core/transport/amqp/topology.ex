@@ -97,12 +97,12 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     {"cyb.events", "vsm.s4.intelligence", "vsm.s4.*"},
     {"cyb.events", "vsm.s5.policy", "vsm.s5.*"},
     
-    # VSM internal communication
-    {"cyb.vsm", "vsm.s1.operations", "s1.#"},
-    {"cyb.vsm", "vsm.s2.coordination", "s2.#"},
-    {"cyb.vsm", "vsm.s3.control", "s3.#"},
-    {"cyb.vsm", "vsm.s4.intelligence", "s4.#"},
-    {"cyb.vsm", "vsm.s5.policy", "s5.#"},
+    # VSM internal communication - using individual system exchanges
+    {"cyb.vsm.s1", "vsm.s1.operations", "s1.#"},
+    {"cyb.vsm.s2", "vsm.s2.coordination", "s2.#"},
+    {"cyb.vsm.s3", "vsm.s3.control", "s3.#"},
+    {"cyb.vsm.s4", "vsm.s4.intelligence", "s4.#"},
+    {"cyb.vsm.s5", "vsm.s5.policy", "s5.#"},
     
     # MCP bindings
     {"cyb.mcp", "mcp.requests", "request"},
