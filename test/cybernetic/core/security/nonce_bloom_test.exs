@@ -2,6 +2,25 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
   use ExUnit.Case
   alias Cybernetic.Core.Security.NonceBloom
 
+  # Helper to generate valid signatures for tests
+  defp generate_test_signature(payload, nonce, timestamp) do
+    secret = Application.get_env(:cybernetic, :security)[:hmac_secret] ||
+             System.get_env("CYBERNETIC_HMAC_SECRET") ||
+             "default-insecure-key-change-in-production"
+    
+    data = [
+      nonce,
+      timestamp,
+      node(),
+      "",  # exchange
+      "",  # routing_key  
+      "application/json",  # content_type
+      Jason.encode!(payload)
+    ] |> Enum.join("|")
+    
+    :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode16(case: :lower)
+  end
+
   setup do
     # NonceBloom is started by the application, no need to start it again
     # Just ensure it's running
