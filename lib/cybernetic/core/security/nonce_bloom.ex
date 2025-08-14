@@ -55,12 +55,14 @@ defmodule Cybernetic.Core.Security.NonceBloom do
     nonce = generate_nonce()
     timestamp = System.system_time(:millisecond)
     site = opts[:site] || node()
+    {signature, key_id} = generate_signature(payload, nonce, timestamp)
     
     enriched = Map.merge(payload, %{
       "_nonce" => nonce,
       "_timestamp" => timestamp,
       "_site" => site,
-      "_signature" => generate_signature(payload, nonce, timestamp)
+      "_signature" => signature,
+      "_key_id" => key_id
     })
     
     # Track the nonce we just generated
