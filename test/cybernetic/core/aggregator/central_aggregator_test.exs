@@ -3,22 +3,40 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
   alias Cybernetic.Core.Aggregator.CentralAggregator
 
   setup do
-    # Check if CentralAggregator is already running
-    pid = case Process.whereis(CentralAggregator) do
-      nil ->
-        # Clean up any existing ETS table
-        case :ets.info(:cyb_agg_window) do
-          :undefined -> :ok
-          _ -> :ets.delete(:cyb_agg_window)
-        end
-        
-        {:ok, p} = CentralAggregator.start_link([])
-        on_exit(fn -> Process.exit(p, :normal) end)
-        p
-      existing_pid ->
-        # Use existing process
-        existing_pid
+    # Force cleanup of any existing handlers
+    :telemetry.list_handlers()
+    |> Enum.each(fn handler ->
+      if match?(%{id: {CentralAggregator, _}}, handler) do
+        :telemetry.detach(handler.id)
+      end
+    end)
+    
+    # Check if CentralAggregator is already running and stop it
+    case Process.whereis(CentralAggregator) do
+      nil -> :ok
+      existing_pid -> Process.exit(existing_pid, :normal)
     end
+    
+    # Wait for process to stop
+    Process.sleep(10)
+    
+    # Clean up any existing ETS table
+    case :ets.info(:cyb_agg_window) do
+      :undefined -> :ok
+      _ -> :ets.delete(:cyb_agg_window)
+    end
+    
+    {:ok, pid} = CentralAggregator.start_link([])
+    on_exit(fn -> 
+      Process.exit(pid, :normal)
+      # Clean up handlers
+      :telemetry.list_handlers()
+      |> Enum.each(fn handler ->
+        if match?(%{id: {CentralAggregator, _}}, handler) do
+          :telemetry.detach(handler.id)
+        end
+      end)
+    end)
     
     {:ok, pid: pid}
   end
