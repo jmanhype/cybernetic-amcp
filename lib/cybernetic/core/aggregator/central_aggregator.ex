@@ -16,7 +16,15 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
   @impl true
   def init(_opts) do
-    :ets.new(@table, [:set, :public, :named_table, read_concurrency: true])
+    # Ensure table exists or create it
+    case :ets.whereis(@table) do
+      :undefined -> 
+        :ets.new(@table, [:set, :public, :named_table, read_concurrency: true])
+      _ -> 
+        # Table already exists, clear it
+        :ets.delete_all_objects(@table)
+    end
+    
     attach_sources()
     Process.send_after(self(), :emit, @emit_every_ms)
     {:ok, %{last_emit: now_ms()}}
