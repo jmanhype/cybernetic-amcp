@@ -1,16 +1,26 @@
 defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   @moduledoc """
-  Collects events (telemetry & Goldrush matches), maintains a rolling window,
-  and periodically emits condensed facts for S4.
-
-  Emits: [:cybernetic, :aggregator, :facts] with %{facts: [...]}, meta: %{window: "..."}
+  Central Aggregator - The Fact Bus for the Cybernetic system.
+  
+  Collects events from telemetry & Goldrush, maintains a rolling window,
+  generates facts, detects episodes, and feeds S4 intelligence.
+  
+  Facts: Immutable, timestamped observations
+  Episodes: Coherent sequences of facts forming a narrative
+  
+  Emits:
+  - [:cybernetic, :aggregator, :facts] - Raw facts every 5s
+  - [:cybernetic, :aggregator, :episode] - Detected episodes
   """
   use GenServer
   require Logger
 
   @table :cyb_agg_window
+  @facts_table :cyb_facts_store
+  @episode_table :cyb_episodes
   @emit_every_ms 5_000
   @window_ms 60_000
+  @episode_threshold 10  # Min facts to form an episode
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
