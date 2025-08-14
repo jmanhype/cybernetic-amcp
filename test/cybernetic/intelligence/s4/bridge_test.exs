@@ -32,14 +32,20 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
     
     # Give Bridge time to attach its telemetry handlers
     Process.sleep(50)
+    
+    # Don't clean up the process immediately - let the test finish first
     on_exit(fn -> 
-      Process.exit(pid, :normal)
-      # Clean up handlers
+      # Clean up handlers first
       :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
       |> Enum.each(fn 
         %{id: {Bridge, _}} -> :telemetry.detach({Bridge, :facts})
         _ -> :ok 
       end)
+      
+      # Then exit the process
+      if Process.alive?(pid) do
+        Process.exit(pid, :normal)
+      end
     end)
     
     {:ok, pid: pid}
