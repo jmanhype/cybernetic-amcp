@@ -177,6 +177,9 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       ref = make_ref()
       parent = self()
       
+      # Detach the S4 Bridge handler temporarily to avoid conflicts
+      :telemetry.detach({Cybernetic.Intelligence.S4.Bridge, :facts})
+      
       :telemetry.attach(
         {__MODULE__, ref},
         [:cybernetic, :aggregator, :facts],
