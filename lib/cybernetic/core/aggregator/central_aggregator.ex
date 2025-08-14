@@ -26,7 +26,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
     # Goldrush matches → [:cybernetic, :goldrush, :match]
     :telemetry.attach_many(
       {__MODULE__, :goldrush},
-      [[:cybernetic, :goldrush, :match], [:cybernetic, :work, :finished]],
+      [[:cybernetic, :goldrush, :match], [:cybernetic, :work, :finished], [:cybernetic, :work, :failed]],
       &__MODULE__.handle_source/4,
       %{}
     )
