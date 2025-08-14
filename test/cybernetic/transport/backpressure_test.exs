@@ -36,15 +36,26 @@ defmodule Cybernetic.Transport.BackpressureTest do
         Agent.update(agent, &[event | &1])
       end
       
+      # Create a producer to feed the consumer
+      {:ok, producer} = Producer.start_link()
       {:ok, consumer} = Consumer.start_link(handler: handler)
       
-      # Manually send events (normally done by GenStage)
-      send(consumer, {:"$gen_consumer", {self(), make_ref()}, [:event1, :event2]})
+      # Wire them together
+      GenStage.sync_subscribe(consumer, to: producer)
       
-      Process.sleep(10)
+      # Push events through the producer
+      Producer.push(producer, :event1)
+      Producer.push(producer, :event2)
+      
+      Process.sleep(50)
       
       stats = Consumer.stats(consumer)
       assert stats.processed == 2
+      
+      # Verify handler was called
+      events = Agent.get(agent, & &1)
+      assert :event1 in events
+      assert :event2 in events
     end
 
     test "handles handler errors gracefully" do
