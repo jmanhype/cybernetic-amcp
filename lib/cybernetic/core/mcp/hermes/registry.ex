@@ -60,6 +60,29 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     end
   end
 
+  @doc "Wait for registry to be ready with builtin tools"
+  def await_ready(timeout \\ 2_000) do
+    ref = make_ref()
+    parent = self()
+    
+    :telemetry.attach(
+      {:mcp_ready, ref},
+      @ready_event,
+      fn _event, meas, _meta, _cfg -> send(parent, {:mcp_ready, meas.count}) end,
+      nil
+    )
+    
+    receive do
+      {:mcp_ready, _count} ->
+        :telemetry.detach({:mcp_ready, ref})
+        :ok
+    after
+      timeout ->
+        :telemetry.detach({:mcp_ready, ref})
+        {:error, :timeout}
+    end
+  end
+
   @doc "Get tool details"
   def get_tool(name) do
     case :ets.lookup(@registry_table, name) do
