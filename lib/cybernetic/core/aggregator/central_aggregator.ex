@@ -93,9 +93,15 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   end
 
   defp summarize do
-    :ets.tab2list(@table)
-    |> Enum.map(fn {_k, v} -> v end)
-    |> to_facts()
+    case :ets.whereis(@table) do
+      :undefined -> 
+        Logger.warning("CentralAggregator: ETS table #{@table} not found during summarize")
+        []
+      _ ->
+        :ets.tab2list(@table)
+        |> Enum.map(fn {_k, v} -> v end)
+        |> to_facts()
+    end
   end
 
   defp to_facts(entries) do
