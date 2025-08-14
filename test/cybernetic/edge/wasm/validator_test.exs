@@ -26,6 +26,11 @@ defmodule Cybernetic.Edge.WASM.ValidatorTest do
         "payload" => %{"data" => "test"}
       }
       
+      # Ensure ValidatorHost is started for this test
+      unless Process.whereis(ValidatorHost) do
+        {:ok, _} = ValidatorHost.start_link(wasm_path: "test.wasm")
+      end
+      
       # With stubbed WASM, should return error
       result = Validator.validate(message, state)
       assert match?({{:error, _}, _state}, result)
