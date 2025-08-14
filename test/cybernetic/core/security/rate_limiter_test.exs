@@ -3,6 +3,12 @@ defmodule Cybernetic.Core.Security.RateLimiterTest do
   alias Cybernetic.Core.Security.RateLimiter
 
   setup do
+    # Stop existing if running and start fresh for tests
+    case Process.whereis(RateLimiter) do
+      nil -> :ok
+      pid -> GenServer.stop(pid, :normal, 100)
+    end
+    Process.sleep(10)
     {:ok, pid} = RateLimiter.start_link(bucket_size: 10, refill_rate: 5)
     {:ok, limiter: pid}
   end
