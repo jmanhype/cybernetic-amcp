@@ -12,7 +12,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
 
   @exchange "cyb.events"
   @queue "cyb.consumer"
-  @prefetch_count 10
+  @prefetch_count Application.compile_env(:cybernetic, :amqp_prefetch, 50)
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
