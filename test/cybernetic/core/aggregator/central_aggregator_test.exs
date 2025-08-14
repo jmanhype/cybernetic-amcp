@@ -68,7 +68,10 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       ref = make_ref()
       parent = self()
       
-      result = :telemetry.attach(
+      # Detach the S4 Bridge handler temporarily to avoid conflicts
+      :telemetry.detach({Cybernetic.Intelligence.S4.Bridge, :facts})
+      
+      :telemetry.attach(
         {__MODULE__, ref},
         [:cybernetic, :aggregator, :facts],
         fn _event, measurements, meta, _config ->
@@ -76,14 +79,6 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
         end,
         nil
       )
-      IO.puts("Telemetry handler attach result: #{inspect(result)}")
-      
-      # List all handlers for this event to check for conflicts
-      handlers = :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
-      IO.puts("Active handlers for [:cybernetic, :aggregator, :facts]: #{length(handlers)}")
-      
-      # Detach the S4 Bridge handler temporarily to avoid conflicts
-      :telemetry.detach({Cybernetic.Intelligence.S4.Bridge, :facts})
 
       # Inject test events
       for i <- 1..5 do
