@@ -11,7 +11,10 @@ defmodule Cybernetic.Intelligence.S4.Bridge do
   alias Cybernetic.Intelligence.S4.Providers.MCPTool
   alias Cybernetic.Intelligence.S4.Prompts.Schemas
 
-  def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  def start_link(opts) do
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
 
   @impl true
   def init(opts) do
