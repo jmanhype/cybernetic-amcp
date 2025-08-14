@@ -24,6 +24,7 @@ defmodule Cybernetic.Application do
       # Goldrush Integration
       {Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic, []},
       Cybernetic.Core.Goldrush.Bridge,
+      Cybernetic.Core.Goldrush.Pipeline,
       
       # VSM Supervisor (includes S1-S5)
       Cybernetic.VSM.Supervisor,
