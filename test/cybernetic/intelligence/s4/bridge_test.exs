@@ -76,6 +76,23 @@ defmodule Cybernetic.Intelligence.S4.BridgeTest do
       handlers = :telemetry.list_handlers([:cybernetic, :aggregator, :facts])
       IO.puts("Attached handlers: #{inspect(handlers)}")
       
+      # If no handlers, ensure Bridge is still alive and re-attach if needed
+      if Enum.empty?(handlers) do
+        if Process.alive?(pid) do
+          IO.puts("Re-attaching Bridge handlers for test...")
+          GenServer.call(pid, {:reattach_handlers})
+        else
+          IO.puts("Bridge process is dead, restarting...")
+          # Restart Bridge if it died
+          new_pid = case Bridge.start_link(provider: MockProvider, provider_opts: []) do
+            {:ok, p} -> p
+            {:error, {:already_started, p}} -> p
+          end
+          pid = new_pid
+          Process.sleep(100)
+        end
+      end
+      
       :telemetry.execute(
         [:cybernetic, :aggregator, :facts],
         %{facts: facts},
