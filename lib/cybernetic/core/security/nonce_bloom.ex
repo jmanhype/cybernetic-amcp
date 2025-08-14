@@ -220,13 +220,8 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   """
   def canonical_string(payload, nonce, timestamp, site \\ nil, meta \\ %{}) do
     # Deterministic order for signing - includes routing keys
-    # Safely encode payload - handle binary data
-    encoded_payload = case Jason.encode(payload) do
-      {:ok, json} -> json
-      {:error, _} -> 
-        # If payload can't be encoded (contains binary), convert to inspected string
-        inspect(payload)
-    end
+    # Safely encode payload - handle any data type
+    encoded_payload = safe_encode_payload(payload)
     
     [
       nonce,
@@ -238,6 +233,64 @@ defmodule Cybernetic.Core.Security.NonceBloom do
       encoded_payload
     ]
     |> Enum.join("|")
+  end
+  
+  defp safe_encode_payload(payload) do
+    try do
+      # Try JSON encoding first
+      case Jason.encode(payload) do
+        {:ok, json} -> json
+        {:error, _} -> fallback_encode(payload)
+      end
+    rescue
+      # Catch any encoding errors
+      _ -> fallback_encode(payload)
+    end
+  end
+  
+  defp fallback_encode(payload) do
+    # Convert to a safe string representation
+    payload
+    |> sanitize_for_encoding()
+    |> inspect()
+  end
+  
+  defp sanitize_for_encoding(payload) when is_map(payload) do
+    # Convert map to string keys and sanitize values
+    Enum.into(payload, %{}, fn {k, v} ->
+      key = cond do
+        is_binary(k) -> k
+        is_atom(k) -> to_string(k)
+        true -> inspect(k)
+      end
+      {key, sanitize_for_encoding(v)}
+    end)
+  end
+  
+  defp sanitize_for_encoding(payload) when is_list(payload) do
+    Enum.map(payload, &sanitize_for_encoding/1)
+  end
+  
+  defp sanitize_for_encoding(payload) when is_binary(payload) do
+    # Check if it's valid UTF-8
+    if String.valid?(payload) do
+      payload
+    else
+      Base.encode64(payload)
+    end
+  end
+  
+  defp sanitize_for_encoding(payload) when is_atom(payload) do
+    to_string(payload)
+  end
+  
+  defp sanitize_for_encoding(payload) when is_number(payload) or is_boolean(payload) do
+    payload
+  end
+  
+  defp sanitize_for_encoding(payload) do
+    # For any other type, convert to string
+    to_string(payload)
   end
   
   defp generate_signature(payload, nonce, timestamp) do
