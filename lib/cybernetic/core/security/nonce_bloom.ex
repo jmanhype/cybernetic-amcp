@@ -36,6 +36,18 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   end
   
   @doc """
+  Get the TTL for nonces in milliseconds
+  """
+  def ttl_ms, do: @nonce_ttl
+  
+  @doc """
+  Manually trigger cleanup of expired nonces
+  """
+  def prune do
+    GenServer.cast(__MODULE__, :prune)
+  end
+  
+  @doc """
   Enrich a message with security headers (nonce, timestamp, signature)
   """
   def enrich_message(payload, opts \\ []) do
