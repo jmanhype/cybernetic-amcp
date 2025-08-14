@@ -3,8 +3,8 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
   alias Cybernetic.VSM.System2.Coordinator
 
   setup do
-    {:ok, pid} = Coordinator.start_link()
-    {:ok, coordinator: pid}
+    # Coordinator is started by the application, just use it
+    {:ok, coordinator: Process.whereis(Coordinator)}
   end
 
   describe "priority queue methods" do
