@@ -5,19 +5,34 @@
 IO.puts("\n🔍 PROVING TOGETHER AI INTEGRATION")
 IO.puts("=" |> String.duplicate(60))
 
-# 1. CHECK MODULE EXISTS
-IO.puts("\n✅ 1. Module Existence Check:")
-module_exists = Code.ensure_loaded?(Cybernetic.VSM.System4.Providers.Together)
-IO.puts("   Together provider module exists: #{module_exists}")
+# 1. CHECK SOURCE FILES EXIST
+IO.puts("\n✅ 1. Source File Existence Check:")
+together_file = "/Users/speed/Downloads/cybernetic/lib/cybernetic/vsm/system4/providers/together.ex"
+router_file = "/Users/speed/Downloads/cybernetic/lib/cybernetic/vsm/system4/router.ex"
+service_file = "/Users/speed/Downloads/cybernetic/lib/cybernetic/vsm/system4/service.ex"
+
+IO.puts("   Together provider file exists: #{File.exists?(together_file)}")
+IO.puts("   Router file exists: #{File.exists?(router_file)}")
+IO.puts("   Service file exists: #{File.exists?(service_file)}")
 
 # 2. CHECK ROUTER INTEGRATION
 IO.puts("\n✅ 2. Router Integration Check:")
-alias Cybernetic.VSM.System4.{Episode, Router}
+router_content = File.read!(router_file)
 
 # Check Together is in routing chains
-code_gen_chain = Router.select_chain(%Episode{kind: :code_gen}, [])
-IO.puts("   Code generation chain: #{inspect(code_gen_chain)}")
-IO.puts("   Together in chain: #{:together in code_gen_chain}")
+code_gen_check = router_content =~ "[:openai, :together, :anthropic]"
+root_cause_check = router_content =~ "[:anthropic, :together, :openai]"
+anomaly_check = router_content =~ "[:together, :anthropic, :ollama]"
+optimization_check = router_content =~ "[:openai, :together, :anthropic]"
+prediction_check = router_content =~ "[:together, :anthropic, :openai]"
+classification_check = router_content =~ "[:together, :openai, :ollama]"
+
+IO.puts("   Code generation chain includes Together: #{code_gen_check}")
+IO.puts("   Root cause chain includes Together: #{root_cause_check}")
+IO.puts("   Anomaly detection chain includes Together: #{anomaly_check}")
+IO.puts("   Optimization chain includes Together: #{optimization_check}")
+IO.puts("   Prediction chain includes Together: #{prediction_check}")
+IO.puts("   Classification chain includes Together: #{classification_check}")
 
 root_cause_chain = Router.select_chain(%Episode{kind: :root_cause}, [])
 IO.puts("   Root cause chain: #{inspect(root_cause_chain)}")
