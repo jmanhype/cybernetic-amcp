@@ -52,6 +52,9 @@ defmodule Cybernetic.MixProject do
       {:req, "~> 0.5.0"},        # For Claude API
       {:httpoison, "~> 2.2"},    # For Telegram bot
       
+      # Redis client
+      {:redix, "~> 1.2"}
+      
       # Environment variable loading
       {:dotenv, "~> 3.1", only: [:dev, :test]},
       
