@@ -167,6 +167,39 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     end
   end
   
+  defp build_analysis_prompt_with_context(episode, opts) do
+    base_prompt = build_analysis_prompt(episode, opts)
+    
+    # Add conversation context if available
+    case Keyword.get(opts, :context) do
+      nil ->
+        base_prompt
+        
+      context_episodes ->
+        # Inject context into the messages
+        context_messages = format_context_messages(context_episodes)
+        existing_messages = base_prompt["messages"]
+        
+        # Prepend context messages before the current request
+        updated_messages = context_messages ++ existing_messages
+        
+        Map.put(base_prompt, "messages", updated_messages)
+    end
+  end
+  
+  defp format_context_messages(context_episodes) do
+    Enum.flat_map(context_episodes, fn episode_context ->
+      episode_context.messages
+      |> Enum.map(fn msg ->
+        %{
+          "role" => to_string(msg.role),
+          "content" => msg.content
+        }
+      end)
+    end)
+    |> Enum.take(-10)  # Keep last 10 messages for context
+  end
+  
   defp build_analysis_prompt(episode, opts) do
     system_prompt = """
     You are the S4 Intelligence system in a Viable System Model (VSM) framework.
