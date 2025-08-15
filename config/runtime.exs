@@ -104,7 +104,13 @@ config :cybernetic, Cybernetic.VSM.System4.Providers.Together,
 # OpenTelemetry Configuration
 config :opentelemetry,
   span_processor: :batch,
-  traces_exporter: :otlp
+  traces_exporter: :otlp,
+  resource: [
+    service: %{
+      name: "cybernetic",
+      version: "0.1.0"
+    }
+  ]
 
 config :opentelemetry_exporter,
   otlp_protocol: :grpc,
