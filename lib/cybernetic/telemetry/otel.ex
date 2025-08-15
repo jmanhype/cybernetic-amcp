@@ -35,8 +35,14 @@ defmodule Cybernetic.Telemetry.OTEL do
       "telemetry.sdk.version" => Application.spec(:opentelemetry, :vsn) |> to_string()
     }
     
-    # Set resource
-    :opentelemetry.set_resource(:otel_resource.create(resource))
+    # Set resource (use newer API if available)
+    case function_exported?(:opentelemetry, :set_resource, 1) do
+      true ->
+        :opentelemetry.set_resource(:otel_resource.create(resource))
+      false ->
+        # Fallback for older OpenTelemetry versions
+        :ok
+    end
     
     # Configure text map propagator for B3 and W3C
     :otel_propagator_text_map.set([
