@@ -6,7 +6,8 @@ defmodule Cybernetic.Telemetry.Prometheus do
   use GenServer
   require Logger
   
-  @metrics [
+  def metrics do
+    [
     # VSM System Metrics
     Telemetry.Metrics.counter("cybernetic.s1.message_processed.count",
       tags: [:type, :status],
