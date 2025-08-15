@@ -46,6 +46,7 @@ defmodule Cybernetic.MixProject do
       # Security and utilities
       {:bloomex, "~> 1.0"},  # Bloom filter for replay protection
       {:nanoid, "~> 2.0"},    # Nonce generation
+      {:elixir_uuid, "~> 1.2"},  # UUID generation
       
       # HTTP clients
       {:req, "~> 0.5.0"},        # For Claude API
