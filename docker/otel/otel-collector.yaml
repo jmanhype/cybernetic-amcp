@@ -16,6 +16,10 @@ processors:
         value: cybernetic
 
 exporters:
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
   prometheus:
     endpoint: "0.0.0.0:8888"
   logging:
