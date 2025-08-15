@@ -93,12 +93,15 @@ defmodule Cybernetic.VSM.System4.Service do
   @impl true
   def handle_call({:route_episode, episode_map}, _from, state) do
     # Convert map to Episode struct if needed
-    episode = case episode_map do
-      %Episode{} = e -> e
-      %{} -> struct(Episode, episode_map)
+    {episode, budget} = case episode_map do
+      %Episode{} = e -> {e, %{}}
+      %{} -> 
+        budget = Map.get(episode_map, :budget, %{})
+        episode = struct(Episode, Map.delete(episode_map, :budget))
+        {episode, budget}
     end
     
-    result = route_to_provider(episode, episode_map[:budget] || %{}, state)
+    result = route_to_provider(episode, budget, state)
     
     # Update stats
     new_state = update_stats(state, result)
