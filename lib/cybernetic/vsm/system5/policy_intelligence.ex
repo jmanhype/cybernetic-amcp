@@ -8,9 +8,9 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   
   use GenServer
   require Logger
+  require OpenTelemetry.Tracer
   alias Cybernetic.VSM.System4.Providers.Anthropic
   alias Cybernetic.VSM.System5.Policy
-  alias Cybernetic.Telemetry.OTEL
   
   @telemetry [:cybernetic, :s5, :policy_intelligence]
   
