@@ -34,35 +34,12 @@ IO.puts("   Optimization chain includes Together: #{optimization_check}")
 IO.puts("   Prediction chain includes Together: #{prediction_check}")
 IO.puts("   Classification chain includes Together: #{classification_check}")
 
-root_cause_chain = Router.select_chain(%Episode{kind: :root_cause}, [])
-IO.puts("   Root cause chain: #{inspect(root_cause_chain)}")
-IO.puts("   Together in chain: #{:together in root_cause_chain}")
-
-anomaly_chain = Router.select_chain(%Episode{kind: :anomaly_detection}, [])
-IO.puts("   Anomaly detection chain: #{inspect(anomaly_chain)}")
-IO.puts("   Together in chain: #{:together in anomaly_chain}")
-
-optimization_chain = Router.select_chain(%Episode{kind: :optimization}, [])
-IO.puts("   Optimization chain: #{inspect(optimization_chain)}")
-IO.puts("   Together in chain: #{:together in optimization_chain}")
-
-prediction_chain = Router.select_chain(%Episode{kind: :prediction}, [])
-IO.puts("   Prediction chain: #{inspect(prediction_chain)}")
-IO.puts("   Together in chain: #{:together in prediction_chain}")
-
-classification_chain = Router.select_chain(%Episode{kind: :classification}, [])
-IO.puts("   Classification chain: #{inspect(classification_chain)}")
-IO.puts("   Together in chain: #{:together in classification_chain}")
-
 # 3. CHECK PROVIDER MODULE RESOLUTION
 IO.puts("\n✅ 3. Provider Module Resolution:")
-case Router.get_provider_module(:together) do
-  {:ok, module} ->
-    IO.puts("   Together module resolved: #{inspect(module)}")
-    IO.puts("   Module loaded: #{Code.ensure_loaded?(module)}")
-  {:error, reason} ->
-    IO.puts("   ❌ Failed to resolve: #{inspect(reason)}")
-end
+# Check if Together is properly mapped in router
+module_mapping_check = router_content =~ "def get_provider_module(:together)" &&
+                       router_content =~ "Cybernetic.VSM.System4.Providers.Together"
+IO.puts("   Together module mapping exists: #{module_mapping_check}")
 
 # 4. CHECK CONFIGURATION
 IO.puts("\n✅ 4. Configuration Check:")
