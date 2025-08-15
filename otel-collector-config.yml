@@ -112,10 +112,6 @@ extensions:
   pprof:
     endpoint: 0.0.0.0:1777
 
-  # Memory ballast for GC optimization
-  memory_ballast:
-    size_mib: 64
-
 service:
   extensions: [health_check, pprof, memory_ballast]
   pipelines:
