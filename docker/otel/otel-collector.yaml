@@ -8,29 +8,33 @@ receivers:
 
 processors:
   batch:
-    timeout: 10s
+    timeout: 1s
+    send_batch_size: 1024
   resource:
     attributes:
       - action: insert
         key: service.name
         value: cybernetic
+      - action: insert
+        key: service.version
+        value: "0.1.0"
 
 exporters:
-  otlp/jaeger:
-    endpoint: jaeger:4317
+  jaeger:
+    endpoint: jaeger:14250
     tls:
       insecure: true
   prometheus:
     endpoint: "0.0.0.0:8889"
   logging:
-    loglevel: info
+    loglevel: debug
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [otlp/jaeger, logging]
+      exporters: [jaeger, logging]
     metrics:
       receivers: [otlp]
       processors: [batch, resource]
