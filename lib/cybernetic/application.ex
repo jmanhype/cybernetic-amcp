@@ -83,4 +83,13 @@ defmodule Cybernetic.Application do
     
     {:ok, sup}
   end
+  
+  # Add health monitoring children conditionally
+  defp health_children do
+    if Application.get_env(:cybernetic, :enable_health_monitoring, true) do
+      [Cybernetic.Health.Supervisor]
+    else
+      []
+    end
+  end
 end
