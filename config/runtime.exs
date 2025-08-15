@@ -101,6 +101,24 @@ config :cybernetic, Cybernetic.VSM.System4.Providers.Together,
   max_tokens: 4096,
   temperature: 0.1
 
+# OpenTelemetry Configuration
+config :opentelemetry,
+  span_processor: :batch,
+  traces_exporter: :otlp
+
+config :opentelemetry_exporter,
+  otlp_protocol: :grpc,
+  otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") || "http://localhost:4317",
+  otlp_headers: System.get_env("OTEL_EXPORTER_OTLP_HEADERS") || "",
+  otlp_compression: :gzip
+
+# Prometheus metrics exporter
+config :telemetry_metrics_prometheus_core,
+  port: String.to_integer(System.get_env("METRICS_PORT") || "9568"),
+  path: "/metrics",
+  format: :text,
+  registry: :default
+
 # Application configuration
 config :cybernetic,
   environment: config_env(),
