@@ -4,6 +4,7 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   @moduledoc """
   S2: Attention/coordination engine (Layer 6B analog).
   """
+  alias Cybernetic.Telemetry.OTEL
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
