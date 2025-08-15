@@ -48,7 +48,9 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
   end
 
   @impl Cybernetic.VSM.System4.LLMProvider
-  def generate(prompt, opts \\ []) when is_binary(prompt) do
+  def generate(prompt_or_messages, opts \\ [])
+  
+  def generate(prompt, opts) when is_binary(prompt) do
     start_time = System.monotonic_time(:millisecond)
     
     payload = %{
