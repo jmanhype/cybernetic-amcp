@@ -32,15 +32,13 @@ defmodule Cybernetic.Application do
       # Central Aggregator (must be before S4 Bridge)
       {Cybernetic.Core.Aggregator.CentralAggregator, []},
       
-      # S4 Intelligence Layer - TODO: implement these modules
-      # {Cybernetic.Intelligence.S4.Bridge, [
-      #   provider: Cybernetic.Intelligence.S4.Providers.Claude,
-      #   provider_opts: [api_key: System.get_env("ANTHROPIC_API_KEY")]
-      # ]},
-      # {Cybernetic.Intelligence.S4.SOPEngine, [exchange: "cyb.events"]},
+      # S5 SOP Engine (must be before S4 Bridge so it can receive messages)
+      {Cybernetic.VSM.System5.SOPEngine, []},
       
-      # Edge WASM Validator (optional, comment out if no WASM runtime)
-      # {Cybernetic.Edge.WASM.ValidatorHost, [wasm_path: System.get_env("CYB_WASM_VALIDATOR")]},
+      # S4 Intelligence Layer
+      {Cybernetic.VSM.System4.LLMBridge, provider: Cybernetic.VSM.System4.Providers.Null},
+      
+      # Edge WASM Validator is stateless - use Cybernetic.Edge.WASM.Validator.load/2 where needed
       
       # VSM Supervisor (includes S1-S5)
       Cybernetic.VSM.Supervisor,
