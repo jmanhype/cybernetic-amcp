@@ -168,9 +168,9 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
             {:error, reason} -> {:error, {:json_decode_error, reason}}
           end
           
-        %{status_code: 401} ->
-          # For demo purposes, return a mock response when auth fails
-          {:ok, create_mock_response()}
+        %{status_code: 401, body: body} ->
+          Logger.error("Anthropic API authentication error: #{body}")
+          {:error, {:authentication_error, body}}
           
         %{status_code: status, body: body} ->
           Logger.error("Anthropic API error: #{status} - #{body}")
