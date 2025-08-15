@@ -130,9 +130,9 @@ defmodule Cybernetic.VSM.System4.Memory do
     key = {episode_id, timestamp}
     :ets.insert(@table_name, {key, entry})
     
-    # Update context tracking
+    # Update context tracking - append new entry to maintain chronological order
     context = Map.get(state.contexts, episode_id, [])
-    new_context = manage_context_window([entry | context])
+    new_context = manage_context_window(context ++ [entry])
     new_contexts = Map.put(state.contexts, episode_id, new_context)
     
     # Broadcast to CRDT for distributed sync
