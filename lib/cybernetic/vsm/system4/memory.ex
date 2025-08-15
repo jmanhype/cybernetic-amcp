@@ -243,10 +243,10 @@ defmodule Cybernetic.VSM.System4.Memory do
   # Private functions
   
   defp manage_context_window(context) do
-    # Context is newest-first, so reverse before taking
+    # Context is already in chronological order
+    # Take the most recent messages (from the end)
     context
-    |> Enum.reverse()
-    |> Enum.take(@max_episodes)
+    |> Enum.take(-@max_episodes)
     |> trim_to_token_limit(@max_context_size)
   end
   
