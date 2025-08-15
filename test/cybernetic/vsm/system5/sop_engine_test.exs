@@ -2,7 +2,7 @@ defmodule Cybernetic.VSM.System5.SOPEngineTest do
   use ExUnit.Case
 
   test "create, update, execute" do
-    {:ok, _} = start_supervised({Cybernetic.VSM.System5.SOPEngine, []})
+    # SOPEngine already started by application
     {:ok, %{id: id, version: 1}} =
       Cybernetic.VSM.System5.SOPEngine.create(%{"name" => "Block IP", "steps" => [%{"action" => "tag", "key" => "blocked", "value" => true}]})
     {:ok, %{id: ^id, version: 2}} =
