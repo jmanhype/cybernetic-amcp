@@ -41,7 +41,7 @@ defmodule Cybernetic.VSM.System5.SOPEngine do
 
   @impl true
   def handle_call({:create, attrs}, _from, state) do
-    sop_id = attrs["id"] || Ecto.UUID.generate()
+    sop_id = attrs["id"] || generate_id()
     version = 1
     now = System.system_time(:millisecond)
     :ets.insert(:sop_store, {sop_id, version, Map.drop(attrs, ["steps"])})
