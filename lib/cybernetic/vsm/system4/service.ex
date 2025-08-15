@@ -10,7 +10,7 @@ defmodule Cybernetic.VSM.System4.Service do
   require Logger
   require OpenTelemetry.Tracer
   
-  alias Cybernetic.VSM.System4.{Episode, Router}
+  alias Cybernetic.VSM.System4.{Episode, Router, Memory}
   
   @telemetry [:cybernetic, :s4, :service]
 
