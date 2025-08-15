@@ -162,7 +162,7 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
     end
   end
 
-  defp check_budget_limits(budget, resource_type, priority) do
+  defp check_budget_limits(budget, _resource_type, priority) do
     current_time = current_time()
     window_start = current_time - budget.window_ms
     
