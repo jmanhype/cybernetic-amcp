@@ -211,7 +211,31 @@ defmodule Cybernetic.VSM.System4.Service do
   defp do_analyze(episode, opts, state) do
     case check_s3_budget(:s4_llm, episode) do
       :ok ->
-        Router.route(episode, opts)
+        # Get conversation context if memory is enabled
+        opts_with_context = if Keyword.get(opts, :use_memory, true) do
+          case Memory.get_context(episode.id) do
+            {:ok, context} ->
+              Keyword.put(opts, :context, context)
+            _ ->
+              opts
+          end
+        else
+          opts
+        end
+        
+        # Route with context
+        result = Router.route(episode, opts_with_context)
+        
+        # Store interaction in memory
+        case result do
+          {:ok, response, metadata} ->
+            Memory.store(episode.id, :assistant, response.text, metadata)
+            Memory.store(episode.id, :user, inspect(episode.data), %{kind: episode.kind})
+            {:ok, response, metadata}
+            
+          error ->
+            error
+        end
         
       {:error, :budget_exhausted} ->
         emit_budget_deny_telemetry(episode)
