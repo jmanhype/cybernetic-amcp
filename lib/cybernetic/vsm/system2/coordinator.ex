@@ -48,11 +48,19 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   end
   
   def handle_call({:reserve_slot, topic}, _from, state) do
-    start_time = System.monotonic_time(:nanosecond)
-    max_slots = calculate_max_slots(topic, state)
-    current = Map.get(state.resource_slots, topic, 0)
-    
-    if current < max_slots do
+    # Start OTEL span for reserve operation
+    OTEL.with_span "s2.reserve_slot", %{"coordinator.topic" => topic} do
+      start_time = System.monotonic_time(:nanosecond)
+      max_slots = calculate_max_slots(topic, state)
+      current = Map.get(state.resource_slots, topic, 0)
+      
+      OTEL.set_attributes(%{
+        "coordinator.max_slots" => max_slots,
+        "coordinator.current_slots" => current,
+        "coordinator.available" => max_slots - current
+      })
+      
+      if current < max_slots do
       new_state = state
         |> put_in([:resource_slots, topic], current + 1)
         |> put_in([:wait_since, topic], System.monotonic_time(:millisecond))
