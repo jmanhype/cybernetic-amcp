@@ -164,7 +164,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     end
   end
   
-  defp build_analysis_prompt(provider, episode, context_opts) do
+  defp build_analysis_prompt(episode, opts) do
     system_prompt = """
     You are the S4 Intelligence system in a Viable System Model (VSM) framework.
     Your role is to analyze operational episodes and provide strategic recommendations.
@@ -205,24 +205,29 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     user_prompt = """
     Episode to analyze:
     
-    ID: #{episode["id"]}
-    Type: #{episode["type"]}
-    Severity: #{episode["severity"]}
-    Timestamp: #{episode["timestamp"]}
-    
-    Details:
-    #{Jason.encode!(episode, pretty: true)}
+    ID: #{episode.id}
+    Kind: #{episode.kind}
+    Title: #{episode.title}
+    Priority: #{episode.priority}
+    Source: #{episode.source_system}
+    Created: #{episode.created_at}
     
     Context:
-    #{if context_opts != [], do: Jason.encode!(context_opts, pretty: true), else: "No additional context"}
+    #{Jason.encode!(episode.context, pretty: true)}
+    
+    Data:
+    #{format_episode_data(episode.data)}
+    
+    Metadata:
+    #{Jason.encode!(episode.metadata, pretty: true)}
     
     Please analyze this episode and provide structured recommendations.
     """
     
     %{
-      "model" => provider.model,
-      "max_tokens" => provider.max_tokens,
-      "temperature" => provider.temperature,
+      "model" => get_model(opts),
+      "max_tokens" => get_max_tokens(opts),
+      "temperature" => get_temperature(opts),
       "system" => system_prompt,
       "messages" => [
         %{
@@ -232,6 +237,38 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
       ]
     }
   end
+
+  defp build_generate_payload(messages, opts) do
+    %{
+      "model" => get_model(opts),
+      "max_tokens" => get_max_tokens(opts),
+      "temperature" => get_temperature(opts),
+      "messages" => messages
+    }
+  end
+
+  defp get_model(opts), do: Keyword.get(opts, :model, @default_model)
+  defp get_max_tokens(opts), do: Keyword.get(opts, :max_tokens, @default_max_tokens)
+  defp get_temperature(opts), do: Keyword.get(opts, :temperature, @default_temperature)
+  defp get_api_key, do: System.get_env("ANTHROPIC_API_KEY")
+  defp get_base_url, do: "https://api.anthropic.com"
+
+  defp format_episode_data(data) when is_binary(data), do: data
+  defp format_episode_data(data), do: Jason.encode!(data, pretty: true)
+
+  defp add_usage_metrics({:ok, result}, latency) do
+    case result do
+      %{tokens: %{input: input, output: output}} ->
+        result = Map.update!(result, :usage, fn usage ->
+          Map.merge(usage, %{latency_ms: latency})
+        end)
+        {:ok, result}
+      _ ->
+        {:ok, result}
+    end
+  end
+
+  defp add_usage_metrics(error, _latency), do: error
   
   defp make_anthropic_request(provider, payload) do
     url = "#{provider.base_url}/v1/messages"
