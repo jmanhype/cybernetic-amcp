@@ -157,13 +157,8 @@ defmodule Cybernetic.VSM.System4.Service do
     task_type = detect_task_type(episode)
     provider_order = get_provider_order(task_type, state)
     
-    # Check rate limits
-    case RateLimiter.check(episode.id, :s4_llm) do
-      :ok ->
-        attempt_providers(episode, provider_order, budget, state)
-      {:error, :rate_limited} ->
-        {:error, "Rate limited for episode #{episode.id}"}
-    end
+    # Skip rate limiting if service not available
+    attempt_providers(episode, provider_order, budget, state)
   end
   
   defp detect_task_type(%Episode{kind: kind}) when not is_nil(kind) do
