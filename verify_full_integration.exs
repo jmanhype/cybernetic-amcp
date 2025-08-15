@@ -106,7 +106,13 @@ defmodule IntegrationVerifier do
   defp test_redis_state do
     IO.puts("\n2️⃣ Testing Redis State Persistence...")
     try do
-      {:ok, redis} = Redix.start_link(host: "localhost", port: 6379, password: "changeme")
+      # Try with password first, then without
+      {:ok, redis} = case Redix.start_link(host: "localhost", port: 6379, password: "changeme") do
+        {:ok, conn} -> {:ok, conn}
+        {:error, _} -> 
+          # Try without password
+          Redix.start_link(host: "localhost", port: 6379)
+      end
       
       # Test VSM state storage
       episode_id = "integration-#{System.unique_integer()}"
