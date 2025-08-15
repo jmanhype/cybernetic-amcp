@@ -58,7 +58,8 @@ defmodule Cybernetic.Telemetry.Prometheus do
     Telemetry.Metrics.distribution("cybernetic.provider.response.latency",
       tags: [:provider],
       unit: {:native, :millisecond},
-      description: "Provider response latency"
+      description: "Provider response latency",
+      reporter_options: [buckets: [100, 500, 1000, 2000, 5000, 10000, 30000]]
     ),
     Telemetry.Metrics.counter("cybernetic.provider.error.count",
       tags: [:provider, :error_type],
