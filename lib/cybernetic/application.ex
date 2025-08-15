@@ -45,6 +45,9 @@ defmodule Cybernetic.Application do
       # S4 Intelligence Layer
       {Cybernetic.VSM.System4.LLMBridge, provider: Cybernetic.VSM.System4.Providers.Null},
       
+      # S4 Multi-Provider Intelligence Service
+      {Cybernetic.VSM.System4.Service, []},
+      
       # Edge WASM Validator is stateless - use Cybernetic.Edge.WASM.Validator.load/2 where needed
       
       # VSM Supervisor (includes S1-S5)
