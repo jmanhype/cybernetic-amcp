@@ -93,8 +93,8 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   end
   
   def handle_call({:recommend_governance, proposed_policy, current_policies}, _from, state) do
-    result = OTEL.with_span "s5.policy_intelligence.recommend_governance", %{
-      proposed_policy_type: proposed_policy["type"]
+    result = OpenTelemetry.Tracer.with_span "s5.policy_intelligence.recommend_governance", %{
+      attributes: %{proposed_policy_type: proposed_policy["type"]}
     } do
       do_recommend_governance(state, proposed_policy, current_policies)
     end
