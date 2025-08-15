@@ -12,7 +12,7 @@ defmodule Cybernetic.Security.AuthManager do
   
   use GenServer
   require Logger
-  alias Cybernetic.Security.{AuditLogger, Crypto}
+  alias Cybernetic.Security.Crypto
   alias Cybernetic.Core.CRDT.ContextGraph
   
   @type role :: :admin | :operator | :viewer | :agent | :system
@@ -162,12 +162,8 @@ defmodule Cybernetic.Security.AuthManager do
             :ets.insert(:auth_sessions, {jwt, session})
             :ets.insert(:refresh_tokens, {refresh, user.id})
             
-            # Audit log
-            AuditLogger.log(:auth_success, %{
-              user: username,
-              method: :password,
-              ip: get_caller_ip()
-            })
+            # Audit log (disabled for now)
+            Logger.info("User authenticated: #{username}")
             
             # Emit telemetry
             :telemetry.execute(
@@ -182,17 +178,14 @@ defmodule Cybernetic.Security.AuthManager do
             # Track failed attempt
             state = track_failed_attempt(username, state)
             
-            AuditLogger.log(:auth_failure, %{
-              user: username,
-              reason: reason,
-              ip: get_caller_ip()
-            })
+            # Audit log (disabled for now)
+            Logger.warning("Authentication failed for #{username}: #{reason}")
             
             {:reply, {:error, :invalid_credentials}, state}
         end
       
       {:error, :rate_limited} ->
-        AuditLogger.log(:auth_rate_limited, %{user: username})
+        Logger.warning("Rate limited: #{username}")
         {:reply, {:error, :too_many_attempts}, state}
     end
   end
@@ -210,19 +203,16 @@ defmodule Cybernetic.Security.AuthManager do
             metadata: %{auth_method: :api_key}
           }
           
-          AuditLogger.log(:api_key_auth, %{
-            key_name: key_data.name,
-            success: true
-          })
+          Logger.info("API key authenticated: #{key_data.name}")
           
           {:reply, {:ok, auth_context}, state}
         else
-          AuditLogger.log(:api_key_expired, %{key_name: key_data.name})
+          Logger.warning("API key expired: #{key_data.name}")
           {:reply, {:error, :expired_key}, state}
         end
       
       [] ->
-        AuditLogger.log(:api_key_invalid, %{})
+        Logger.warning("Invalid API key attempt")
         {:reply, {:error, :invalid_key}, state}
     end
   end
@@ -293,7 +283,7 @@ defmodule Cybernetic.Security.AuthManager do
         
         :ets.insert(:auth_sessions, {new_jwt, session})
         
-        AuditLogger.log(:token_refreshed, %{user_id: user_id})
+        Logger.info("Token refreshed for user: #{user_id}")
         
         {:reply, {:ok, %{token: new_jwt, refresh_token: new_refresh, expires_in: @jwt_ttl_seconds}}, state}
       
@@ -315,21 +305,11 @@ defmodule Cybernetic.Security.AuthManager do
       end
     
     if authorized? do
-      AuditLogger.log(:authorization, %{
-        user_id: auth_context.user_id,
-        resource: resource,
-        action: action,
-        result: :granted
-      })
+      Logger.debug("Authorization granted: #{auth_context.user_id} -> #{resource}:#{action}")
       
       {:reply, :ok, state}
     else
-      AuditLogger.log(:authorization, %{
-        user_id: auth_context.user_id,
-        resource: resource,
-        action: action,
-        result: :denied
-      })
+      Logger.warning("Authorization denied: #{auth_context.user_id} -> #{resource}:#{action}")
       
       {:reply, {:error, :unauthorized}, state}
     end
@@ -357,11 +337,7 @@ defmodule Cybernetic.Security.AuthManager do
     
     :ets.insert(:api_keys, {key_hash, key_data})
     
-    AuditLogger.log(:api_key_created, %{
-      name: name,
-      roles: roles,
-      expires_at: expires_at
-    })
+    Logger.info("API key created: #{name} with roles #{inspect(roles)}")
     
     {:reply, {:ok, key}, state}
   end
@@ -374,7 +350,7 @@ defmodule Cybernetic.Security.AuthManager do
         :ets.delete(:auth_sessions, token_or_key)
         :ets.delete(:refresh_tokens, session.refresh_token)
         
-        AuditLogger.log(:token_revoked, %{user_id: session.user_id})
+        Logger.info("Token revoked for user: #{session.user_id}")
         {:reply, :ok, state}
       
       [] ->
@@ -384,7 +360,7 @@ defmodule Cybernetic.Security.AuthManager do
           [{^key_hash, key_data}] ->
             :ets.delete(:api_keys, key_hash)
             
-            AuditLogger.log(:api_key_revoked, %{name: key_data.name})
+            Logger.info("API key revoked: #{key_data.name}")
             {:reply, :ok, state}
           
           [] ->
