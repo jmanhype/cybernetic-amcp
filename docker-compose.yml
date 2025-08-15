@@ -121,7 +121,7 @@ services:
 
   # OpenTelemetry Collector
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.91.0
+    image: otel/opentelemetry-collector-contrib:0.109.0
     container_name: cyb-otel
     command: ["--config=/etc/otel-collector.yaml"]
     ports:
