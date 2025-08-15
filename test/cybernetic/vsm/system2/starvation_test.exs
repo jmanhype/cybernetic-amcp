@@ -118,7 +118,7 @@ defmodule Cybernetic.VSM.System2.StarvationTest do
             :ok ->
               # Got a slot, release it immediately
               Coordinator.release_slot(lane)
-              Map.update!(acc, String.to_atom(String.replace(lane, "#{timestamp}", "")), &(&1 + 1))
+              Map.update!(acc, String.to_atom(String.replace(lane, "_#{timestamp}", "")), &(&1 + 1))
             :backpressure ->
               acc
           end
