@@ -31,7 +31,7 @@ defmodule Cybernetic.VSM.System4.Providers.Together do
   def analyze_episode(episode, opts \\ []) do
     start_time = System.monotonic_time(:millisecond)
     
-    OpenTelemetry.Tracer.with_span "together.analyze_episode", %{
+    Tracer.with_span "together.analyze_episode", %{
       attributes: %{
         model: get_model(opts),
         episode_id: episode.id,
