@@ -88,12 +88,7 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   
   @impl true
   def handle_call({:analyze_evolution, policy_id, context}, _from, state) do
-    result = OTEL.with_span "s5.policy_intelligence.analyze_evolution", %{
-      policy_id: policy_id
-    } do
-      do_analyze_evolution(state, policy_id, context)
-    end
-    
+    result = do_analyze_evolution(state, policy_id, context)
     {:reply, result, state}
   end
   
