@@ -356,16 +356,17 @@ defmodule Cybernetic.Security.AuditLogger do
     
     result = 
       entries
-      |> Enum.reduce_while({:ok, nil}, fn entry, {:ok, prev_hash} ->
-        # Verify signature
-        if not verify_signature(entry, state.signing_key) do
-          {:halt, {:error, {:invalid_signature, entry.id}}}
-        # Verify chain (except for genesis)
-        elsif entry.id != "genesis" && entry.previous_hash != prev_hash do
-          {:halt, {:error, {:broken_chain, entry.id}}}
-        else
-          {:cont, {:ok, entry.signature}}
-        end
+      |> Enum.reduce_while({:ok, nil}, fn 
+        entry, {:ok, prev_hash} ->
+          # Verify signature
+          if not verify_signature(entry, state.signing_key) do
+            {:halt, {:error, {:invalid_signature, entry.id}}}
+          # Verify chain (except for genesis)
+          elsif entry.id != "genesis" && entry.previous_hash != prev_hash do
+            {:halt, {:error, {:broken_chain, entry.id}}}
+          else
+            {:cont, {:ok, entry.signature}}
+          end
       end)
     
     case result do
