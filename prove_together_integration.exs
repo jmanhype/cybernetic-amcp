@@ -97,12 +97,14 @@ end)
 # 8. INTEGRATION POINTS SUMMARY
 IO.puts("\n✅ 8. Integration Points Summary:")
 integration_points = [
-  {"Provider Module", module_exists},
-  {"Router Chain Selection", :together in code_gen_chain},
-  {"Module Resolution", match?({:ok, _}, Router.get_provider_module(:together))},
-  {"Configuration Present", length(config) > 0},
+  {"Provider File Exists", File.exists?(together_file)},
+  {"Router Integration", code_gen_check && root_cause_check && anomaly_check},
+  {"Module Resolution", module_mapping_check},
+  {"Configuration Present", config_check},
   {"Circuit Breaker Setup", together_in_cb},
-  {"Routing Tests Pass", all_correct}
+  {"Provider Stats Setup", together_in_stats},
+  {"LLMProvider Implementation", has_behavior && has_capabilities && has_generate},
+  {"Routing Tests Pass", all_routing_correct}
 ]
 
 all_integrated = Enum.all?(integration_points, fn {_, status} -> status end)
