@@ -64,7 +64,15 @@ defmodule Cybernetic.MixProject do
       {:phoenix, "~> 1.7"},
       {:phoenix_live_view, "~> 0.20"},
       {:phoenix_live_dashboard, "~> 0.8"},
-      {:plug_cowboy, "~> 2.5"}
+      {:plug_cowboy, "~> 2.5"},
+      
+      # OpenTelemetry
+      {:opentelemetry, "~> 1.4"},
+      {:opentelemetry_api, "~> 1.3"},
+      {:opentelemetry_exporter, "~> 1.7"},
+      {:opentelemetry_telemetry, "~> 1.1"},
+      {:opentelemetry_ecto, "~> 1.2"},
+      {:opentelemetry_phoenix, "~> 1.2"}
     ]
   end
 
