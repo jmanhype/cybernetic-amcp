@@ -87,7 +87,7 @@ defmodule Cybernetic.VSM.System5.SOPEngine do
     with [{^sop_id, v, _}] <- :ets.lookup(:sop_store, sop_id),
          sop <- load_version!(sop_id, v),
          {:ok, result} <- run_steps(sop["steps"] || [], input) do
-      exec_id = Ecto.UUID.generate()
+      exec_id = generate_id()
       :ets.insert(:sop_exec_log, {exec_id, sop_id, v, input, result, System.system_time(:millisecond)})
       :telemetry.execute(@telemetry ++ [:execute], %{count: 1}, %{id: sop_id, version: v})
       {:reply, {:ok, %{exec_id: exec_id, result: result}}, state}
