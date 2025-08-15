@@ -435,6 +435,25 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     end
   end
   
+  # ========== PRIVATE FUNCTIONS - INITIALIZATION ==========
+  
+  defp init_health_monitors do
+    %{
+      system1: %{status: :healthy, last_checked: DateTime.utc_now()},
+      system2: %{status: :healthy, last_checked: DateTime.utc_now()},
+      resources: %{status: :healthy, last_checked: DateTime.utc_now()}
+    }
+  end
+  
+  defp init_compliance_checks do
+    %{
+      checked_at: DateTime.utc_now(),
+      policies_checked: 0,
+      violations: [],
+      compliance_rate: 1.0
+    }
+  end
+  
   # ========== PRIVATE FUNCTIONS - CIRCUIT BREAKERS ==========
   
   defp init_circuit_breakers do
