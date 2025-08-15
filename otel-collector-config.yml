@@ -113,7 +113,7 @@ extensions:
     endpoint: 0.0.0.0:1777
 
 service:
-  extensions: [health_check, pprof, memory_ballast]
+  extensions: [health_check, pprof]
   pipelines:
     # Traces pipeline: Cybernetic → Collector → Jaeger
     traces:
