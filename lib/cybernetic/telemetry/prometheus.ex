@@ -37,7 +37,8 @@ defmodule Cybernetic.Telemetry.Prometheus do
     Telemetry.Metrics.distribution("cybernetic.s4.intelligence_query.duration",
       tags: [:provider],
       unit: {:native, :millisecond},
-      description: "S4 query duration"
+      description: "S4 query duration",
+      reporter_options: [buckets: [100, 500, 1000, 2000, 5000, 10000, 30000]]
     ),
     
     Telemetry.Metrics.counter("cybernetic.s5.policy_update.count",
