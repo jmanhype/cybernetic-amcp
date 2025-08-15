@@ -9,7 +9,7 @@ defmodule Cybernetic.VSM.System4.Providers.Together do
   @behaviour Cybernetic.VSM.System4.LLMProvider
   
   require Logger
-  require OpenTelemetry.Tracer
+  require OpenTelemetry.Tracer, as: Tracer
   
   @default_model "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
   @default_max_tokens 4096
