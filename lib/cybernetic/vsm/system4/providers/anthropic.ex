@@ -270,18 +270,18 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
 
   defp add_usage_metrics(error, _latency), do: error
   
-  defp make_anthropic_request(provider, payload) do
-    url = "#{provider.base_url}/v1/messages"
+  defp make_anthropic_request(payload) do
+    url = "#{get_base_url()}/v1/messages"
     headers = [
       {"Content-Type", "application/json"},
-      {"x-api-key", provider.api_key},
+      {"x-api-key", get_api_key()},
       {"anthropic-version", "2023-06-01"},
       {"anthropic-beta", "max-tokens-3-5-sonnet-2024-07-15"}
     ]
     
     options = [
-      timeout: provider.timeout,
-      recv_timeout: provider.timeout,
+      timeout: 30_000,
+      recv_timeout: 30_000,
       hackney: [pool: :anthropic_pool]
     ]
     
