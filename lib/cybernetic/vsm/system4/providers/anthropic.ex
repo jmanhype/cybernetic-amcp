@@ -102,7 +102,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     end
   end
   
-  defp build_analysis_prompt(episode, context_opts) do
+  defp build_analysis_prompt(provider, episode, context_opts) do
     system_prompt = """
     You are the S4 Intelligence system in a Viable System Model (VSM) framework.
     Your role is to analyze operational episodes and provide strategic recommendations.
