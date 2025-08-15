@@ -39,6 +39,9 @@ defmodule Cybernetic.Application do
       # S5 SOP Engine (must be before S4 Bridge so it can receive messages)
       {Cybernetic.VSM.System5.SOPEngine, []},
       
+      # S5 Policy Intelligence Engine  
+      {Cybernetic.VSM.System5.PolicyIntelligence, []},
+      
       # S4 Intelligence Layer
       {Cybernetic.VSM.System4.LLMBridge, provider: Cybernetic.VSM.System4.Providers.Null},
       
