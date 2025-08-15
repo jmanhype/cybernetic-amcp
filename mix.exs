@@ -76,7 +76,10 @@ defmodule Cybernetic.MixProject do
       {:opentelemetry_exporter, "~> 1.7"},
       {:opentelemetry_telemetry, "~> 1.1"},
       {:opentelemetry_ecto, "~> 1.2"},
-      {:opentelemetry_phoenix, "~> 1.2"}
+      {:opentelemetry_phoenix, "~> 1.2"},
+      
+      # Prometheus metrics exporter
+      {:telemetry_metrics_prometheus_core, "~> 1.1"}
     ]
   end
 
