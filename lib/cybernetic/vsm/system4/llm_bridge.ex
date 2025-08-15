@@ -22,6 +22,7 @@ defmodule Cybernetic.VSM.System4.LLMBridge do
   end
 
   # Hook for your Aggregator to send episodes to S4
+  @impl true
   def handle_cast({:episode, ep}, state) do
     :telemetry.execute(@telemetry ++ [:request], %{count: 1}, %{episode: meta(ep)})
     case state.provider.analyze_episode(ep, []) do
