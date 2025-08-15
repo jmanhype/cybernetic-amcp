@@ -105,7 +105,9 @@ defmodule Cybernetic.VSM.System2.Coordinator do
         %{topic: topic}
       )
       
-      {:reply, :backpressure, new_state}
+        OTEL.add_event("backpressure", %{"topic" => topic, "reason" => "max_slots_reached"})
+        {:reply, :backpressure, new_state}
+      end
     end
   end
   
