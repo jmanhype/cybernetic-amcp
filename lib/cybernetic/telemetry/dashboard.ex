@@ -495,7 +495,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
     }
   end
   
-  defp generate_prometheus_config(state) do
+  defp generate_prometheus_config(_state) do
     %{
       global: %{
         scrape_interval: "15s",
