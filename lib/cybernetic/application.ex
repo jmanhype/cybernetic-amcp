@@ -92,4 +92,13 @@ defmodule Cybernetic.Application do
       []
     end
   end
+  
+  # Add telemetry children conditionally
+  defp telemetry_children do
+    if Application.get_env(:cybernetic, :enable_telemetry, true) do
+      [Cybernetic.Telemetry.Supervisor]
+    else
+      []
+    end
+  end
 end
