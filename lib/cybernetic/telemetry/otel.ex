@@ -1,0 +1,158 @@
+defmodule Cybernetic.Telemetry.OTEL do
+  @moduledoc """
+  OpenTelemetry configuration and helper functions for distributed tracing.
+  
+  Provides:
+  - Resource attributes (service.name, version, env)
+  - B3/W3C propagation
+  - Span helpers with context propagation
+  - AMQP header injection/extraction
+  """
+  
+  require OpenTelemetry.Tracer, as: Tracer
+  require OpenTelemetry.Span, as: Span
+  require Record
+  
+  # Import the span record definition
+  Record.defrecordp :span_ctx,
+    Record.extract(:span_ctx, from_lib: "opentelemetry_api/include/opentelemetry.hrl")
+  
+  @tracer_id :cybernetic
+  
+  @doc """
+  Initialize OpenTelemetry with resource attributes and exporters.
+  Called from application.ex
+  """
+  def setup do
+    # Resource attributes
+    resource = %{
+      "service.name" => "cybernetic",
+      "service.version" => Application.spec(:cybernetic, :vsn) |> to_string(),
+      "service.environment" => System.get_env("ENV", "development"),
+      "deployment.environment" => System.get_env("ENV", "development"),
+      "telemetry.sdk.language" => "elixir",
+      "telemetry.sdk.name" => "opentelemetry",
+      "telemetry.sdk.version" => Application.spec(:opentelemetry, :vsn) |> to_string()
+    }
+    
+    # Set resource
+    :opentelemetry.set_resource(:otel_resource.create(resource))
+    
+    # Configure text map propagator for B3 and W3C
+    :otel_propagator_text_map.set([
+      :otel_propagator_b3,
+      :otel_propagator_trace_context
+    ])
+    
+    :ok
+  end
+  
+  @doc """
+  Extract trace context from AMQP headers
+  """
+  def extract_context(headers) when is_list(headers) do
+    headers_map = headers
+    |> Enum.map(fn 
+      {k, _type, v} -> {to_string(k), to_string(v)}
+      {k, v} -> {to_string(k), to_string(v)}
+    end)
+    |> Map.new()
+    
+    :otel_propagator_text_map.extract(headers_map)
+  end
+  
+  @doc """
+  Inject trace context into AMQP headers
+  """
+  def inject_context(headers \\ []) do
+    ctx_map = %{}
+    updated_map = :otel_propagator_text_map.inject(ctx_map)
+    
+    # Convert back to AMQP header format
+    amqp_headers = Enum.map(updated_map, fn {k, v} ->
+      {String.to_atom(k), :longstr, to_string(v)}
+    end)
+    
+    headers ++ amqp_headers
+  end
+  
+  @doc """
+  Start a new span with attributes
+  """
+  def with_span(name, attributes \\ %{}, fun) do
+    Tracer.with_span name, %{attributes: attributes, kind: :internal} do
+      result = fun.()
+      
+      # Add result as span attribute
+      case result do
+        {:ok, _} -> Span.set_attribute(:result, "success")
+        {:error, reason} -> 
+          Span.set_attribute(:result, "error")
+          Span.set_attribute(:error_reason, inspect(reason))
+        _ -> Span.set_attribute(:result, "unknown")
+      end
+      
+      result
+    end
+  end
+  
+  @doc """
+  Add event to current span
+  """
+  def add_event(name, attributes \\ %{}) do
+    Span.add_event(name, attributes)
+  end
+  
+  @doc """
+  Set attributes on current span
+  """
+  def set_attributes(attributes) do
+    Enum.each(attributes, fn {k, v} ->
+      Span.set_attribute(k, v)
+    end)
+  end
+  
+  @doc """
+  Record an exception on the current span
+  """
+  def record_exception(exception, stacktrace \\ nil) do
+    attributes = %{
+      "exception.type" => exception.__struct__ |> to_string(),
+      "exception.message" => Exception.message(exception)
+    }
+    
+    attributes = if stacktrace do
+      Map.put(attributes, "exception.stacktrace", Exception.format_stacktrace(stacktrace))
+    else
+      attributes
+    end
+    
+    Span.record_exception(exception, stacktrace)
+    Span.set_status(:error, Exception.message(exception))
+  end
+  
+  @doc """
+  Get current trace and span IDs as hex strings
+  """
+  def current_ids do
+    ctx = Tracer.current_span_ctx()
+    
+    case ctx do
+      span_ctx(trace_id: trace_id, span_id: span_id) when trace_id != 0 and span_id != 0 ->
+        %{
+          trace_id: trace_id |> :otel_id_text.to_hex(),
+          span_id: span_id |> :otel_id_text.to_hex()
+        }
+      _ ->
+        %{trace_id: nil, span_id: nil}
+    end
+  end
+  
+  @doc """
+  Create a child span linked to current context
+  """
+  def child_span(name, attributes \\ %{}) do
+    parent_ctx = Tracer.current_span_ctx()
+    Tracer.start_span(name, %{attributes: attributes, parent: parent_ctx})
+  end
+end
