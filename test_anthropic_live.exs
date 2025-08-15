@@ -224,7 +224,7 @@ end
 defmodule LiveTest do
   def run do
     IO.puts("🧠 Testing Anthropic Provider for Cybernetic VSM Framework")
-    IO.puts("=" * 60)
+    IO.puts(String.duplicate("=", 60))
     
     # Test episode - S1 operational overload scenario
     episode = %{
