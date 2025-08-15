@@ -6,6 +6,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   
   use GenServer
   require Logger
+  alias Cybernetic.Telemetry.OTEL
   
   @bloom_size 100_000
   @bloom_error_rate 0.001
