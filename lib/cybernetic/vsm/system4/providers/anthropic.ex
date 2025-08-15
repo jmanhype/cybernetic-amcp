@@ -82,7 +82,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
       episode_type: episode["type"]
     })
     
-    prompt = build_analysis_prompt(episode, context_opts)
+    prompt = build_analysis_prompt(provider, episode, context_opts)
     
     case make_anthropic_request(provider, prompt) do
       {:ok, response} ->
