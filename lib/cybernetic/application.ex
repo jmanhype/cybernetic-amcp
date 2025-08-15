@@ -7,6 +7,10 @@ defmodule Cybernetic.Application do
   require Logger
 
   def start(_type, _args) do
+    # Initialize OpenTelemetry
+    Cybernetic.Telemetry.OTEL.setup()
+    Logger.info("OpenTelemetry initialized for service: cybernetic")
+    
     children = [
       {Cluster.Supervisor, [Application.get_env(:libcluster, :topologies, []), [name: Cybernetic.ClusterSupervisor]]},
       
