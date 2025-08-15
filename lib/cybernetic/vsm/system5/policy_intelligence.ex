@@ -103,8 +103,8 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   end
   
   def handle_call({:evolve_meta_policies, system_metrics, historical_data}, _from, state) do
-    result = OTEL.with_span "s5.policy_intelligence.evolve_meta_policies", %{
-      metrics_count: map_size(system_metrics)
+    result = OpenTelemetry.Tracer.with_span "s5.policy_intelligence.evolve_meta_policies", %{
+      attributes: %{metrics_count: map_size(system_metrics)}
     } do
       do_evolve_meta_policies(state, system_metrics, historical_data)
     end
