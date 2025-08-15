@@ -162,17 +162,17 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     with {:ok, json} <- Jason.encode(payload),
          {:ok, response} <- HTTPoison.post(url, json, headers, options) do
       case response do
-        %{status: 200, body: body} ->
+        %{status_code: 200, body: body} ->
           case Jason.decode(body) do
             {:ok, decoded} -> {:ok, decoded}
             {:error, reason} -> {:error, {:json_decode_error, reason}}
           end
           
-        %{status: 401} ->
+        %{status_code: 401} ->
           # For demo purposes, return a mock response when auth fails
           {:ok, create_mock_response()}
           
-        %{status: status, body: body} ->
+        %{status_code: status, body: body} ->
           Logger.error("Anthropic API error: #{status} - #{body}")
           {:error, {:http_error, status, body}}
       end
