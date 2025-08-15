@@ -73,7 +73,7 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
     end
   end
 
-  def generate(messages, opts \\ []) when is_list(messages) do
+  def generate(messages, opts) when is_list(messages) do
     # Convert messages to a single prompt for Ollama
     prompt = messages_to_prompt(messages)
     generate(prompt, opts)
