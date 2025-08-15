@@ -89,9 +89,24 @@ defmodule Cybernetic.Telemetry.OTEL do
   end
   
   @doc """
-  Start a new span with attributes
+  Start a new span with attributes - supports both function and do block syntax
   """
-  def with_span(name, attributes \\ %{}, fun) do
+  def with_span(name, attributes \\ %{}, fun_or_opts \\ [])
+  
+  # Handle do block syntax: with_span(name, attrs, do: ...)
+  def with_span(name, attributes, opts) when is_list(opts) and opts != [] do
+    case Keyword.get(opts, :do) do
+      nil -> 
+        # No do block, treat as empty function
+        with_span(name, attributes, fn -> :ok end)
+      block ->
+        # Execute the do block
+        with_span(name, attributes, fn -> block end)
+    end
+  end
+  
+  # Handle function syntax: with_span(name, attrs, fn -> ... end)
+  def with_span(name, attributes, fun) when is_function(fun) do
     Tracer.with_span name, %{attributes: attributes, kind: :internal} do
       result = fun.()
       
