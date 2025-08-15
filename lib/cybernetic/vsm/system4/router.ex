@@ -53,15 +53,15 @@ defmodule Cybernetic.VSM.System4.Router do
   end
 
   def select_chain(%Episode{kind: :code_gen}, _opts) do
-    [:openai, :anthropic]
+    [:openai, :together, :anthropic]  # Together has good code models
   end
 
   def select_chain(%Episode{kind: :root_cause}, _opts) do
-    [:anthropic, :openai]
+    [:anthropic, :together, :openai]  # Together for fast analysis
   end
 
   def select_chain(%Episode{kind: :anomaly_detection}, _opts) do
-    [:anthropic, :ollama]
+    [:together, :anthropic, :ollama]  # Together for rapid detection
   end
 
   def select_chain(%Episode{kind: :compliance_check}, _opts) do
@@ -69,15 +69,15 @@ defmodule Cybernetic.VSM.System4.Router do
   end
 
   def select_chain(%Episode{kind: :optimization}, _opts) do
-    [:openai, :anthropic, :ollama]
+    [:openai, :together, :anthropic]  # Together has optimization models
   end
 
   def select_chain(%Episode{kind: :prediction}, _opts) do
-    [:anthropic, :openai]
+    [:together, :anthropic, :openai]  # Together for fast predictions
   end
 
   def select_chain(%Episode{kind: :classification}, _opts) do
-    [:openai, :anthropic, :ollama]
+    [:together, :openai, :ollama]  # Together is good at classification
   end
 
   def select_chain(_episode, opts) do
@@ -196,6 +196,10 @@ defmodule Cybernetic.VSM.System4.Router do
     {:ok, Cybernetic.VSM.System4.Providers.Ollama}
   end
 
+  def get_provider_module(:together) do
+    {:ok, Cybernetic.VSM.System4.Providers.Together}
+  end
+
   def get_provider_module(provider) do
     {:error, {:unknown_provider, provider}}
   end
@@ -211,6 +215,7 @@ defmodule Cybernetic.VSM.System4.Router do
   defp provider_config_key(:anthropic), do: Cybernetic.VSM.System4.Providers.Anthropic
   defp provider_config_key(:openai), do: Cybernetic.VSM.System4.Providers.OpenAI
   defp provider_config_key(:ollama), do: Cybernetic.VSM.System4.Providers.Ollama
+  defp provider_config_key(:together), do: Cybernetic.VSM.System4.Providers.Together
 
   @doc """
   Check S3 rate limiter budget for provider.
