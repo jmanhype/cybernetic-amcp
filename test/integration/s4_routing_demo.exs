@@ -100,7 +100,6 @@ defmodule Cybernetic.Integration.S4RoutingDemo do
       id: UUID.uuid4() |> to_string(),
       kind: kind,
       title: title,
-      description: "Test episode for routing demonstration",
       priority: :medium,
       source_system: :s1,
       created_at: DateTime.utc_now(),
