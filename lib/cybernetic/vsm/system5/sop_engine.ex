@@ -100,16 +100,10 @@ defmodule Cybernetic.VSM.System5.SOPEngine do
   end
 
   defp load_version!(sop_id, v) do
-    [{^sop_id, ^v, sop, _}] = :ets.lookup(:sop_versions, {sop_id, v}) |> normalize_lookup()
-    sop
-  end
-
-  # ETS bag compatibility helper
-  defp normalize_lookup([]), do: []
-  defp normalize_lookup([{_, _, _, _} | _] = rows), do: rows
-  defp normalize_lookup([{k, v}] = _single) do
-    # handle lookup(:sop_versions, {id, v}) returning [{key, val}] on some ETS setups
-    :ets.match_object(:sop_versions, {elem(k, 0), elem(k, 1), :_, :_})
+    case :ets.match_object(:sop_versions, {sop_id, v, :_, :_}) do
+      [{^sop_id, ^v, sop, _}] -> sop
+      [] -> raise "Version not found: #{sop_id}@#{v}"
+    end
   end
 
   # naive, replace with proper action runners (AMQP, HTTP, function, etc.)
