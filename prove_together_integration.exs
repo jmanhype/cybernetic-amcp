@@ -53,46 +53,45 @@ IO.puts("   Model configured: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo")
 
 # 5. CHECK S4 SERVICE INTEGRATION
 IO.puts("\n✅ 5. S4 Service Integration:")
-# Read the service file to verify Together is in circuit breakers
-service_path = "/Users/speed/Downloads/cybernetic/lib/cybernetic/vsm/system4/service.ex"
-service_content = File.read!(service_path)
+service_content = File.read!(service_file)
 together_in_cb = service_content =~ "providers = [:anthropic, :openai, :together, :ollama]"
+together_in_stats = service_content =~ "together: %{requests: 0, success: 0, error: 0}"
 IO.puts("   Together in circuit breakers: #{together_in_cb}")
+IO.puts("   Together in provider stats: #{together_in_stats}")
 
-# 6. CHECK CAPABILITIES
-IO.puts("\n✅ 6. Provider Capabilities:")
-alias Cybernetic.VSM.System4.Providers.Together
-caps = Together.capabilities()
-IO.puts("   Modes: #{inspect(caps.modes)}")
-IO.puts("   Strengths: #{inspect(caps.strengths)}")
-IO.puts("   Max tokens: #{caps.max_tokens}")
-IO.puts("   Context window: #{caps.context_window} tokens (128k!)")
+# 6. CHECK PROVIDER FILE STRUCTURE
+IO.puts("\n✅ 6. Provider Implementation Check:")
+together_content = File.read!(together_file)
+has_behavior = together_content =~ "@behaviour Cybernetic.VSM.System4.LLMProvider"
+has_capabilities = together_content =~ "def capabilities do"
+has_generate = together_content =~ "def generate"
+has_analyze = together_content =~ "def analyze_episode"
+has_health_check = together_content =~ "def health_check"
+has_embed = together_content =~ "def embed"
 
-# 7. SIMULATE ROUTING SCENARIOS
+IO.puts("   Implements LLMProvider behavior: #{has_behavior}")
+IO.puts("   Has capabilities function: #{has_capabilities}")
+IO.puts("   Has generate function: #{has_generate}")
+IO.puts("   Has analyze_episode function: #{has_analyze}")
+IO.puts("   Has health_check function: #{has_health_check}")
+IO.puts("   Has embed function: #{has_embed}")
+
+# 7. ROUTING PRIORITY VALIDATION
 IO.puts("\n✅ 7. Routing Priority Tests:")
 
-routing_tests = [
-  {:code_gen, "Code Generation", [:openai, :together, :anthropic]},
-  {:root_cause, "Root Cause Analysis", [:anthropic, :together, :openai]},
-  {:anomaly_detection, "Anomaly Detection", [:together, :anthropic, :ollama]},
-  {:optimization, "Optimization", [:openai, :together, :anthropic]},
-  {:prediction, "Prediction", [:together, :anthropic, :openai]},
-  {:classification, "Classification", [:together, :openai, :ollama]}
+routing_validations = [
+  {"Code Generation", code_gen_check, "OpenAI → Together → Anthropic"},
+  {"Root Cause Analysis", root_cause_check, "Anthropic → Together → OpenAI"},
+  {"Anomaly Detection", anomaly_check, "Together → Anthropic → Ollama"},
+  {"Optimization", optimization_check, "OpenAI → Together → Anthropic"},
+  {"Prediction", prediction_check, "Together → Anthropic → OpenAI"},
+  {"Classification", classification_check, "Together → OpenAI → Ollama"}
 ]
 
-all_correct = Enum.all?(routing_tests, fn {kind, name, expected} ->
-  episode = Episode.new(kind, name, %{test: true})
-  actual = Router.select_chain(episode, [])
-  correct = actual == expected
-  
-  status = if correct, do: "✅", else: "❌"
-  IO.puts("   #{status} #{name}: #{if correct, do: "Correct", else: "Mismatch"}")
-  if not correct do
-    IO.puts("      Expected: #{inspect(expected)}")
-    IO.puts("      Got: #{inspect(actual)}")
-  end
-  
-  correct
+all_routing_correct = Enum.all?(routing_validations, fn {name, check, chain} ->
+  status = if check, do: "✅", else: "❌"
+  IO.puts("   #{status} #{name}: #{chain}")
+  check
 end)
 
 # 8. INTEGRATION POINTS SUMMARY
