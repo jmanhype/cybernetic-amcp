@@ -256,7 +256,7 @@ defmodule LiveTest do
         IO.puts("✅ Provider created successfully")
         IO.puts("   Model: #{provider.model}")
         IO.puts("   Timeout: #{provider.timeout}ms")
-        IO.puts()
+        IO.puts("")
         
         IO.puts("📊 Episode Details:")
         IO.puts("   ID: #{episode["id"]}")
@@ -265,28 +265,28 @@ defmodule LiveTest do
         IO.puts("   CPU Usage: #{episode["details"]["cpu_usage"] * 100}%")
         IO.puts("   Memory Usage: #{episode["details"]["memory_usage"] * 100}%")
         IO.puts("   Queue Depth: #{episode["details"]["queue_depth"]}")
-        IO.puts()
+        IO.puts("")
         
         IO.puts("🔄 Sending to Claude for analysis...")
         
         case Cybernetic.VSM.System4.Providers.Anthropic.analyze_episode(provider, episode) do
           {:ok, result} ->
             IO.puts("✅ Analysis completed successfully!")
-            IO.puts()
+            IO.puts("")
             
             IO.puts("📋 SUMMARY:")
             IO.puts("   #{result.summary}")
-            IO.puts()
+            IO.puts("")
             
             IO.puts("🎯 RISK LEVEL: #{String.upcase(result.risk_level)}")
-            IO.puts()
+            IO.puts("")
             
             if length(result.root_causes) > 0 do
               IO.puts("🔍 ROOT CAUSES:")
               Enum.each(result.root_causes, fn cause ->
                 IO.puts("   • #{cause}")
               end)
-              IO.puts()
+              IO.puts("")
             end
             
             if length(result.sop_suggestions) > 0 do
@@ -299,7 +299,7 @@ defmodule LiveTest do
                 if sop["triggers"] do
                   IO.puts("      Triggers: #{Enum.join(sop["triggers"], ", ")}")
                 end
-                IO.puts()
+                IO.puts("")
               end)
             end
             
@@ -310,7 +310,7 @@ defmodule LiveTest do
                 IO.puts("   #{index}. [#{String.upcase(rec["type"])}] #{rec["action"]}")
                 IO.puts("      Target System: #{String.upcase(rec["system"])}")
                 IO.puts("      Rationale: #{rec["rationale"]}")
-                IO.puts()
+                IO.puts("")
               end)
             end
             
@@ -319,7 +319,7 @@ defmodule LiveTest do
               Enum.each(result.learning_points, fn point ->
                 IO.puts("   • #{point}")
               end)
-              IO.puts()
+              IO.puts("")
             end
             
             IO.puts("🎉 Live test completed successfully!")
