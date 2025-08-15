@@ -150,7 +150,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     url = "#{provider.base_url}/v1/messages"
     headers = [
       {"Content-Type", "application/json"},
-      {"Authorization", "Bearer #{provider.api_key}"},
+      {"x-api-key", provider.api_key},
       {"anthropic-version", "2023-06-01"}
     ]
     
