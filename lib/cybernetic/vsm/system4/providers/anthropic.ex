@@ -205,12 +205,12 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
         end
         
       {:ok, %{status: 429} = response} ->
-        Logger.warn("Rate limited by Anthropic API, retrying in #{get_retry_delay(response)} ms")
+        Logger.warning("Rate limited by Anthropic API, retrying in #{get_retry_delay(response)} ms")
         :timer.sleep(get_retry_delay(response))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
         
-      {:ok, %{status: status, body: body}} when status >= 500 ->
-        Logger.warn("Server error #{status}, retrying... (#{retries_left} retries left)")
+      {:ok, %{status: status, body: _body}} when status >= 500 ->
+        Logger.warning("Server error #{status}, retrying... (#{retries_left} retries left)")
         :timer.sleep(exponential_backoff(4 - retries_left))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
         
@@ -219,7 +219,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
         {:error, {:http_error, status, parse_error_body(body)}}
         
       {:error, %HTTPoison.Error{reason: :timeout}} ->
-        Logger.warn("Request timeout, retrying... (#{retries_left} retries left)")
+        Logger.warning("Request timeout, retrying... (#{retries_left} retries left)")
         make_request_with_retry(url, json, headers, options, retries_left - 1)
         
       {:error, %HTTPoison.Error{reason: reason}} ->
