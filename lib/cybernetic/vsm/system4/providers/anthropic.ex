@@ -66,13 +66,73 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   end
   
   @impl Cybernetic.VSM.System4.LLMProvider
-  def analyze_episode(provider, episode, context_opts \\ []) do
-    OTEL.with_span "anthropic.analyze_episode", %{
-      model: provider.model,
-      episode_id: episode["id"],
-      episode_type: episode["type"]
+  def capabilities do
+    %{
+      modes: [:chat, :tool_use, :json, :reasoning],
+      strengths: [:reasoning, :code],
+      max_tokens: 8192,
+      context_window: 200_000
+    }
+  end
+
+  @impl Cybernetic.VSM.System4.LLMProvider
+  def analyze_episode(episode, opts \\ []) do
+    start_time = System.monotonic_time(:millisecond)
+    
+    OpenTelemetry.Tracer.with_span "anthropic.analyze_episode", %{
+      attributes: %{
+        model: get_model(opts),
+        episode_id: episode.id,
+        episode_kind: episode.kind
+      }
     } do
-      do_analyze_episode(provider, episode, context_opts)
+      result = do_analyze_episode(episode, opts)
+      
+      latency = System.monotonic_time(:millisecond) - start_time
+      add_usage_metrics(result, latency)
+      
+      result
+    end
+  end
+
+  @impl Cybernetic.VSM.System4.LLMProvider
+  def generate(prompt, opts \\ []) when is_binary(prompt) do
+    generate([%{"role" => "user", "content" => prompt}], opts)
+  end
+
+  def generate(messages, opts \\ []) when is_list(messages) do
+    start_time = System.monotonic_time(:millisecond)
+    
+    case make_anthropic_request(build_generate_payload(messages, opts)) do
+      {:ok, response} ->
+        latency = System.monotonic_time(:millisecond) - start_time
+        parse_generate_response(response, latency)
+        
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @impl Cybernetic.VSM.System4.LLMProvider
+  def embed(text, _opts \\ []) do
+    # Anthropic doesn't provide embeddings - return error
+    {:error, :embeddings_not_supported}
+  end
+
+  @impl Cybernetic.VSM.System4.LLMProvider
+  def health_check do
+    case System.get_env("ANTHROPIC_API_KEY") do
+      nil -> {:error, :missing_api_key}
+      _key -> 
+        # Simple ping test
+        case make_anthropic_request(%{
+          "model" => @default_model,
+          "max_tokens" => 1,
+          "messages" => [%{"role" => "user", "content" => "test"}]
+        }) do
+          {:ok, _} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
     end
   end
   
