@@ -163,13 +163,23 @@ defmodule Cybernetic.VSM.System4.Service do
     end
   end
   
-  defp detect_task_type(%Episode{task: %{type: type}}) when not is_nil(type), do: type
-  defp detect_task_type(%Episode{messages: messages}) do
-    # Analyze messages to detect task type
-    content = messages
-    |> Enum.map(& &1.content)
-    |> Enum.join(" ")
-    |> String.downcase()
+  defp detect_task_type(%Episode{kind: kind}) when not is_nil(kind) do
+    # Map episode kinds to task types
+    case kind do
+      :policy_review -> :reasoning
+      :root_cause -> :reasoning
+      :code_gen -> :code_generation
+      :anomaly_detection -> :reasoning
+      :compliance_check -> :reasoning
+      :optimization -> :general
+      :prediction -> :general
+      :classification -> :fast
+      _ -> :general
+    end
+  end
+  defp detect_task_type(%Episode{data: data}) when is_binary(data) do
+    # Analyze data content to detect task type
+    content = String.downcase(data)
     
     cond do
       String.contains?(content, ["reason", "logic", "analyze", "think"]) -> :reasoning
