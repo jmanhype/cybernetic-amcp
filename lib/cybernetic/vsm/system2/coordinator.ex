@@ -81,8 +81,9 @@ defmodule Cybernetic.VSM.System2.Coordinator do
         %{topic: topic, max_slots: max_slots}
       )
       
-      {:reply, :ok, new_state}
-    else
+        OTEL.add_event("slot_reserved", %{"topic" => topic, "slot" => current + 1})
+        {:reply, :ok, new_state}
+      else
       # Update wait time if not already waiting
       new_state = Map.update(state, :wait_since, %{topic => System.monotonic_time(:millisecond)}, fn ws ->
         Map.put_new(ws, topic, System.monotonic_time(:millisecond))
