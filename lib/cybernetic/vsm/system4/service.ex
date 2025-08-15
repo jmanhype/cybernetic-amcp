@@ -244,7 +244,7 @@ defmodule Cybernetic.VSM.System4.Service do
   
   defp do_analyze(episode, opts, state) do
     # Store the episode in memory
-    Memory.store(episode.id, :user, episode.messages |> List.first() |> Map.get(:content, ""), %{})
+    Memory.store(episode.id, :user, episode.data || "", %{})
     
     # Route to appropriate provider
     route_to_provider(episode, Keyword.get(opts, :budget, %{}), state)
