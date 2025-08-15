@@ -300,6 +300,7 @@ defmodule Cybernetic.VSM.System4.Memory do
   
   defp format_context_for_llm(entries) do
     entries
+    |> Enum.reverse()  # Ensure chronological order for LLM
     |> Enum.group_by(& &1.episode_id)
     |> Enum.map(fn {episode_id, episode_entries} ->
       messages = Enum.map(episode_entries, fn entry ->
