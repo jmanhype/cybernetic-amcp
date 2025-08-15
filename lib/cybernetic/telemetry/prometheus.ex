@@ -16,7 +16,8 @@ defmodule Cybernetic.Telemetry.Prometheus do
     Telemetry.Metrics.distribution("cybernetic.s1.message_processed.duration",
       tags: [:type],
       unit: {:native, :millisecond},
-      description: "S1 message processing duration"
+      description: "S1 message processing duration",
+      reporter_options: [buckets: [10, 50, 100, 250, 500, 1000, 2500, 5000]]
     ),
     
     Telemetry.Metrics.counter("cybernetic.s2.coordination_decision.count",
