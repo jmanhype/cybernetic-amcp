@@ -113,8 +113,8 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   end
   
   def handle_call({:assess_alignment, policies_by_system}, _from, state) do
-    result = OTEL.with_span "s5.policy_intelligence.assess_alignment", %{
-      systems_count: map_size(policies_by_system)
+    result = OpenTelemetry.Tracer.with_span "s5.policy_intelligence.assess_alignment", %{
+      attributes: %{systems_count: map_size(policies_by_system)}
     } do
       do_assess_alignment(state, policies_by_system)
     end
