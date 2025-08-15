@@ -76,7 +76,8 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   Validate an incoming message's security headers
   """
   def validate_message(message) do
-    with {:ok, :has_headers} <- check_headers(message),
+    OTEL.with_span "nonce_bloom.validate", %{"message.size" => byte_size(inspect(message))} do
+      with {:ok, :has_headers} <- check_headers(message),
          {:ok, :valid_timestamp} <- validate_timestamp(message["_timestamp"]),
          {:ok, :new} <- check_nonce(message["_nonce"]),
          {:ok, :valid_signature} <- validate_signature(message) do
