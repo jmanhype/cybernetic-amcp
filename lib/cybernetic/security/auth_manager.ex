@@ -473,28 +473,33 @@ defmodule Cybernetic.Security.AuthManager do
     # In production, use proper JWT library like Joken
     # For now, simple encoded JSON with signature
     payload = Jason.encode!(claims)
-    signature = :crypto.mac(:hmac, :sha256, @jwt_secret, payload) |> Base.encode64()
+    signature = :crypto.mac(:hmac, :sha256, @jwt_secret, payload) |> Base.encode64(padding: false)
     
-    Base.encode64(payload) <> "." <> signature
+    Base.encode64(payload, padding: false) <> "." <> signature
   end
   
   defp verify_jwt(token) do
     case String.split(token, ".") do
       [payload_b64, signature_b64] ->
-        payload = Base.decode64!(payload_b64)
-        expected_signature = :crypto.mac(:hmac, :sha256, @jwt_secret, payload) |> Base.encode64()
+        case Base.decode64(payload_b64, padding: false) do
+          {:ok, payload} ->
+            expected_signature = :crypto.mac(:hmac, :sha256, @jwt_secret, payload) |> Base.encode64(padding: false)
         
-        if signature_b64 == expected_signature do
-          claims = Jason.decode!(payload)
+            if signature_b64 == expected_signature do
+              claims = Jason.decode!(payload)
+              
+              # Check expiration
+              if claims["exp"] > DateTime.to_unix(DateTime.utc_now()) do
+                {:ok, claims}
+              else
+                {:error, :expired}
+              end
+            else
+              {:error, :invalid_signature}
+            end
           
-          # Check expiration
-          if claims["exp"] > DateTime.to_unix(DateTime.utc_now()) do
-            {:ok, claims}
-          else
-            {:error, :expired}
-          end
-        else
-          {:error, :invalid_signature}
+          :error ->
+            {:error, :invalid_format}
         end
       
       _ ->
