@@ -133,7 +133,7 @@ defmodule Cybernetic.Telemetry.Prometheus do
   def init(_opts) do
     # Start Prometheus metrics reporter
     {:ok, _} = TelemetryMetricsPrometheus.Core.start_link(
-      metrics: @metrics,
+      metrics: metrics(),
       port: Application.get_env(:telemetry_metrics_prometheus_core, :port, 9568)
     )
     
