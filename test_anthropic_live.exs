@@ -249,7 +249,7 @@ defmodule LiveTest do
     }
     
     # Create provider
-    api_key = "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"
+    api_key = "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"
     
     case Cybernetic.VSM.System4.Providers.Anthropic.new(api_key: api_key) do
       {:ok, provider} ->
