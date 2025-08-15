@@ -241,20 +241,8 @@ defmodule Cybernetic.Security.AuthManager do
         end
       
       [] ->
-        # Try to verify JWT signature even if not in session cache
-        case verify_jwt(token) do
-          {:ok, claims} ->
-            auth_context = %{
-              user_id: claims["sub"],
-              roles: claims["roles"] || [],
-              permissions: expand_permissions(claims["roles"] || []),
-              metadata: %{auth_method: :jwt}
-            }
-            {:reply, {:ok, auth_context}, state}
-          
-          {:error, _reason} ->
-            {:reply, {:error, :invalid_token}, state}
-        end
+        # Token not found in sessions - it's invalid/revoked
+        {:reply, {:error, :invalid_token}, state}
     end
   end
   
