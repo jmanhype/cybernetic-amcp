@@ -20,8 +20,8 @@ processors:
         value: "0.1.0"
 
 exporters:
-  jaeger:
-    endpoint: jaeger:14250
+  otlp:
+    endpoint: cyb-jaeger:4317
     tls:
       insecure: true
   prometheus:
@@ -34,7 +34,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [jaeger, logging]
+      exporters: [otlp, logging]
     metrics:
       receivers: [otlp]
       processors: [batch, resource]
