@@ -372,7 +372,18 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
       %{"content" => [%{"text" => text}]} ->
         case Jason.decode(text) do
           {:ok, parsed} ->
+            usage = extract_usage_info(response)
+            
             result = %{
+              text: text,
+              tokens: %{
+                input: get_in(response, ["usage", "input_tokens"]) || 0,
+                output: get_in(response, ["usage", "output_tokens"]) || 0
+              },
+              usage: usage,
+              citations: [],
+              confidence: 0.8,
+              # Legacy fields for backward compatibility
               summary: parsed["summary"],
               root_causes: parsed["root_causes"] || [],
               sop_suggestions: parsed["sop_suggestions"] || [],
@@ -385,7 +396,18 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
             
           {:error, _} ->
             # Fallback for non-JSON responses
+            usage = extract_usage_info(response)
+            
             {:ok, %{
+              text: text,
+              tokens: %{
+                input: get_in(response, ["usage", "input_tokens"]) || 0,
+                output: get_in(response, ["usage", "output_tokens"]) || 0
+              },
+              usage: usage,
+              citations: [],
+              confidence: 0.6,
+              # Legacy fallback
               summary: text,
               root_causes: [],
               sop_suggestions: [%{
@@ -406,4 +428,46 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
         {:error, {:unexpected_response_format, response}}
     end
   end
+
+  defp parse_generate_response(response, latency) do
+    case response do
+      %{"content" => [%{"text" => text}]} ->
+        usage = extract_usage_info(response, latency)
+        
+        result = %{
+          text: text,
+          tokens: %{
+            input: get_in(response, ["usage", "input_tokens"]) || 0,
+            output: get_in(response, ["usage", "output_tokens"]) || 0
+          },
+          usage: usage,
+          tool_calls: [],
+          finish_reason: map_stop_reason(get_in(response, ["stop_reason"]))
+        }
+        
+        {:ok, result}
+        
+      _ ->
+        {:error, {:unexpected_response_format, response}}
+    end
+  end
+
+  defp extract_usage_info(response, latency \\ 0) do
+    input_tokens = get_in(response, ["usage", "input_tokens"]) || 0
+    output_tokens = get_in(response, ["usage", "output_tokens"]) || 0
+    
+    # Approximate cost calculation (as of 2024)
+    # Claude 3.5 Sonnet: $3/1M input tokens, $15/1M output tokens
+    cost_usd = (input_tokens * 3.0 / 1_000_000) + (output_tokens * 15.0 / 1_000_000)
+    
+    %{
+      cost_usd: cost_usd,
+      latency_ms: latency
+    }
+  end
+
+  defp map_stop_reason("end_turn"), do: :stop
+  defp map_stop_reason("max_tokens"), do: :length
+  defp map_stop_reason("tool_use"), do: :tool_calls
+  defp map_stop_reason(_), do: :stop
 end
