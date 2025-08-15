@@ -48,6 +48,9 @@ defmodule Cybernetic.Application do
       # S4 Multi-Provider Intelligence Service
       {Cybernetic.VSM.System4.Service, []},
       
+      # S4 Memory for conversation context
+      {Cybernetic.VSM.System4.Memory, []},
+      
       # S3 Rate Limiter for budget management
       {Cybernetic.VSM.System3.RateLimiter, []},
       
