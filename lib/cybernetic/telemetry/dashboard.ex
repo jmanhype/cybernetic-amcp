@@ -519,7 +519,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
           ]
         }
       ],
-      recording_rules: state.prometheus_metrics |> Enum.map(&build_recording_rule/1)
+      recording_rules: configure_prometheus_metrics() |> Enum.map(&build_recording_rule/1)
     }
   end
   
