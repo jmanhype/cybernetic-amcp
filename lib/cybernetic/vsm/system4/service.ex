@@ -1,445 +1,262 @@
 defmodule Cybernetic.VSM.System4.Service do
   @moduledoc """
-  S4 Intelligence Service - Multi-provider AI coordination for the VSM framework.
-  
-  Provides the main public API for S4 intelligence operations with intelligent
-  routing, fallback handling, and circuit breaking across multiple LLM providers.
+  S4 Service - Intelligent routing and coordination for LLM providers.
+  Routes episodes to appropriate providers based on task type and availability.
   """
-  
   use GenServer
   require Logger
-  require OpenTelemetry.Tracer
   
-  alias Cybernetic.VSM.System4.{Episode, Router, Memory}
+  alias Cybernetic.VSM.System4.{Episode, Memory}
+  alias Cybernetic.VSM.System4.Providers.{Anthropic, OpenAI, Together, Ollama, Null}
+  alias Cybernetic.Core.Security.RateLimiter
+  alias Cybernetic.Transport.CircuitBreaker
   
+  @default_timeout 30_000
   @telemetry [:cybernetic, :s4, :service]
-
-  defstruct [
-    :providers,
-    :circuit_breakers,
-    :stats,
-    :config
-  ]
-
-  @type t :: %__MODULE__{
-    providers: map(),
-    circuit_breakers: map(),
-    stats: map(),
-    config: map()
+  
+  # Provider selection rules
+  @provider_rules %{
+    reasoning: [:anthropic, :openai],
+    code_generation: [:anthropic, :openai, :together],
+    general: [:together, :ollama, :openai],
+    fast: [:together, :ollama],
+    quality: [:anthropic, :openai]
   }
-
-  # Public API
-
-  @doc """
-  Start the S4 Service.
-  """
+  
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
-
+  
+  @impl true
+  def init(opts) do
+    state = %{
+      providers: init_providers(opts),
+      circuit_breakers: %{},
+      stats: %{
+        total_requests: 0,
+        successful: 0,
+        failed: 0,
+        by_provider: %{}
+      }
+    }
+    
+    Logger.info("S4 Service initialized with providers: #{inspect(Map.keys(state.providers))}")
+    {:ok, state}
+  end
+  
+  # Public API
+  
   @doc """
-  Analyze an episode using the best available provider chain.
-  
-  ## Parameters
-  
-  - episode: Episode struct or episode data
-  - opts: Analysis options
-  
-  ## Returns
-  
-  {:ok, result, metadata} | {:error, reason}
+  Route an episode to the appropriate provider based on task type and availability.
   """
-  def analyze(episode_or_data, opts \\ [])
-
-  def analyze(%Episode{} = episode, opts) do
-    GenServer.call(__MODULE__, {:analyze, episode, opts}, 60_000)
+  def route_episode(episode_map) when is_map(episode_map) do
+    GenServer.call(__MODULE__, {:route_episode, episode_map}, @default_timeout)
+  catch
+    :exit, {:noproc, _} ->
+      # Service not started, use null provider
+      {:ok, %{provider: :null, content: "Service not available", episode_id: episode_map[:id]}}
   end
-
-  def analyze(episode_data, opts) when is_map(episode_data) do
-    episode = convert_to_episode(episode_data)
-    analyze(episode, opts)
-  end
-
+  
   @doc """
-  Generate text completion using the best available provider.
-  
-  ## Parameters
-  
-  - prompt: String prompt or message list
-  - opts: Generation options
-  
-  ## Returns
-  
-  {:ok, result, metadata} | {:error, reason}
+  Analyze an episode using intelligent routing.
   """
-  def complete(prompt, opts \\ []) do
-    GenServer.call(__MODULE__, {:complete, prompt, opts}, 60_000)
+  def analyze_episode(%Episode{} = episode, opts \\ []) do
+    GenServer.call(__MODULE__, {:analyze, episode, opts}, @default_timeout)
+  catch
+    :exit, {:noproc, _} ->
+      # Service not started, use null provider
+      {:ok, %{provider: :null, content: "Service not available", episode_id: episode.id}}
   end
-
-  @doc """
-  Generate embeddings for text.
   
-  ## Parameters
-  
-  - text: Input text
-  - opts: Embedding options
-  
-  ## Returns
-  
-  {:ok, result, metadata} | {:error, reason}
-  """
-  def embed(text, opts \\ []) do
-    GenServer.call(__MODULE__, {:embed, text, opts}, 30_000)
-  end
-
-  @doc """
-  Get service health status.
-  """
-  def health_status do
-    GenServer.call(__MODULE__, :health_status, 5_000)
-  end
-
   @doc """
   Get service statistics.
   """
   def stats do
-    GenServer.call(__MODULE__, :stats, 5_000)
+    GenServer.call(__MODULE__, :stats)
+  catch
+    :exit, {:noproc, _} ->
+      %{error: "Service not running"}
   end
-
-  # GenServer callbacks
-
-  @impl GenServer
-  def init(opts) do
-    config = load_config(opts)
-    
-    state = %__MODULE__{
-      providers: %{},
-      circuit_breakers: initialize_circuit_breakers(),
-      stats: initialize_stats(),
-      config: config
-    }
-    
-    Logger.info("S4 Service initialized with providers: #{inspect(Map.keys(state.circuit_breakers))}")
-    
-    # Schedule periodic health checks
-    schedule_health_check()
-    
-    {:ok, state}
+  
+  @doc """
+  Health check for all providers.
+  """
+  def health_check do
+    GenServer.call(__MODULE__, :health_check, 10_000)
+  catch
+    :exit, {:noproc, _} ->
+      %{status: :down, providers: %{}}
   end
-
-  @impl GenServer
+  
+  # Server Callbacks
+  
+  @impl true
+  def handle_call({:route_episode, episode_map}, _from, state) do
+    # Convert map to Episode struct if needed
+    episode = case episode_map do
+      %Episode{} = e -> e
+      %{} -> struct(Episode, episode_map)
+    end
+    
+    result = route_to_provider(episode, episode_map[:budget] || %{}, state)
+    
+    # Update stats
+    new_state = update_stats(state, result)
+    
+    {:reply, result, new_state}
+  end
+  
+  @impl true
   def handle_call({:analyze, episode, opts}, _from, state) do
-    start_time = System.monotonic_time(:millisecond)
-    
-    result = OpenTelemetry.Tracer.with_span "s4.service.analyze", %{
-      attributes: %{
-        episode_id: episode.id,
-        episode_kind: episode.kind,
-        priority: episode.priority
-      }
-    } do
-      do_analyze(episode, opts, state)
-    end
-    
-    latency = System.monotonic_time(:millisecond) - start_time
-    new_state = update_stats(state, :analyze, result, latency)
-    
+    result = do_analyze(episode, opts, state)
+    new_state = update_stats(state, result)
     {:reply, result, new_state}
   end
-
-  @impl GenServer
-  def handle_call({:complete, prompt, opts}, _from, state) do
-    start_time = System.monotonic_time(:millisecond)
-    
-    result = OpenTelemetry.Tracer.with_span "s4.service.complete", %{
-      attributes: %{
-        prompt_length: byte_size(to_string(prompt))
-      }
-    } do
-      do_complete(prompt, opts, state)
-    end
-    
-    latency = System.monotonic_time(:millisecond) - start_time
-    new_state = update_stats(state, :complete, result, latency)
-    
-    {:reply, result, new_state}
-  end
-
-  @impl GenServer
-  def handle_call({:embed, text, opts}, _from, state) do
-    start_time = System.monotonic_time(:millisecond)
-    
-    result = OpenTelemetry.Tracer.with_span "s4.service.embed", %{
-      attributes: %{
-        text_length: byte_size(text)
-      }
-    } do
-      do_embed(text, opts, state)
-    end
-    
-    latency = System.monotonic_time(:millisecond) - start_time
-    new_state = update_stats(state, :embed, result, latency)
-    
-    {:reply, result, new_state}
-  end
-
-  @impl GenServer
-  def handle_call(:health_status, _from, state) do
-    health = check_provider_health(state)
-    {:reply, health, state}
-  end
-
-  @impl GenServer
+  
+  @impl true
   def handle_call(:stats, _from, state) do
     {:reply, state.stats, state}
   end
-
-  @impl GenServer
-  def handle_info(:health_check, state) do
-    new_state = perform_health_check(state)
-    schedule_health_check()
-    {:noreply, new_state}
-  end
-
-  @impl GenServer
-  def handle_info(_msg, state) do
-    {:noreply, state}
-  end
-
-  # Private functions
-
-  defp do_analyze(episode, opts, state) do
-    case check_s3_budget(:s4_llm, episode) do
-      :ok ->
-        # Get conversation context if memory is enabled
-        opts_with_context = if Keyword.get(opts, :use_memory, true) do
-          case Memory.get_context(episode.id) do
-            {:ok, context} ->
-              Keyword.put(opts, :context, context)
-            _ ->
-              opts
-          end
-        else
-          opts
-        end
-        
-        # Route with context
-        result = Router.route(episode, opts_with_context)
-        
-        # Store interaction in memory
-        case result do
-          {:ok, response, metadata} ->
-            Memory.store(episode.id, :assistant, response.text, metadata)
-            Memory.store(episode.id, :user, inspect(episode.data), %{kind: episode.kind})
-            {:ok, response, metadata}
-            
-          error ->
-            error
-        end
-        
-      {:error, :budget_exhausted} ->
-        emit_budget_deny_telemetry(episode)
-        {:error, :rate_limited}
-    end
-  end
-
-  defp do_complete(prompt, opts, _state) do
-    # For completion, use a simple episode for routing
-    episode = Episode.new(:code_gen, "Text completion", prompt, 
-      priority: Keyword.get(opts, :priority, :normal)
-    )
-    
-    case Router.route(episode, Keyword.put(opts, :operation, :complete)) do
-      {:ok, result, metadata} ->
-        # Extract just the text completion part
-        completion_result = %{
-          text: result.text,
-          tokens: result.tokens,
-          usage: result.usage,
-          finish_reason: Map.get(result, :finish_reason, :stop)
-        }
-        {:ok, completion_result, metadata}
-        
-      error ->
-        error
-    end
-  end
-
-  defp do_embed(text, opts, _state) do
-    # For embeddings, try providers that support it
-    providers_with_embeddings = [:openai, :ollama]
-    
-    case try_embedding_providers(text, opts, providers_with_embeddings) do
-      {:ok, result, provider} ->
-        {:ok, result, %{provider: provider}}
-        
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp try_embedding_providers(_text, _opts, []) do
-    {:error, :no_embedding_providers_available}
-  end
-
-  defp try_embedding_providers(text, opts, [provider | rest]) do
-    case Router.get_provider_module(provider) do
-      {:ok, module} ->
-        case module.embed(text, opts) do
-          {:ok, result} ->
-            {:ok, result, provider}
-            
-          {:error, :embeddings_not_supported} ->
-            try_embedding_providers(text, opts, rest)
-            
-          {:error, _reason} ->
-            try_embedding_providers(text, opts, rest)
-        end
-        
-      {:error, _} ->
-        try_embedding_providers(text, opts, rest)
-    end
-  end
-
-  defp convert_to_episode(episode_data) do
-    Episode.new(
-      Map.get(episode_data, :kind, :classification),
-      Map.get(episode_data, :title, "Unnamed Episode"),
-      Map.get(episode_data, :data, episode_data),
-      context: Map.get(episode_data, :context, %{}),
-      metadata: Map.get(episode_data, :metadata, %{}),
-      priority: Map.get(episode_data, :priority, :normal),
-      source_system: Map.get(episode_data, :source_system, :unknown)
-    )
-  end
-
-  defp check_s3_budget(budget_type, episode) do
-    try do
-      case Cybernetic.VSM.System3.RateLimiter.request_tokens(budget_type, episode.kind, episode.priority) do
-        :ok -> :ok
-        {:error, :rate_limited} -> {:error, :budget_exhausted}
+  
+  @impl true
+  def handle_call(:health_check, _from, state) do
+    health = Enum.reduce(state.providers, %{}, fn {name, provider}, acc ->
+      status = try do
+        provider.health_check()
+      rescue
+        _ -> :error
       end
-    rescue
-      _ -> :ok  # Fallback if RateLimiter not available
-    end
-  end
-
-  defp load_config(opts) do
-    default_config = %{
-      health_check_interval: 60_000,  # 1 minute
-      circuit_breaker_threshold: 5,
-      circuit_breaker_timeout: 30_000
-    }
-    
-    app_config = Application.get_env(:cybernetic, :s4, [])
-    |> Enum.into(%{})
-    
-    opts_config = Keyword.take(opts, [:health_check_interval, :circuit_breaker_threshold])
-    |> Enum.into(%{})
-    
-    Map.merge(default_config, Map.merge(app_config, opts_config))
-  end
-
-  defp initialize_circuit_breakers do
-    providers = [:anthropic, :openai, :together, :ollama]
-    
-    Enum.into(providers, %{}, fn provider ->
-      {provider, %{
-        state: :closed,
-        failure_count: 0,
-        last_failure_time: nil,
-        last_success_time: System.monotonic_time(:millisecond)
-      }}
+      Map.put(acc, name, status)
     end)
+    
+    {:reply, %{status: :up, providers: health}, state}
   end
-
-  defp initialize_stats do
-    %{
-      requests: %{
-        analyze: %{total: 0, success: 0, error: 0},
-        complete: %{total: 0, success: 0, error: 0},
-        embed: %{total: 0, success: 0, error: 0}
-      },
-      latency: %{
-        analyze: %{total: 0, count: 0, avg: 0},
-        complete: %{total: 0, count: 0, avg: 0},
-        embed: %{total: 0, count: 0, avg: 0}
-      },
-      providers: %{
-        anthropic: %{requests: 0, success: 0, error: 0},
-        openai: %{requests: 0, success: 0, error: 0},
-        together: %{requests: 0, success: 0, error: 0},
-        ollama: %{requests: 0, success: 0, error: 0}
-      }
-    }
-  end
-
-  defp update_stats(state, operation, result, latency) do
-    stats = state.stats
+  
+  # Private Functions
+  
+  defp init_providers(opts) do
+    providers = Keyword.get(opts, :providers, [:anthropic, :openai, :together, :ollama])
     
-    # Update request stats
-    req_stats = get_in(stats, [:requests, operation])
-    new_req_stats = %{
-      total: req_stats.total + 1,
-      success: req_stats.success + (if match?({:ok, _, _}, result), do: 1, else: 0),
-      error: req_stats.error + (if match?({:error, _}, result), do: 1, else: 0)
-    }
-    
-    # Update latency stats
-    lat_stats = get_in(stats, [:latency, operation])
-    new_total = lat_stats.total + latency
-    new_count = lat_stats.count + 1
-    new_lat_stats = %{
-      total: new_total,
-      count: new_count,
-      avg: div(new_total, new_count)
-    }
-    
-    new_stats = stats
-    |> put_in([:requests, operation], new_req_stats)
-    |> put_in([:latency, operation], new_lat_stats)
-    
-    %{state | stats: new_stats}
-  end
-
-  defp check_provider_health(state) do
-    state.circuit_breakers
-    |> Enum.map(fn {provider, cb_state} ->
-      health = case cb_state.state do
-        :closed -> :healthy
-        :open -> :unhealthy
-        :half_open -> :recovering
+    Enum.reduce(providers, %{}, fn provider, acc ->
+      module = case provider do
+        :anthropic -> Anthropic
+        :openai -> OpenAI
+        :together -> Together
+        :ollama -> Ollama
+        _ -> Null
       end
       
-      {provider, %{
-        health: health,
-        last_success: cb_state.last_success_time,
-        failure_count: cb_state.failure_count
-      }}
+      Map.put(acc, provider, module)
     end)
-    |> Enum.into(%{})
   end
-
-  defp perform_health_check(state) do
-    # This would check each provider's health
-    # For now, we'll just return the current state
-    state
+  
+  defp route_to_provider(episode, budget, state) do
+    task_type = detect_task_type(episode)
+    provider_order = get_provider_order(task_type, state)
+    
+    # Check rate limits
+    case RateLimiter.check_rate(episode.id, :s4_llm) do
+      :ok ->
+        attempt_providers(episode, provider_order, budget, state)
+      {:error, :rate_limited} ->
+        {:error, "Rate limited for episode #{episode.id}"}
+    end
   end
-
-  defp schedule_health_check do
-    Process.send_after(self(), :health_check, 60_000)
+  
+  defp detect_task_type(%Episode{task: %{type: type}}) when not is_nil(type), do: type
+  defp detect_task_type(%Episode{messages: messages}) do
+    # Analyze messages to detect task type
+    content = messages
+    |> Enum.map(& &1.content)
+    |> Enum.join(" ")
+    |> String.downcase()
+    
+    cond do
+      String.contains?(content, ["reason", "logic", "analyze", "think"]) -> :reasoning
+      String.contains?(content, ["code", "function", "implement", "program"]) -> :code_generation
+      String.contains?(content, ["quick", "simple", "fast"]) -> :fast
+      true -> :general
+    end
   end
-
-  defp emit_budget_deny_telemetry(episode) do
-    :telemetry.execute(
-      [:cyb, :s3, :budget, :deny],
-      %{},
-      %{
-        service: :s4,
-        episode_id: episode.id,
-        episode_kind: episode.kind,
-        reason: :s4_budget_exhausted
-      }
-    )
+  defp detect_task_type(_), do: :general
+  
+  defp get_provider_order(task_type, state) do
+    # Get providers for this task type
+    candidates = Map.get(@provider_rules, task_type, [:anthropic, :openai, :together, :ollama])
+    
+    # Filter to available providers and sort by circuit breaker state
+    candidates
+    |> Enum.filter(fn p -> Map.has_key?(state.providers, p) end)
+    |> Enum.sort_by(fn p -> 
+      breaker = Map.get(state.circuit_breakers, p, CircuitBreaker.new(to_string(p)))
+      case breaker.state do
+        :closed -> 0  # Prefer closed (working) breakers
+        :half_open -> 1
+        :open -> 2
+      end
+    end)
+  end
+  
+  defp attempt_providers(_episode, [], _budget, _state) do
+    {:error, "No providers available"}
+  end
+  
+  defp attempt_providers(episode, [provider | rest], budget, state) do
+    module = Map.get(state.providers, provider)
+    breaker = Map.get(state.circuit_breakers, provider, CircuitBreaker.new(to_string(provider)))
+    
+    case CircuitBreaker.call(breaker, fn ->
+      # Store context before calling provider
+      Memory.store(episode.id, :system, "Routing to #{provider}", %{provider: provider})
+      
+      # Call the provider
+      case module.analyze_episode(episode, budget: budget) do
+        {:ok, result} -> 
+          {:ok, Map.put(result, :provider, provider)}
+        error -> 
+          error
+      end
+    end) do
+      {:ok, result, new_breaker} ->
+        # Update circuit breaker state
+        new_state = put_in(state.circuit_breakers[provider], new_breaker)
+        {:ok, result}
+        
+      {:error, :circuit_open} ->
+        Logger.warning("Circuit breaker open for #{provider}, trying next")
+        attempt_providers(episode, rest, budget, state)
+        
+      {:error, reason} ->
+        Logger.warning("Provider #{provider} failed: #{inspect(reason)}, trying next")
+        attempt_providers(episode, rest, budget, state)
+    end
+  end
+  
+  defp do_analyze(episode, opts, state) do
+    # Store the episode in memory
+    Memory.store(episode.id, :user, episode.messages |> List.first() |> Map.get(:content, ""), %{})
+    
+    # Route to appropriate provider
+    route_to_provider(episode, Keyword.get(opts, :budget, %{}), state)
+  end
+  
+  defp update_stats(state, result) do
+    stats = state.stats
+    
+    new_stats = case result do
+      {:ok, %{provider: provider}} ->
+        %{stats |
+          total_requests: stats.total_requests + 1,
+          successful: stats.successful + 1,
+          by_provider: Map.update(stats.by_provider, provider, 1, &(&1 + 1))
+        }
+      {:error, _} ->
+        %{stats |
+          total_requests: stats.total_requests + 1,
+          failed: stats.failed + 1
+        }
+    end
+    
+    %{state | stats: new_stats}
   end
 end
