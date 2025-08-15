@@ -34,7 +34,7 @@ defmodule APIKeyTest do
         IO.puts("Payload size: #{byte_size(json)} bytes")
         
         case HTTPoison.post(url, json, headers, timeout: 30_000) do
-          {:ok, %{status: 200, body: body}} ->
+          {:ok, %{status_code: 200, body: body}} ->
             IO.puts("✅ API key is VALID! Response received.")
             case Jason.decode(body) do
               {:ok, decoded} ->
@@ -43,11 +43,11 @@ defmodule APIKeyTest do
                 IO.puts("Got response but couldn't decode JSON")
             end
             
-          {:ok, %{status: 401, body: body}} ->
+          {:ok, %{status_code: 401, body: body}} ->
             IO.puts("❌ API key is INVALID - 401 Unauthorized")
             IO.puts("Error: #{body}")
             
-          {:ok, %{status: status, body: body}} ->
+          {:ok, %{status_code: status, body: body}} ->
             IO.puts("⚠️  Unexpected status: #{status}")
             IO.puts("Body: #{body}")
             
