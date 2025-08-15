@@ -85,11 +85,11 @@ defmodule Cybernetic.Telemetry.OTEL do
       
       # Add result as span attribute
       case result do
-        {:ok, _} -> Span.set_attribute(:result, "success")
+        {:ok, _} -> Span.set_attribute(Tracer.current_span_ctx(), :result, "success")
         {:error, reason} -> 
-          Span.set_attribute(:result, "error")
-          Span.set_attribute(:error_reason, inspect(reason))
-        _ -> Span.set_attribute(:result, "unknown")
+          Span.set_attribute(Tracer.current_span_ctx(), :result, "error")
+          Span.set_attribute(Tracer.current_span_ctx(), :error_reason, inspect(reason))
+        _ -> Span.set_attribute(Tracer.current_span_ctx(), :result, "unknown")
       end
       
       result
@@ -100,15 +100,16 @@ defmodule Cybernetic.Telemetry.OTEL do
   Add event to current span
   """
   def add_event(name, attributes \\ %{}) do
-    Span.add_event(name, attributes)
+    Span.add_event(Tracer.current_span_ctx(), name, attributes)
   end
   
   @doc """
   Set attributes on current span
   """
   def set_attributes(attributes) do
+    span_ctx = Tracer.current_span_ctx()
     Enum.each(attributes, fn {k, v} ->
-      Span.set_attribute(k, v)
+      Span.set_attribute(span_ctx, k, v)
     end)
   end
   
@@ -127,8 +128,9 @@ defmodule Cybernetic.Telemetry.OTEL do
       attributes
     end
     
-    Span.record_exception(exception, stacktrace)
-    Span.set_status(:error, Exception.message(exception))
+    span_ctx = Tracer.current_span_ctx()
+    Span.record_exception(span_ctx, exception, stacktrace)
+    Span.set_status(span_ctx, :error, Exception.message(exception))
   end
   
   @doc """
@@ -140,8 +142,8 @@ defmodule Cybernetic.Telemetry.OTEL do
     case ctx do
       span_ctx(trace_id: trace_id, span_id: span_id) when trace_id != 0 and span_id != 0 ->
         %{
-          trace_id: trace_id |> :otel_id_text.to_hex(),
-          span_id: span_id |> :otel_id_text.to_hex()
+          trace_id: trace_id |> Integer.to_string(16) |> String.pad_leading(32, "0"),
+          span_id: span_id |> Integer.to_string(16) |> String.pad_leading(16, "0")
         }
       _ ->
         %{trace_id: nil, span_id: nil}
