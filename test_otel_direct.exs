@@ -38,9 +38,9 @@ defmodule OTelDirectTest do
     IO.puts("\n3️⃣ Creating nested trace...")
     create_nested_trace()
     
-    IO.puts("\n4️⃣ Forcing flush...")
-    :opentelemetry.force_flush()
-    Process.sleep(3000)
+    IO.puts("\n4️⃣ Waiting for traces to be sent...")
+    # Force flush is not available in this version
+    Process.sleep(5000)
     
     IO.puts("\n5️⃣ Checking services in Jaeger...")
     check_jaeger_services()
