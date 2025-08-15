@@ -61,7 +61,7 @@ defmodule Cybernetic.Application do
       
       # Telegram Agent (S1)
       Cybernetic.VSM.System1.Agents.TelegramAgent
-    ]
+    ] ++ health_children()
     opts = [
       strategy: :one_for_one, 
       name: Cybernetic.Supervisor,
