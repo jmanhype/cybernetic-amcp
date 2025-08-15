@@ -34,9 +34,17 @@ Thumbs.db
 *.db
 *.sqlite3
 
-# Environment variables
+# Environment variables and secrets
 .env
-.env.local
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+*_api_key*
+*_secret*
+!*_secret.exs
 
 # Temporary files
 *.tmp
