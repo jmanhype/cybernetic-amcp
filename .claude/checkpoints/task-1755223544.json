@@ -1,0 +1,1 @@
+{"checkpoint": "task-20250814-210542", "task": "its workig look curl -X POST https://api.anthropic.com/v1/messages \       -H "Content-Type: applica", "timestamp": "2025-08-15T02:05:44Z", "commit": "d3b72f736abbe1efdd62d887a73f725d2305c18f", "github_release": "true"}
