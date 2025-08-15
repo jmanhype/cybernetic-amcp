@@ -39,7 +39,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Tracing do
       message_id = Keyword.get(opts, :message_id, generate_message_id())
       opts = Keyword.put(opts, :message_id, message_id)
       
-      Span.set_attribute("messaging.message_id", message_id)
+      Span.set_attribute(Tracer.current_span_ctx(), "messaging.message_id", message_id)
       
       # Perform actual publish
       result = Cybernetic.Core.Transport.AMQP.Publisher.publish(
@@ -51,10 +51,10 @@ defmodule Cybernetic.Core.Transport.AMQP.Tracing do
       
       case result do
         :ok ->
-          Span.set_status(:ok, "Published successfully")
+          Span.set_status(Tracer.current_span_ctx(), :ok, "Published successfully")
           :ok
         {:error, reason} ->
-          Span.set_status(:error, "Publish failed: #{inspect(reason)}")
+          Span.set_status(Tracer.current_span_ctx(), :error, "Publish failed: #{inspect(reason)}")
           {:error, reason}
       end
     end
