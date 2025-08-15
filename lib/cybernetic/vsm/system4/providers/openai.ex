@@ -47,11 +47,13 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   end
 
   @impl Cybernetic.VSM.System4.LLMProvider
-  def generate(prompt, opts \\ []) when is_binary(prompt) do
+  def generate(prompt_or_messages, opts \\ [])
+  
+  def generate(prompt, opts) when is_binary(prompt) do
     generate([%{"role" => "user", "content" => prompt}], opts)
   end
 
-  def generate(messages, opts \\ []) when is_list(messages) do
+  def generate(messages, opts) when is_list(messages) do
     start_time = System.monotonic_time(:millisecond)
     
     case make_openai_request(build_generate_payload(messages, opts)) do
