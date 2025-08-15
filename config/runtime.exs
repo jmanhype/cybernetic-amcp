@@ -64,6 +64,36 @@ config :cybernetic, Cybernetic.Core.Security.NonceBloom,
   bloom_error_rate: 0.001,
   persist_path: System.get_env("CYB_BLOOM_FILE") || "/tmp/cyb.bloom"
 
+# S4 Intelligence Multi-Provider Configuration
+config :cybernetic, :s4,
+  default_chain: [
+    anthropic: [model: "claude-3-5-sonnet-20241022"],
+    openai: [model: "gpt-4o"],
+    ollama: [model: "deepseek-r1:7b"]
+  ],
+  timeout_ms: 30_000,
+  health_check_interval: 60_000,
+  circuit_breaker_threshold: 5
+
+# Provider-specific configurations
+config :cybernetic, Cybernetic.VSM.System4.Providers.Anthropic,
+  api_key: {:system, "ANTHROPIC_API_KEY"},
+  model: "claude-3-5-sonnet-20241022",
+  max_tokens: 8192,
+  temperature: 0.1
+
+config :cybernetic, Cybernetic.VSM.System4.Providers.OpenAI,
+  api_key: {:system, "OPENAI_API_KEY"},
+  model: "gpt-4o",
+  max_tokens: 4096,
+  temperature: 0.1
+
+config :cybernetic, Cybernetic.VSM.System4.Providers.Ollama,
+  endpoint: System.get_env("OLLAMA_ENDPOINT") || "http://localhost:11434",
+  model: "deepseek-r1:7b",
+  max_tokens: 2048,
+  temperature: 0.1
+
 # Application configuration
 config :cybernetic,
   environment: config_env(),
