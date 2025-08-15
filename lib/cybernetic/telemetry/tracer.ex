@@ -65,7 +65,7 @@ defmodule Cybernetic.Telemetry.Tracer do
   """
   def create_test_trace(name \\ "test.trace") do
     # Use the lower-level API to ensure trace creation
-    tracer = :opentelemetry.get_tracer(:cybernetic, "0.1.0")
+    tracer = :opentelemetry.get_tracer(:cybernetic)
     
     # Start a span
     ctx = :otel_tracer.start_span(
