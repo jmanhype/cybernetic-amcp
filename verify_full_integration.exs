@@ -212,28 +212,22 @@ defmodule IntegrationVerifier do
   defp test_provider_routing do
     IO.puts("\n5️⃣ Testing Multi-Provider Routing...")
     try do
-      alias Cybernetic.VSM.System4.Service
+      alias Cybernetic.VSM.System4.{Service, Episode}
       
-      # Test routing for different task types
-      tasks = [
-        %{type: :reasoning, content: "Complex problem"},
-        %{type: :code_generation, content: "Write code"},
-        %{type: :general, content: "Simple question"}
+      # Test routing for different episode kinds
+      episodes = [
+        Episode.new(:root_cause, "Complex reasoning problem", "Analyze the root cause"),
+        Episode.new(:code_gen, "Code generation task", "Write a function"),
+        Episode.new(:optimization, "Simple optimization", "Optimize this query")
       ]
       
-      results = Enum.map(tasks, fn task ->
-        episode_id = "routing-#{System.unique_integer()}"
-        
-        case Service.route_episode(%{
-          id: episode_id,
-          task: task,
-          budget: %{max_tokens: 100}
-        }) do
+      results = Enum.map(episodes, fn episode ->
+        case Service.route_episode(episode) do
           {:ok, response} ->
-            IO.puts("   ✓ #{task.type} -> #{response.provider}")
+            IO.puts("   ✓ #{episode.kind} -> #{response.provider}")
             true
           {:error, reason} ->
-            IO.puts("   ℹ️  #{task.type}: #{reason}")
+            IO.puts("   ℹ️  #{episode.kind}: #{reason}")
             # Not failing the test for API-related errors
             true
         end
