@@ -117,4 +117,8 @@ defmodule Cybernetic.VSM.System5.SOPEngine do
   defp run_steps([%{"action" => "tag", "key" => k, "value" => val} | rest], input),
     do: run_steps(rest, Map.put(input, k, val))
   defp run_steps([unknown | _], _), do: {:error, {:unknown_step, unknown}}
+
+  defp generate_id do
+    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+  end
 end
