@@ -118,6 +118,7 @@ defmodule Cybernetic.Telemetry.Prometheus do
       description: "Number of processes"
     )
   ]
+  end
   
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
