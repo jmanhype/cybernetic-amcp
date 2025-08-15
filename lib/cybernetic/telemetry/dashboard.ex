@@ -385,7 +385,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
     ]
   end
   
-  defp generate_grafana_dashboard(state) do
+  defp generate_grafana_dashboard(_state) do
     %{
       dashboard: %{
         title: "Cybernetic VSM Dashboard",
