@@ -136,27 +136,29 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     end
   end
   
-  defp do_analyze_episode(provider, episode, context_opts) do
+  defp do_analyze_episode(episode, opts) do
+    model = get_model(opts)
+    
     :telemetry.execute(@telemetry ++ [:request], %{count: 1}, %{
-      model: provider.model,
-      episode_type: episode["type"]
+      model: model,
+      episode_kind: episode.kind
     })
     
-    prompt = build_analysis_prompt(provider, episode, context_opts)
+    prompt = build_analysis_prompt(episode, opts)
     
-    case make_anthropic_request(provider, prompt) do
+    case make_anthropic_request(prompt) do
       {:ok, response} ->
         :telemetry.execute(@telemetry ++ [:response], %{
           count: 1,
-          tokens: response["usage"]["output_tokens"]
-        }, %{model: provider.model})
+          tokens: get_in(response, ["usage", "output_tokens"]) || 0
+        }, %{model: model})
         
         parse_analysis_response(response)
         
       {:error, reason} = error ->
         :telemetry.execute(@telemetry ++ [:error], %{count: 1}, %{
           reason: inspect(reason),
-          model: provider.model
+          model: model
         })
         error
     end
