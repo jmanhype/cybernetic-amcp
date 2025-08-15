@@ -176,26 +176,95 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     headers = [
       {"Content-Type", "application/json"},
       {"Authorization", "Bearer #{provider.api_key}"},
-      {"anthropic-version", "2023-06-01"}
+      {"anthropic-version", "2023-06-01"},
+      {"anthropic-beta", "max-tokens-3-5-sonnet-2024-07-15"}
+    ]
+    
+    options = [
+      timeout: provider.timeout,
+      recv_timeout: provider.timeout,
+      hackney: [pool: :anthropic_pool]
     ]
     
     with {:ok, json} <- Jason.encode(payload),
-         {:ok, %{status: 200, body: body}} <- 
-           HTTPoison.post(url, json, headers, timeout: provider.timeout),
-         {:ok, response} <- Jason.decode(body) do
+         {:ok, response} <- make_request_with_retry(url, json, headers, options, 3) do
       {:ok, response}
     else
+      {:error, reason} ->
+        Logger.error("Anthropic API request failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+  
+  defp make_request_with_retry(url, json, headers, options, retries_left) when retries_left > 0 do
+    case HTTPoison.post(url, json, headers, options) do
+      {:ok, %{status: 200, body: body}} ->
+        case Jason.decode(body) do
+          {:ok, response} -> {:ok, response}
+          {:error, reason} -> {:error, {:json_decode_error, reason}}
+        end
+        
+      {:ok, %{status: 429} = response} ->
+        Logger.warn("Rate limited by Anthropic API, retrying in #{get_retry_delay(response)} ms")
+        :timer.sleep(get_retry_delay(response))
+        make_request_with_retry(url, json, headers, options, retries_left - 1)
+        
+      {:ok, %{status: status, body: body}} when status >= 500 ->
+        Logger.warn("Server error #{status}, retrying... (#{retries_left} retries left)")
+        :timer.sleep(exponential_backoff(4 - retries_left))
+        make_request_with_retry(url, json, headers, options, retries_left - 1)
+        
       {:ok, %{status: status, body: body}} ->
         Logger.error("Anthropic API error: #{status} - #{body}")
-        {:error, {:http_error, status, body}}
+        {:error, {:http_error, status, parse_error_body(body)}}
+        
+      {:error, %HTTPoison.Error{reason: :timeout}} ->
+        Logger.warn("Request timeout, retrying... (#{retries_left} retries left)")
+        make_request_with_retry(url, json, headers, options, retries_left - 1)
         
       {:error, %HTTPoison.Error{reason: reason}} ->
         Logger.error("HTTP request failed: #{inspect(reason)}")
         {:error, {:network_error, reason}}
-        
-      {:error, reason} ->
-        Logger.error("JSON encoding/decoding failed: #{inspect(reason)}")
-        {:error, {:json_error, reason}}
+    end
+  end
+  
+  defp make_request_with_retry(_url, _json, _headers, _options, 0) do
+    {:error, :max_retries_exceeded}
+  end
+  
+  defp get_retry_delay(response) do
+    case get_header(response.headers, "retry-after") do
+      nil -> 1000 # Default 1 second
+      retry_after -> 
+        case Integer.parse(retry_after) do
+          {seconds, ""} -> seconds * 1000
+          _ -> 1000
+        end
+    end
+  end
+  
+  defp get_header(headers, key) do
+    headers
+    |> Enum.find(fn {k, _v} -> String.downcase(k) == String.downcase(key) end)
+    |> case do
+      {_k, v} -> v
+      nil -> nil
+    end
+  end
+  
+  defp exponential_backoff(attempt) do
+    base_delay = 1000 # 1 second
+    max_delay = 30_000 # 30 seconds
+    delay = base_delay * :math.pow(2, attempt)
+    min(delay, max_delay) |> round()
+  end
+  
+  defp parse_error_body(body) do
+    case Jason.decode(body) do
+      {:ok, %{"error" => %{"message" => message}}} -> message
+      {:ok, %{"error" => error}} when is_binary(error) -> error
+      {:ok, parsed} -> inspect(parsed)
+      {:error, _} -> body
     end
   end
   
