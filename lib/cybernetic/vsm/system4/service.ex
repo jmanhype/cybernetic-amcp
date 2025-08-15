@@ -155,7 +155,7 @@ defmodule Cybernetic.VSM.System4.Service do
     provider_order = get_provider_order(task_type, state)
     
     # Check rate limits
-    case RateLimiter.check_rate(episode.id, :s4_llm) do
+    case RateLimiter.check(episode.id, :s4_llm) do
       :ok ->
         attempt_providers(episode, provider_order, budget, state)
       {:error, :rate_limited} ->
