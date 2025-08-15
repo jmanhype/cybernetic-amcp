@@ -69,6 +69,7 @@ config :cybernetic, :s4,
   default_chain: [
     anthropic: [model: "claude-3-5-sonnet-20241022"],
     openai: [model: "gpt-4o"],
+    together: [model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"],
     ollama: [model: "deepseek-r1:7b"]
   ],
   timeout_ms: 30_000,
@@ -92,6 +93,12 @@ config :cybernetic, Cybernetic.VSM.System4.Providers.Ollama,
   endpoint: System.get_env("OLLAMA_ENDPOINT") || "http://localhost:11434",
   model: "deepseek-r1:7b",
   max_tokens: 2048,
+  temperature: 0.1
+
+config :cybernetic, Cybernetic.VSM.System4.Providers.Together,
+  api_key: {:system, "TOGETHER_API_KEY"},
+  model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+  max_tokens: 4096,
   temperature: 0.1
 
 # Application configuration
