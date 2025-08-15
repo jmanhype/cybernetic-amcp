@@ -53,7 +53,7 @@ defmodule Cybernetic.MixProject do
       {:httpoison, "~> 2.2"},    # For Telegram bot
       
       # Redis client
-      {:redix, "~> 1.2"}
+      {:redix, "~> 1.2"},
       
       # Environment variable loading
       {:dotenv, "~> 3.1", only: [:dev, :test]},
