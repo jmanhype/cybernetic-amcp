@@ -310,7 +310,7 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
   
   defp create_test_episode(kind, attrs) do
     base_episode = %Episode{
-      id: UUID.uuid4(),
+      id: UUID.uuid4() |> to_string(),
       kind: kind,
       title: attrs[:title] || "Test Episode",
       description: attrs[:description] || "Test episode for S4 multi-provider integration",
