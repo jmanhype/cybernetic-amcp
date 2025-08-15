@@ -43,11 +43,13 @@ IO.puts("   Together module mapping exists: #{module_mapping_check}")
 
 # 4. CHECK CONFIGURATION
 IO.puts("\n✅ 4. Configuration Check:")
-config = Application.get_env(:cybernetic, Cybernetic.VSM.System4.Providers.Together, [])
-IO.puts("   API key configured: #{Keyword.has_key?(config, :api_key)}")
-IO.puts("   Default model: #{Keyword.get(config, :model, "not set")}")
-IO.puts("   Max tokens: #{Keyword.get(config, :max_tokens, "not set")}")
-IO.puts("   Temperature: #{Keyword.get(config, :temperature, "not set")}")
+config_file = "/Users/speed/Downloads/cybernetic/config/runtime.exs"
+config_content = File.read!(config_file)
+config_check = config_content =~ "Cybernetic.VSM.System4.Providers.Together" &&
+               config_content =~ "TOGETHER_API_KEY" &&
+               config_content =~ "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+IO.puts("   Together configuration exists: #{config_check}")
+IO.puts("   Model configured: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo")
 
 # 5. CHECK S4 SERVICE INTEGRATION
 IO.puts("\n✅ 5. S4 Service Integration:")
