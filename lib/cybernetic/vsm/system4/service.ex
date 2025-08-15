@@ -317,7 +317,7 @@ defmodule Cybernetic.VSM.System4.Service do
   end
 
   defp initialize_circuit_breakers do
-    providers = [:anthropic, :openai, :ollama]
+    providers = [:anthropic, :openai, :together, :ollama]
     
     Enum.into(providers, %{}, fn provider ->
       {provider, %{
@@ -344,6 +344,7 @@ defmodule Cybernetic.VSM.System4.Service do
       providers: %{
         anthropic: %{requests: 0, success: 0, error: 0},
         openai: %{requests: 0, success: 0, error: 0},
+        together: %{requests: 0, success: 0, error: 0},
         ollama: %{requests: 0, success: 0, error: 0}
       }
     }
