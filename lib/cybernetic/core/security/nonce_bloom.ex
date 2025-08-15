@@ -81,11 +81,14 @@ defmodule Cybernetic.Core.Security.NonceBloom do
          {:ok, :valid_timestamp} <- validate_timestamp(message["_timestamp"]),
          {:ok, :new} <- check_nonce(message["_nonce"]),
          {:ok, :valid_signature} <- validate_signature(message) do
-      {:ok, strip_security_headers(message)}
-    else
-      {:error, reason} ->
-        Logger.warning("Message validation failed: #{inspect(reason)}")
-        {:error, reason}
+        OTEL.add_event("validation_success", %{"nonce" => message["_nonce"]})
+        {:ok, strip_security_headers(message)}
+      else
+        {:error, reason} ->
+          OTEL.add_event("validation_failed", %{"reason" => inspect(reason)})
+          Logger.warning("Message validation failed: #{inspect(reason)}")
+          {:error, reason}
+      end
     end
   end
   
