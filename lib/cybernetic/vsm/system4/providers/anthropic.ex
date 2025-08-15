@@ -146,7 +146,8 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
       episode_kind: episode.kind
     })
     
-    prompt = build_analysis_prompt(episode, opts)
+    # Build prompt with optional conversation context
+    prompt = build_analysis_prompt_with_context(episode, opts)
     
     case make_anthropic_request(prompt) do
       {:ok, response} ->
