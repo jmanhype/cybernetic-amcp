@@ -405,7 +405,7 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
 
   defp add_usage_metrics({:ok, result}, latency) do
     case result do
-      %{tokens: %{input: input, output: output}} ->
+      %{tokens: %{input: _input, output: _output}} ->
         result = Map.update!(result, :usage, fn usage ->
           Map.merge(usage, %{latency_ms: latency})
         end)
