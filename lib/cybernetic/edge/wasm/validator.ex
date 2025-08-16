@@ -38,10 +38,18 @@ defmodule Cybernetic.Edge.WASM.Validator do
 
   # pick an implementation at runtime
   defp impl do
-    if Code.ensure_loaded?(Wasmex) do
-      Cybernetic.Edge.WASM.Validator.WasmexImpl
-    else
-      Cybernetic.Edge.WASM.Validator.NoopImpl
+    cond do
+      # Check if wasmtime CLI is available
+      System.find_executable("wasmtime") != nil ->
+        Cybernetic.Edge.WASM.Validator.PortImpl
+        
+      # Fallback to Wasmex if available
+      Code.ensure_loaded?(Wasmex) ->
+        Cybernetic.Edge.WASM.Validator.WasmexImpl
+        
+      # Default to no-op
+      true ->
+        Cybernetic.Edge.WASM.Validator.NoopImpl
     end
   end
 end
