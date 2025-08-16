@@ -70,12 +70,25 @@ defmodule Cybernetic.VSM.System3.ControlSupervisorTest do
     end
     
     test "executes restart intervention" do
+      # Start a dummy process to restart (not the test process!)
+      dummy_pid = spawn(fn -> 
+        receive do
+          :stop -> :ok
+        end
+      end)
+      
       assert {:ok, _id} = 
         ControlSupervisor.intervene(
-          {:process, self()},
+          {:process, dummy_pid},
           :restart_component,
           "Test restart"
         )
+        
+      # Give it time to process
+      Process.sleep(10)
+      
+      # The dummy process should have been killed
+      refute Process.alive?(dummy_pid)
     end
     
     test "executes throttle intervention" do
