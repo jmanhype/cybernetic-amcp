@@ -48,8 +48,8 @@ defmodule Cybernetic.VSM.System4.Router do
   @doc """
   Select provider chain based on episode kind and routing policy.
   """
-  def select_chain(%Episode{kind: :policy_review}, _opts) do
-    [:anthropic, :ollama]
+  def select_chain(%Episode{kind: :policy_review}, opts) do
+    Keyword.get(opts, :override_chain, [:anthropic, :ollama])
   end
 
   def select_chain(%Episode{kind: :code_gen}, _opts) do
