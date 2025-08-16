@@ -56,8 +56,9 @@ defmodule Cybernetic.MixProject do
       # Environment variable loading
       {:dotenv, "~> 3.1", only: [:dev, :test]},
       
-      # WASM runtime - using override for rustler compatibility
-      {:wasmex, "~> 0.9.2", override: true},
+      # WASM runtime - ready but conflicts with rustler 0.36.2
+      # Uncomment when rustler is downgraded or wasmex is updated
+      # {:wasmex, "~> 0.9.2"},
       
       # Testing
       {:stream_data, "~> 1.0", only: [:test, :dev]},
