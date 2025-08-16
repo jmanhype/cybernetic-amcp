@@ -377,7 +377,7 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     %{state | compliance_checks: new_compliance}
   end
   
-  defp check_policy_compliance(policy_id, policy, state) do
+  defp check_policy_compliance(_policy_id, policy, state) do
     # Check specific policy rules
     case policy.type do
       :resource_limit ->
