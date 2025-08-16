@@ -13,8 +13,8 @@ defmodule Cybernetic.Edge.WASM.Validator do
 
   @impl true
   def load(bytes, opts \\ []) when is_binary(bytes) do
-    # User opts should override defaults
-    impl().load(bytes, Keyword.merge(opts, @default_limits))
+    # Merge defaults first, then user opts override
+    impl().load(bytes, Keyword.merge(@default_limits, opts))
   end
 
   @impl true
@@ -22,8 +22,8 @@ defmodule Cybernetic.Edge.WASM.Validator do
     start = System.monotonic_time()
     :telemetry.execute(@telemetry ++ [:start], %{count: 1}, %{opts: opts})
 
-    # User opts should override defaults
-    res = impl().validate(instance, message, Keyword.merge(opts, @default_limits))
+    # Merge defaults first, then user opts override
+    res = impl().validate(instance, message, Keyword.merge(@default_limits, opts))
 
     :telemetry.execute(
       @telemetry ++ [:stop],
