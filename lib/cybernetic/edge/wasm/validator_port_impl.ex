@@ -50,7 +50,7 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
       "run",
       "--fuel", to_string(fuel),
       "--max-memory-size", "#{max_mem * 64 * 1024}",  # pages to bytes
-      "--dir", ".",  # No filesystem access
+      # No --dir flag means no filesystem access
       "--env", "WASM_ENV=secure",
       wasm_path,
       "--",
