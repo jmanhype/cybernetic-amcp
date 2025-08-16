@@ -37,7 +37,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
 
   def process_command(%{message: %{text: text, chat: %{id: chat_id}, from: from}}) do
     # Process the command synchronously for testing
-    {routing_key, _enhanced_payload} = classify_and_route(text, chat_id, from)
+    {routing_key, enhanced_payload} = classify_and_route(text, chat_id, from)
     
     # Emit VSM S1 telemetry event for the test collector
     :telemetry.execute([:vsm, :s1, :operation], %{count: 1}, %{
@@ -93,7 +93,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     Logger.info("S1 Telegram received from #{chat_id}: #{text}")
     
     # Classify and route message
-    {routing_key, _enhanced_payload} = classify_and_route(text, chat_id, from)
+    {routing_key, enhanced_payload} = classify_and_route(text, chat_id, from)
     
     # Publish to appropriate system via AMQP
     correlation_id = generate_correlation_id()
