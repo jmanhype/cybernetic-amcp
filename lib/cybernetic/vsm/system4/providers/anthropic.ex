@@ -342,7 +342,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   
   defp make_request_with_retry(url, json, headers, options, retries_left) when retries_left > 0 do
     case HTTPoison.post(url, json, headers, options) do
-      {:ok, %{status: 200, body: body}} ->
+      {:ok, %{status_code: 200, body: body}} ->
         case Jason.decode(body) do
           {:ok, response} -> {:ok, response}
           {:error, reason} -> {:error, {:json_decode_error, reason}}
