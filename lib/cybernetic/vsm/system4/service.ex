@@ -230,26 +230,24 @@ defmodule Cybernetic.VSM.System4.Service do
   
   defp attempt_providers(episode, [provider | rest], budget, state) do
     module = Map.get(state.providers, provider)
-    breaker = Map.get(state.circuit_breakers, provider, CircuitBreaker.new(to_string(provider)))
+    circuit_breaker_name = :"s4_provider_#{provider}"
     
-    case CircuitBreaker.call(breaker, fn ->
+    case AdaptiveCircuitBreaker.call(circuit_breaker_name, fn ->
       # Store context before calling provider
       Memory.store(episode.id, :system, "Routing to #{provider}", %{provider: provider})
       
       # Call the provider
       case module.analyze_episode(episode, budget: budget) do
         {:ok, result} -> 
-          {:ok, Map.put(result, :provider, provider)}
+          Map.put(result, :provider, provider)
         error -> 
-          error
+          throw(error)
       end
     end) do
-      {:ok, result, new_breaker} ->
-        # Update circuit breaker state
-        _new_state = put_in(state.circuit_breakers[provider], new_breaker)
+      {:ok, result} ->
         {:ok, result}
         
-      {:error, :circuit_open} ->
+      {:error, :circuit_breaker_open} ->
         Logger.warning("Circuit breaker open for #{provider}, trying next")
         attempt_providers(episode, rest, budget, state)
         
