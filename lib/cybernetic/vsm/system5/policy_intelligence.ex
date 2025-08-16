@@ -231,29 +231,31 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
     end
   end
   
-  defp build_policy_prompt(analysis_type, context) do
-    base_episode = %{
-      "id" => "policy-analysis-#{System.unique_integer()}",
-      "type" => "policy_#{analysis_type}",
-      "severity" => "medium",
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "details" => context
-    }
-    
-    # Enhance the episode with analysis-specific context
-    case analysis_type do
-      :policy_evolution ->
-        Map.put(base_episode, "analysis_focus", "policy_evolution_patterns")
-        
-      :governance_recommendation ->
-        Map.put(base_episode, "analysis_focus", "governance_and_compliance")
-        
-      :meta_policy_evolution ->
-        Map.put(base_episode, "analysis_focus", "organizational_learning")
-        
-      :system_alignment ->
-        Map.put(base_episode, "analysis_focus", "vsm_system_coherence")
+  defp build_policy_episode(analysis_type, context) do
+    kind = case analysis_type do
+      :policy_evolution -> :policy_review
+      :governance_recommendation -> :compliance_check
+      :meta_policy_evolution -> :optimization
+      :system_alignment -> :policy_review
     end
+    
+    title = case analysis_type do
+      :policy_evolution -> "Policy Evolution Analysis"
+      :governance_recommendation -> "Governance Recommendation"
+      :meta_policy_evolution -> "Meta-Policy Evolution"
+      :system_alignment -> "System Alignment Assessment"
+    end
+    
+    Episode.new(
+      kind,
+      title,
+      context,
+      priority: :normal,
+      metadata: %{
+        analysis_type: analysis_type,
+        source_system: :s5
+      }
+    )
   end
   
   # Fallback implementations when Claude is not available
