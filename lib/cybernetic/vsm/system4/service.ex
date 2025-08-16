@@ -12,7 +12,6 @@ defmodule Cybernetic.VSM.System4.Service do
   alias Cybernetic.Transport.CircuitBreaker
   
   @default_timeout 30_000
-  @telemetry [:cybernetic, :s4, :service]
   
   # Provider selection rules
   @provider_rules %{
