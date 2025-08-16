@@ -4,6 +4,10 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
   
   This avoids rustler dependency conflicts while providing full WASM security.
   Requires wasmtime CLI to be installed: https://wasmtime.dev/
+  
+  ## Temp File Management
+  The WASM bytecode is written to a temp file for wasmtime to execute.
+  Call `cleanup/1` when done with the validator to remove the temp file.
   """
   @behaviour Cybernetic.Edge.WASM.Behaviour
   require Logger
@@ -21,8 +25,6 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
       # Verify WASM is valid
       case System.cmd(wasmtime_path(), ["compile", temp_path]) do
         {_, 0} ->
-          # Store cleanup handler
-          Process.flag(:trap_exit, true)
           {:ok, %{
             wasm_path: temp_path,
             fuel_limit: Keyword.get(opts, :fuel, 5_000_000),
@@ -38,6 +40,16 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
         {:error, {:load_failed, e}}
     end
   end
+  
+  @doc """
+  Clean up the temporary WASM file.
+  Call this when done with the validator instance.
+  """
+  def cleanup(%{wasm_path: path}) when is_binary(path) do
+    File.rm(path)
+    :ok
+  end
+  def cleanup(_), do: :ok
   
   @impl true
   def validate(validator_state, message, opts) do
