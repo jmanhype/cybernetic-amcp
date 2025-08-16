@@ -935,7 +935,7 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   # Placeholder functions - implement based on actual system
   defp query_system_status(_system), do: {:ok, %{metrics: %{}, errors: []}}
   defp determine_health_status(_status), do: :healthy
-  defp check_resource_limit_policy(policy, state) do
+  defp check_resource_limit_policy(policy, _state) do
     violations = []
     
     # Check CPU usage against policy
