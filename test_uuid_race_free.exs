@@ -150,7 +150,7 @@ defmodule TestUUIDRaceFree do
     end
     
     # Check state - should have cleared transition_ref
-    state = Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.get_state(:test_cleanup_cb)
+    _state = Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.get_state(:test_cleanup_cb)
     
     # Second call should be able to attempt transition again
     # (after another timeout)
@@ -195,7 +195,7 @@ defmodule TestUUIDRaceFree do
       end
       
       # Spawn 100 concurrent calls
-      tasks = for i <- 1..100 do
+      tasks = for _i <- 1..100 do
         Task.async(fn ->
           Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.call(
             :test_perf_cb,
