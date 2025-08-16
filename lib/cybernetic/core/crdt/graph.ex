@@ -145,8 +145,8 @@ defmodule Cybernetic.Core.CRDT.Graph do
 
   def handle_call(:get_state, _from, state) do
     # Export current ETS state
-    nodes = :ets.match_object(@table, {{:node, :"_"}, :"_"})
-    edges = :ets.match_object(@table, {{:edge, :"_"}, :"_"})
+    nodes = :ets.match_object(@table, {{:node, :_}, :_})
+    edges = :ets.match_object(@table, {{:edge, :_}, :_})
     
     export = %{
       nodes: nodes,
