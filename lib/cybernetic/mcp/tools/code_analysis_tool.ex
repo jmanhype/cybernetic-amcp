@@ -94,6 +94,8 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
     code = Map.get(params, "code") || read_file(params["file_path"])
     language = Map.get(params, "language", detect_language(code))
     
+    IO.puts("Language detected/provided: #{language}")
+    
     %{
       language: language,
       metrics: analyze_metrics(code, language),
