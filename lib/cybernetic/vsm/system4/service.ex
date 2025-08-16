@@ -9,7 +9,7 @@ defmodule Cybernetic.VSM.System4.Service do
   alias Cybernetic.VSM.System4.{Episode, Memory}
   alias Cybernetic.VSM.System4.Providers.{Anthropic, OpenAI, Together, Ollama, Null}
   alias Cybernetic.Core.Security.RateLimiter
-  alias Cybernetic.Transport.CircuitBreaker
+  alias Cybernetic.Core.Resilience.AdaptiveCircuitBreaker
   
   @default_timeout 30_000
   
