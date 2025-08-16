@@ -1050,13 +1050,17 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   # Helper functions for resource monitoring
   defp get_current_cpu_usage do
     # In a real system, this would query actual CPU metrics
-    # For testing with impossibly low limits (0.0001), return a value that exceeds it
-    0.1 # 10% CPU usage
+    # For testing: return realistic value with slight randomness
+    base_usage = 0.1  # 10% base CPU usage
+    variation = :rand.uniform() * 0.05  # +/- 5% variation
+    Float.round(base_usage + variation - 0.025, 3)
   end
   
   defp get_current_memory_usage do
     # In a real system, this would query actual memory metrics
-    # Return memory usage as a percentage (0.0 to 1.0)
-    0.2 # 20% memory usage
+    # For testing: return realistic value with slight randomness
+    base_usage = 0.2  # 20% base memory usage
+    variation = :rand.uniform() * 0.1  # +/- 10% variation
+    Float.round(base_usage + variation - 0.05, 3)
   end
 end
