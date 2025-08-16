@@ -10,26 +10,28 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   alias AMQP.{Exchange, Queue}
   alias Cybernetic.Core.Transport.AMQP.Connection
   
-  @exchanges [
-    # Core event bus for all systems
-    {:events, :topic, durable: true, auto_delete: false},
-    
-    # Telemetry data from all components
-    {:telemetry, :topic, durable: true, auto_delete: false},
-    
-    # MCP tool invocations and results
-    {:mcp, :direct, durable: true, auto_delete: false},
-    
-    # VSM inter-system communication
-    {:vsm, :topic, durable: true, auto_delete: false},
-    
-    # Priority messages (algedonic channel)
-    {:priority, :direct, durable: true, auto_delete: false},
-    
-    # Dead letter exchange for failed messages (use vsm.dlx to match existing)
-    {:dlx, :fanout, durable: true, auto_delete: false},
-    {"vsm.dlx", :fanout, durable: true, auto_delete: false}
-  ]
+  # @exchanges attribute was unused - commented out for now
+  # Static exchanges are managed in config/runtime.exs instead
+  # @exchanges [
+  #   # Core event bus for all systems
+  #   {:events, :topic, durable: true, auto_delete: false},
+  #   
+  #   # Telemetry data from all components
+  #   {:telemetry, :topic, durable: true, auto_delete: false},
+  #   
+  #   # MCP tool invocations and results
+  #   {:mcp, :direct, durable: true, auto_delete: false},
+  #   
+  #   # VSM inter-system communication
+  #   {:vsm, :topic, durable: true, auto_delete: false},
+  #   
+  #   # Priority messages (algedonic channel)
+  #   {:priority, :direct, durable: true, auto_delete: false},
+  #   
+  #   # Dead letter exchange for failed messages (use vsm.dlx to match existing)
+  #   {:dlx, :fanout, durable: true, auto_delete: false},
+  #   {"vsm.dlx", :fanout, durable: true, auto_delete: false}
+  # ]
   
   @queues [
     # VSM System queues - match existing configuration
