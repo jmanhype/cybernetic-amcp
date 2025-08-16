@@ -97,7 +97,7 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     event = %{
       name: event_name,
       measurements: measurements,
-      metadata: metadata,
+      metadata: _metadata,
       timestamp: System.monotonic_time(:millisecond)
     }
     
