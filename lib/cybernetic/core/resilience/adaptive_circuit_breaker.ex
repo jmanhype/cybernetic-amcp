@@ -322,7 +322,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     %{state |
       state: :half_open,
       success_count: 0,
-      recovery_timer: cancel_recovery_timer(state.recovery_timer)
+      recovery_timer: cancel_recovery_timer(state.recovery_timer),
+      transitioning: false
     }
   end
 
