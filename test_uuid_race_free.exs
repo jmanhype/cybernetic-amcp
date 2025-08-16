@@ -115,8 +115,8 @@ defmodule TestUUIDRaceFree do
       IO.puts("  ✗ Some attempts lost - race condition detected!")
     end
     
-    # Cleanup tasks
-    Enum.each(tasks, &Task.await(&1, 0))
+    # Cleanup tasks properly
+    Enum.each(tasks, &Task.await(&1, 1000))
     Process.exit(cb, :normal)
   end
   
