@@ -313,7 +313,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     %{state |
       state: :open,
       success_count: 0,
-      recovery_timer: recovery_timer
+      recovery_timer: recovery_timer,
+      transitioning: false  # Clear transitioning flag when opening
     }
   end
 
