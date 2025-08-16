@@ -289,13 +289,14 @@ defmodule DogfoodTest do
     results = for i <- 1..10 do
       result = AdaptiveCircuitBreaker.call(:workflow_breaker, workflow_task, 5000)
       
-      case result do
+      msg = case result do
         {:ok, op_id} ->
-          Logger.info("    ✓ Workflow #{i} completed: #{op_id}")
+          "    ✓ Workflow #{i} completed: #{op_id}"
         {:error, reason} ->
-          Logger.info("    ✗ Workflow #{i} failed: #{inspect(reason)}")
+          "    ✗ Workflow #{i} failed: #{inspect(reason)}"
       end
       
+      Logger.info(msg)
       Process.sleep(50)
       result
     end
