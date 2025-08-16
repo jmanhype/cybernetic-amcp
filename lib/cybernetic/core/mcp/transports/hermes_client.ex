@@ -123,7 +123,7 @@ defmodule Cybernetic.MCP.HermesClient do
     execute_tool(tool_name, params, [])
   end
   
-  def execute_tool(tool_name, params, opts) do
+  def execute_tool(tool_name, _params, opts) do
     timeout = Keyword.get(opts, :timeout, 30_000)
     
     # Direct implementation since call_tool always returns {:error, :not_implemented}
