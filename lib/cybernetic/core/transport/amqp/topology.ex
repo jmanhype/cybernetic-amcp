@@ -223,7 +223,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
             {:ok, _} ->
               Logger.debug("Queue already exists: #{name}")
               {:cont, :ok}
-            error ->
+            _error ->
               Logger.warning("Queue exists with different args: #{name}")
               {:cont, :ok}  # Continue anyway since queue exists
           end
