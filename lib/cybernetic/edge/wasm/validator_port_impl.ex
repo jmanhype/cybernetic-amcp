@@ -82,11 +82,12 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
       line: 1024
     ])
     
-    # Set timeout
-    Process.send_after(self(), {:kill_port, port}, timeout)
+    # Set timeout with a reference to verify sender
+    timer_ref = make_ref()
+    timer = Process.send_after(self(), {:kill_port, port, timer_ref}, timeout)
     
     start_time = System.monotonic_time(:microsecond)
-    result = collect_port_output(port, timeout)
+    result = collect_port_output(port, timeout, timer_ref, timer)
     duration = System.monotonic_time(:microsecond) - start_time
     
     :telemetry.execute(
@@ -107,29 +108,50 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
   
   # Private functions
   
-  defp collect_port_output(port, timeout) do
-    collect_port_output(port, timeout, [])
+  defp collect_port_output(port, timeout, timer_ref, timer) do
+    collect_port_output(port, timeout, timer_ref, timer, [])
   end
   
-  defp collect_port_output(port, timeout, acc) do
+  defp collect_port_output(port, timeout, timer_ref, timer, acc) do
     receive do
       {^port, {:data, data}} ->
-        collect_port_output(port, timeout, [data | acc])
+        collect_port_output(port, timeout, timer_ref, timer, [data | acc])
         
       {^port, {:exit_status, 0}} ->
+        # Cancel timer since we completed successfully
+        Process.cancel_timer(timer)
+        # Flush any pending timer message
+        receive do
+          {:kill_port, ^port, ^timer_ref} -> :ok
+        after
+          0 -> :ok
+        end
         output = acc |> Enum.reverse() |> IO.iodata_to_binary()
         {:ok, output}
         
       {^port, {:exit_status, code}} ->
+        Process.cancel_timer(timer)
+        # Flush any pending timer message
+        receive do
+          {:kill_port, ^port, ^timer_ref} -> :ok
+        after
+          0 -> :ok
+        end
         {:error, {:wasm_exit, code}}
         
-      {:kill_port, ^port} ->
-        Port.close(port)
+      {:kill_port, ^port, ^timer_ref} ->
+        # Only close if this is our timer message
+        if Port.info(port) != nil do
+          Port.close(port)
+        end
         {:error, :timeout}
         
     after
       timeout ->
-        Port.close(port)
+        Process.cancel_timer(timer)
+        if Port.info(port) != nil do
+          Port.close(port)
+        end
         {:error, :timeout}
     end
   end
