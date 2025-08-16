@@ -365,7 +365,7 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
     end
   end
 
-  defp extract_usage_info(response, latency \\ 0) do
+  defp extract_usage_info(_response, latency \\ 0) do
     # Ollama is local, so no cost
     %{
       cost_usd: 0.0,
