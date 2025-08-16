@@ -86,8 +86,9 @@ defmodule Cybernetic.MCP.HermesClient do
           {:ok, %{result: %{"tools" => tools}}} = list_tools()
           {:ok, %{status: :healthy, tools_count: length(tools)}}
         
-        {:error, reason} ->
-          {:error, %{status: :unhealthy, reason: reason}}
+        # ping() only returns :pong
+        # {:error, reason} ->
+        #   {:error, %{status: :unhealthy, reason: reason}}
       end
     rescue
       error ->
