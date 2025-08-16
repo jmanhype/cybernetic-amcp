@@ -74,8 +74,7 @@ defmodule TestS4CircuitBreaker do
     result2 = Cybernetic.VSM.System4.Service.route_episode(episode2)
     IO.puts("  Recovery result: #{inspect(result2)}")
     
-    # Cleanup
-    Process.exit(service_pid, :normal)
+    # Note: Don't cleanup the service as it's managed by the application
     
     IO.puts("\n✅ S4 Circuit Breaker Integration Tests Complete!")
   end
