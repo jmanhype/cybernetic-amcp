@@ -318,7 +318,6 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
       source_system: :s1,
       created_at: DateTime.utc_now(),
       context: attrs[:context] || %{},
-      data: attrs[:data] || %{},
       metadata: attrs[:metadata] || %{test: true}
     }
     
