@@ -60,7 +60,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       failure_history: :queue.new(),
       success_history: :queue.new(),
       adaptive_threshold: Keyword.get(opts, :failure_threshold, @default_failure_threshold),
-      recovery_timer: nil
+      recovery_timer: nil,
+      transitioning: false
     }
     
     # Attach to telemetry for system health monitoring
