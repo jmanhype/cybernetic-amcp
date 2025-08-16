@@ -62,7 +62,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
         setup_exchanges(channel)
         Confirm.select(channel)
         new_state = %{state | channel: channel}
-        handle_call({:publish, exchange, routing_key, payload, opts}, _from, new_state)
+        handle_call({:publish, exchange, routing_key, payload, opts}, nil, new_state)
       
       {:error, _} ->
         {:reply, {:error, :no_channel}, state}
