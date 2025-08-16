@@ -83,6 +83,11 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     end
   end
 
+  @doc "Telemetry handler for MCP ready events"
+  def handle_mcp_ready(_event, measurements, _metadata, parent) do
+    send(parent, {:mcp_ready, measurements.count})
+  end
+
   @doc "Get tool details"
   def get_tool(name) do
     case :ets.lookup(@registry_table, name) do
