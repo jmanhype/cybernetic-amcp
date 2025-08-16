@@ -98,7 +98,7 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
     :telemetry.execute(
       @telemetry ++ [:executed],
       %{duration_us: duration},
-      %{result: elem(result, 0)}
+      %{result: if is_tuple(result), do: elem(result, 0), else: :unknown}
     )
     
     case result do
