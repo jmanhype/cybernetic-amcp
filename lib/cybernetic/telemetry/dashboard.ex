@@ -200,7 +200,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
     end)
   end
   
-  defp handle_telemetry_event(event_name, measurements, metadata, _config) do
+  def handle_telemetry_event(event_name, measurements, metadata, _config) do
     send(__MODULE__, {:telemetry_event, event_name, measurements, metadata})
   end
   
