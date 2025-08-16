@@ -34,6 +34,11 @@ defmodule Cybernetic.Application do
       {Cybernetic.Core.Transport.AMQP.Topology, []},
       Cybernetic.Core.Transport.AMQP.Publisher,
       
+      # Performance Optimizations
+      {Cybernetic.Core.Transport.AMQP.PublisherPool, []},
+      {Cybernetic.Core.CRDT.Cache, []},
+      {Cybernetic.Telemetry.BatchedCollector, []},
+      
       # MCP Registry  
       Cybernetic.Core.MCP.Hermes.Registry,
       
