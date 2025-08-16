@@ -146,4 +146,9 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
       _ -> "Unknown error: #{code}"
     end
   end
+  
+  # Find wasmtime at runtime, not compile time
+  defp wasmtime_path do
+    System.find_executable("wasmtime") || "/usr/local/bin/wasmtime"
+  end
 end
