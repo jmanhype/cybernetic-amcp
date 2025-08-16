@@ -58,7 +58,7 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
     ]
     
     # Run with timeout using Port
-    port = Port.open({:spawn_executable, @wasmtime_path}, [
+    port = Port.open({:spawn_executable, wasmtime_path()}, [
       :binary,
       :exit_status,
       args: args,
