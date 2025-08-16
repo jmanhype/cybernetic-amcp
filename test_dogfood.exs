@@ -319,7 +319,7 @@ defmodule DogfoodTest do
     case Cache.get("current_operation") do
       {:ok, op} ->
         Logger.info("\n  • Final cached operation: #{inspect(op)}")
-      _ ->
+      :miss ->
         Logger.info("\n  • No operation in cache")
     end
     
