@@ -110,7 +110,7 @@ defmodule Cybernetic.VSM.Recursive.Supervisor do
   """
   def scale_child(child_id, new_quotas) do
     case :ets.lookup(:vsm_children, child_id) do
-      [{^child_id, pid, old_quotas, spec}] ->
+      [{^child_id, pid, old_quotas, _spec}] ->
         merged_quotas = Map.merge(old_quotas, new_quotas)
         
         case validate_quotas(merged_quotas) do
