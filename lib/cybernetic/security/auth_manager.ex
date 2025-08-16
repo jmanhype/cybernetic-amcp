@@ -12,8 +12,8 @@ defmodule Cybernetic.Security.AuthManager do
   
   use GenServer
   require Logger
-  alias Cybernetic.Security.Crypto
-  alias Cybernetic.Core.CRDT.ContextGraph
+  # alias Cybernetic.Security.Crypto  # Not used yet
+  # alias Cybernetic.Core.CRDT.ContextGraph  # Not used yet
   
   @type role :: :admin | :operator | :viewer | :agent | :system
   @type permission :: atom()
@@ -30,9 +30,9 @@ defmodule Cybernetic.Security.AuthManager do
   
   # JWT configuration
   @jwt_secret System.get_env("JWT_SECRET", "dev-secret-change-in-production")
-  @jwt_algorithm :HS256
+  # @jwt_algorithm :HS256  # Not used yet
   @jwt_ttl_seconds 3600 # 1 hour
-  @refresh_ttl_seconds 86400 # 24 hours
+  # @refresh_ttl_seconds 86400 # 24 hours  # Not used yet
   
   # Role definitions with permissions
   @role_permissions %{
@@ -389,10 +389,10 @@ defmodule Cybernetic.Security.AuthManager do
     end)
     
     # Clean up old refresh tokens (older than 30 days)
-    cutoff = DateTime.add(now, -30 * 24 * 3600, :second)
+    _cutoff = DateTime.add(now, -30 * 24 * 3600, :second)
     
     :ets.tab2list(:refresh_tokens)
-    |> Enum.each(fn {token, _user_id} ->
+    |> Enum.each(fn {_token, _user_id} ->
       # In production, store creation time with refresh tokens
       # For now, we'll keep them until explicitly revoked
       :ok
@@ -466,7 +466,8 @@ defmodule Cybernetic.Security.AuthManager do
     Base.encode64(payload, padding: false) <> "." <> signature
   end
   
-  defp verify_jwt(token) do
+  # Unused function - kept for future JWT validation needs
+  # defp verify_jwt(token) do
     case String.split(token, ".") do
       [payload_b64, signature_b64] ->
         case Base.decode64(payload_b64, padding: false) do
@@ -490,12 +491,12 @@ defmodule Cybernetic.Security.AuthManager do
             {:error, :invalid_format}
         end
       
-      _ ->
-        {:error, :invalid_format}
-    end
-  end
+      # _ ->
+        # {:error, :invalid_format}
+    # end
+  # end
   
-  defp generate_refresh_token(user) do
+  defp generate_refresh_token(_user) do
     :crypto.strong_rand_bytes(32) |> Base.encode64()
   end
   
@@ -576,10 +577,11 @@ defmodule Cybernetic.Security.AuthManager do
     }
   end
   
-  defp get_caller_ip do
-    # In production, extract from connection metadata
-    "127.0.0.1"
-  end
+  # Unused function - kept for future IP tracking needs
+  # defp get_caller_ip do
+  #   # In production, extract from connection metadata
+  #   "127.0.0.1"
+  # end
   
   defp load_api_keys do
     # Load any pre-configured API keys from environment
