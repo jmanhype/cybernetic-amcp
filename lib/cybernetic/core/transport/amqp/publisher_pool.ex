@@ -148,7 +148,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
     |> Enum.map(&elem(&1, 1))
   end
 
-  defp get_available_channel(%{channels: []} = state) do
+  defp get_available_channel(%{channels: []}) do
     {:error, :no_channels}
   end
 
