@@ -169,10 +169,16 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
     duration = System.monotonic_time(:microsecond) - start_time
     
     # Emit batch telemetry
+    throughput = if duration > 0 do
+      length(messages) / (duration / 1_000_000)
+    else
+      0.0
+    end
+    
     :telemetry.execute([:cyb, :amqp, :batch_publish], %{
       count: length(messages),
       duration_us: duration,
-      throughput: length(messages) / (duration / 1_000_000)
+      throughput: throughput
     }, %{batch_size: length(messages)})
     
     {successes, errors} = Enum.split_with(results, &match?(:ok, &1))
