@@ -179,20 +179,38 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   defp build_analysis_prompt_with_context(episode, opts) do
     base_prompt = build_analysis_prompt(episode, opts)
     
-    # Add conversation context if available
+    # Add conversation or metadata context if available
     case Keyword.get(opts, :context) do
       nil ->
         base_prompt
         
-      context_episodes ->
-        # Inject context into the messages
-        context_messages = format_context_messages(context_episodes)
-        existing_messages = base_prompt["messages"]
-        
-        # Prepend context messages before the current request
-        updated_messages = context_messages ++ existing_messages
-        
-        Map.put(base_prompt, "messages", updated_messages)
+      context when is_list(context) ->
+        case context do
+          # Check if it's conversation context (list of episodes with messages)
+          [%{messages: _} | _] = context_episodes ->
+            # Inject context into the messages
+            context_messages = format_context_messages(context_episodes)
+            existing_messages = base_prompt["messages"]
+            
+            # Prepend context messages before the current request
+            updated_messages = context_messages ++ existing_messages
+            
+            Map.put(base_prompt, "messages", updated_messages)
+            
+          # Handle metadata context (keyword list)
+          context_metadata ->
+            # Add metadata context to the user message content
+            existing_messages = base_prompt["messages"]
+            [user_message | other_messages] = existing_messages
+            
+            context_text = "\n\nAdditional Context:\n#{Jason.encode!(context_metadata, pretty: true)}"
+            updated_user_content = user_message["content"] <> context_text
+            
+            updated_user_message = Map.put(user_message, "content", updated_user_content)
+            updated_messages = [updated_user_message | other_messages]
+            
+            Map.put(base_prompt, "messages", updated_messages)
+        end
     end
   end
   
