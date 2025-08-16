@@ -6,7 +6,6 @@ defmodule Cybernetic.Core.Transport.RetryHelper do
   require Logger
   
   @default_max_retries 5
-  @poison_routing_key "dlq.poison"
   
   @doc """
   Wraps a function with retry logic and poison routing.
