@@ -254,7 +254,7 @@ defmodule Cybernetic.Health.Collector do
       :telemetry.attach(
         "collector-#{inspect(event)}",
         event,
-        &handle_telemetry_event/4,
+        {__MODULE__, :handle_telemetry_event, []},
         nil
       )
     end)
