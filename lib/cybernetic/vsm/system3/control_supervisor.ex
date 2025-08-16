@@ -432,6 +432,78 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     end
   end
   
+  # ========== PRIVATE FUNCTIONS - INTERVENTIONS ==========
+  
+  defp execute_intervention(intervention, state) do
+    Logger.info("Executing intervention: #{inspect(intervention)}")
+    
+    case intervention.action do
+      :restart_component ->
+        # Send restart message to target
+        case intervention.target do
+          {:system, num} ->
+            send_to_system(num, :restart)
+            {:ok, :restarted}
+          
+          {:process, pid} ->
+            if Process.alive?(pid) do
+              Process.exit(pid, :restart)
+              {:ok, :restarted}
+            else
+              {:error, :process_not_alive}
+            end
+          
+          _ ->
+            {:error, :unknown_target}
+        end
+      
+      :throttle_input ->
+        # Throttle input to target system
+        case intervention.target do
+          {:system, num} ->
+            send_to_system(num, {:throttle, 0.5})
+            {:ok, :throttled}
+          
+          _ ->
+            {:error, :cannot_throttle}
+        end
+      
+      :force_rebalance ->
+        # Force S2 to rebalance resources
+        send_to_s2(:force_rebalance, intervention.reason)
+        {:ok, :rebalancing}
+      
+      :emergency_stop ->
+        # Emergency stop of component
+        case intervention.target do
+          {:system, num} ->
+            send_to_system(num, :emergency_stop)
+            {:ok, :stopped}
+          
+          _ ->
+            {:error, :cannot_stop}
+        end
+      
+      _ ->
+        {:error, :unknown_action}
+    end
+  end
+  
+  defp send_to_system(system_num, message) do
+    routing_key = "vsm.system#{system_num}.control"
+    
+    Publisher.publish(
+      "vsm_exchange",
+      routing_key,
+      %{
+        type: "control_directive",
+        message: message,
+        from: :system3,
+        timestamp: DateTime.utc_now()
+      }
+    )
+  end
+  
   # ========== PRIVATE FUNCTIONS - INITIALIZATION ==========
   
   defp init_health_monitors do
