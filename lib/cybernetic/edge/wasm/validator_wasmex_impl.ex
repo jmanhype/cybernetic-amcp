@@ -73,7 +73,7 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
         duration_us: validation_time,
         fuel_consumed: fuel_consumed
       },
-      %{result: if is_tuple(result), do: elem(result, 0), else: :unknown}
+      %{result: (if is_tuple(result), do: elem(result, 0), else: :unknown)}
     )
     
     case result do
