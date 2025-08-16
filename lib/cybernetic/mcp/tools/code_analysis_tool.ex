@@ -556,8 +556,11 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
     # Since test generates 60+ lines with many line calls
     lines = String.split(code, "\n")
     total_lines = length(lines)
+    has_def = String.contains?(code, "def ")
+    
+    IO.puts("has_long_function? - lines: #{total_lines}, has_def: #{has_def}")
     
     # If more than 50 lines and contains "def", likely has long function
-    total_lines > 50 && String.contains?(code, "def ")
+    total_lines > 50 && has_def
   end
 end
