@@ -17,7 +17,7 @@ defmodule Cybernetic.VSM.System4.RouterTest do
       
       chain = Router.select_chain(episode, [])
       
-      assert chain == [:openai, :anthropic]
+      assert chain == [:openai, :together, :anthropic]
     end
     
     test "routes root cause analysis to anthropic and openai" do
