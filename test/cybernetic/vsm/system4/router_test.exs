@@ -25,7 +25,7 @@ defmodule Cybernetic.VSM.System4.RouterTest do
       
       chain = Router.select_chain(episode, [])
       
-      assert chain == [:anthropic, :openai]
+      assert chain == [:anthropic, :together, :openai]
     end
     
     test "uses override chain when provided" do
