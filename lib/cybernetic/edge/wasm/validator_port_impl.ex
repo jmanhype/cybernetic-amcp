@@ -49,8 +49,13 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
   Call this when done with the validator instance.
   """
   def cleanup(%{wasm_path: path}) when is_binary(path) do
-    File.rm(path)
-    :ok
+    case File.rm(path) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok  # Already deleted
+      {:error, reason} = error ->
+        Logger.warning("Failed to cleanup WASM temp file #{path}: #{inspect(reason)}")
+        error
+    end
   end
   def cleanup(_), do: :ok
   
