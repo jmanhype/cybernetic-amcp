@@ -6,9 +6,6 @@ defmodule Cybernetic.Transport.Backpressure do
   use GenStage
   require Logger
 
-  @default_max_demand 100
-  @default_min_demand 10
-
   def init(opts) do
     # This module is primarily a collection of GenStage implementations
     # The main entry point is build_pipeline/1
