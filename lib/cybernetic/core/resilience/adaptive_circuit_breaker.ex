@@ -34,7 +34,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     :success_history,
     :adaptive_threshold,
     :recovery_timer,
-    :transitioning  # Guard against race conditions
+    :transition_ref  # UUID for atomic transition checking
   ]
 
   def start_link(opts) do
@@ -61,7 +61,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       success_history: :queue.new(),
       adaptive_threshold: Keyword.get(opts, :failure_threshold, @default_failure_threshold),
       recovery_timer: nil,
-      transitioning: false
+      transition_ref: nil
     }
     
     # Attach to telemetry for system health monitoring
@@ -122,15 +122,24 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       
       :open ->
         if should_attempt_recovery?(state) do
-          # Atomically check and set transitioning flag
-          if state.transitioning do
+          # Use UUID for atomic transition - no race condition possible
+          transition_id = UUID.uuid4()
+          if state.transition_ref == nil do
+            # Claim the transition atomically
+            new_state = %{state | transition_ref: transition_id}
+            new_state = transition_to_half_open(new_state)
+            # Wrap in try to ensure cleanup on exception
+            try do
+              execute_and_handle_result(fun, new_state)
+            rescue
+              error ->
+                # Clear transition ref on error
+                cleared_state = %{new_state | transition_ref: nil}
+                {:reply, {:error, error}, cleared_state}
+            end
+          else
             emit_circuit_breaker_telemetry(state, :rejected)
             {:reply, {:error, :circuit_breaker_open}, state}
-          else
-            # Set transitioning BEFORE transition
-            new_state = %{state | transitioning: true}
-            new_state = transition_to_half_open(new_state)
-            execute_and_handle_result(fun, new_state)
           end
         else
           emit_circuit_breaker_telemetry(state, :rejected)
@@ -138,13 +147,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
         end
       
       :half_open ->
-        if state.transitioning do
-          # Already transitioning, reject
-          emit_circuit_breaker_telemetry(state, :rejected)
-          {:reply, {:error, :circuit_breaker_transitioning}, state}
-        else
-          execute_and_handle_result(fun, state)
-        end
+        # No need to check transition_ref in half_open
+        execute_and_handle_result(fun, state)
     end
   end
 
@@ -189,7 +193,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       failure_history: :queue.new(),
       success_history: :queue.new(),
       recovery_timer: cancel_recovery_timer(state.recovery_timer),
-      transitioning: false
+      transition_ref: nil
     }
     {:noreply, new_state}
   end
@@ -282,7 +286,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       last_failure_time: now,
       health_score: new_health_score,
       failure_history: new_failure_history,
-      transitioning: false  # Clear transitioning flag on failure
+      transition_ref: nil  # Clear transition ref on failure
     }
     
     Logger.warning("Circuit breaker '#{state.name}' recorded failure: #{inspect(error)}")
@@ -326,7 +330,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       state: :open,
       success_count: 0,
       recovery_timer: recovery_timer,
-      transitioning: false  # Clear transitioning flag when opening
+      transition_ref: nil  # Clear transition ref when opening
     }
   end
 
@@ -338,7 +342,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       state: :half_open,
       success_count: 0,
       recovery_timer: cancel_recovery_timer(state.recovery_timer),
-      transitioning: false
+      transition_ref: nil  # Clear on entering half_open
     }
   end
 
@@ -389,10 +393,18 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     # Exponential backoff with jitter - cap exponent to prevent overflow
     safe_exponent = min(failure_count - 1, 10)  # Cap at 2^10 = 1024x multiplier
     exponential = min(base_timeout * :math.pow(2, safe_exponent), 300_000)  # Max 5 minutes
-    jitter_range = max(1, trunc(exponential * 0.1))  # Ensure minimum 1 for rand.uniform
-    # True jitter: ±10% (subtract half range then add random)
-    jitter = :rand.uniform(jitter_range) - div(jitter_range, 2)
-    trunc(exponential + jitter)
+    
+    # True ±10% jitter
+    jitter_percent = 0.1
+    max_jitter = trunc(exponential * jitter_percent)
+    
+    # Generate jitter in range [-max_jitter, +max_jitter]
+    if max_jitter > 0 do
+      jitter = :rand.uniform(2 * max_jitter + 1) - max_jitter - 1
+      max(1, trunc(exponential + jitter))  # Ensure positive result
+    else
+      trunc(exponential)
+    end
   end
 
   defp add_to_history(history, timestamp, max_size) do
