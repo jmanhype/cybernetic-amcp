@@ -216,6 +216,9 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     # Re-evaluate compliance with new policy
     new_state = perform_compliance_checks(new_state)
     
+    # Enforce policies if violations found
+    new_state = enforce_policies(new_state)
+    
     Logger.info("Updated policy #{policy_id}")
     
     {:noreply, new_state}
