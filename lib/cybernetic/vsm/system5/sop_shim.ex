@@ -31,15 +31,9 @@ defmodule Cybernetic.VSM.System5.SOPShim do
           convert_suggestion_to_sop(episode, s4_result, suggestion)
         end)
         
-        case store_sops(sops) do
-          {:ok, sop_ids} ->
-            Logger.info("Created #{length(sop_ids)} SOPs from S4 analysis of episode #{episode.id}")
-            {:ok, sop_ids}
-            
-          {:error, reason} ->
-            Logger.error("Failed to store SOPs from S4 analysis: #{inspect(reason)}")
-            {:error, reason}
-        end
+        {:ok, sop_ids} = store_sops(sops)
+        Logger.info("Created #{length(sop_ids)} SOPs from S4 analysis of episode #{episode.id}")
+        {:ok, sop_ids}
     end
   end
 
