@@ -257,11 +257,18 @@ defmodule Cybernetic.VSM.System4.Service do
     candidates
     |> Enum.filter(fn p -> Map.has_key?(state.providers, p) end)
     |> Enum.sort_by(fn p -> 
-      breaker = Map.get(state.circuit_breakers, p, CircuitBreaker.new(to_string(p)))
-      case breaker.state do
-        :closed -> 0  # Prefer closed (working) breakers
-        :half_open -> 1
-        :open -> 2
+      circuit_breaker_name = :"s4_provider_#{p}"
+      breaker_state = try do
+        AdaptiveCircuitBreaker.get_state(circuit_breaker_name)
+      rescue
+        _ -> %{state: :closed, health_score: 1.0}
+      end
+      
+      # Sort by circuit breaker state and health score
+      case breaker_state.state do
+        :closed -> {0, 1.0 - breaker_state.health_score}  # Prefer closed with high health
+        :half_open -> {1, 1.0 - breaker_state.health_score}
+        :open -> {2, 1.0 - breaker_state.health_score}
       end
     end)
   end
