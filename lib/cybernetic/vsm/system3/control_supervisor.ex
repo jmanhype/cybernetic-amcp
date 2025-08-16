@@ -1007,7 +1007,24 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   defp check_security_policy(_policy, _state), do: []
   defp check_sla_policy(_policy, _state), do: []
   defp calculate_compliance_rate(_violations, _policies), do: 1.0
-  defp create_policy_intervention(_violation), do: %{id: "int_1", action: :monitor, target: :system1}
+  defp create_policy_intervention(violation) do
+    %{
+      id: generate_intervention_id(),
+      target: {:system, 1}, # Default to System 1 for resource violations
+      action: determine_policy_action(violation),
+      reason: {:policy_violation, violation.type},
+      started_at: DateTime.utc_now(),
+      status: :active
+    }
+  end
+  
+  defp determine_policy_action(violation) do
+    case violation.type do
+      :resource_limit when violation.severity == :critical -> :throttle_input
+      :resource_limit -> :monitor
+      _ -> :monitor
+    end
+  end
   defp redirect_traffic(_target), do: {:ok, :redirected}
   defp scale_resources(_target), do: {:ok, :scaled}
   defp emergency_stop(_target), do: {:ok, :stopped}
