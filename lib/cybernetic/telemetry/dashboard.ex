@@ -174,7 +174,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       :telemetry.attach(
         "dashboard-#{Enum.join(event, "-")}",
         event,
-        &handle_telemetry_event/4,
+        {__MODULE__, :handle_telemetry_event, []},
         nil
       )
     end)
@@ -184,7 +184,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       :telemetry.attach(
         "dashboard-provider-#{Enum.join(event, "-")}",
         event,
-        &handle_telemetry_event/4,
+        {__MODULE__, :handle_telemetry_event, []},
         nil
       )
     end)
@@ -194,7 +194,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       :telemetry.attach(
         "dashboard-transport-#{Enum.join(event, "-")}",
         event,
-        &handle_telemetry_event/4,
+        {__MODULE__, :handle_telemetry_event, []},
         nil
       )
     end)
