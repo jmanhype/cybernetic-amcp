@@ -3,6 +3,11 @@ defmodule Cybernetic.Core.CRDT.Cache do
   High-performance caching layer for CRDT operations.
   Provides LRU caching with TTL for frequently accessed semantic triples
   and query results to reduce CRDT computation overhead.
+  
+  NOTE: Current implementation uses lists for access_order tracking which
+  results in O(n) operations for cache hits/updates. For high-frequency
+  scenarios (>10k ops/sec), consider upgrading to a more efficient LRU
+  implementation using ordered_set ETS tables.
   """
   use GenServer
   require Logger
