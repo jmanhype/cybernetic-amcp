@@ -37,6 +37,9 @@ defmodule Cybernetic.Application do
       # MCP Registry  
       Cybernetic.Core.MCP.Hermes.Registry,
       
+      # Circuit Breaker Registry
+      {Registry, keys: :unique, name: Cybernetic.CircuitBreakerRegistry},
+      
       # Goldrush Integration
       {Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic, []},
       Cybernetic.Core.Goldrush.Bridge,
