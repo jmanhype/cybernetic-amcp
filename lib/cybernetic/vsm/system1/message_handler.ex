@@ -223,7 +223,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     "coord_#{:os.system_time(:millisecond)}_#{:rand.uniform(1000)}"
   end
 
-  defp record_algedonic_event(type, payload, meta) do
+  defp record_algedonic_event(type, payload, _meta) do
     # Skip algedonic recording during tests to prevent feedback loops
     if Application.get_env(:cybernetic, :test_mode, false) do
       :ok
