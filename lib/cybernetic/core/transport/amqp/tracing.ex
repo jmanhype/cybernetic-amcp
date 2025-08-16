@@ -51,10 +51,10 @@ defmodule Cybernetic.Core.Transport.AMQP.Tracing do
       
       case result do
         :ok ->
-          Span.set_status(Tracer.current_span_ctx(), :ok, "Published successfully")
+          Span.set_status(Tracer.current_span_ctx(), OpenTelemetry.status(:ok))
           :ok
         {:error, reason} ->
-          Span.set_status(Tracer.current_span_ctx(), :error, "Publish failed: #{inspect(reason)}")
+          Span.set_status(Tracer.current_span_ctx(), OpenTelemetry.status(:error))
           {:error, reason}
       end
     end
