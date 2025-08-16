@@ -7,10 +7,6 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
   alias Cybernetic.Core.Transport.AMQP.Publisher
   require Logger
 
-  @s4_routing_key "s4.reason"
-  @s3_routing_key "s3.policy"
-  @s5_routing_key "s5.identity"
-
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
