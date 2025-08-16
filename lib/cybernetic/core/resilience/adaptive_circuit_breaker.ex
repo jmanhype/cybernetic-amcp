@@ -33,7 +33,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     :failure_history,
     :success_history,
     :adaptive_threshold,
-    :recovery_timer
+    :recovery_timer,
+    :transitioning  # Guard against race conditions
   ]
 
   def start_link(opts) do
