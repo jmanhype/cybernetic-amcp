@@ -8,7 +8,6 @@ defmodule Cybernetic.Core.CRDT.GraphQueries do
   alias Cybernetic.Core.Transport.AMQP.Publisher
   require Logger
   
-  @query_timeout 5_000
   @max_depth 10
   
   defmodule Query do
