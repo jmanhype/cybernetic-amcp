@@ -47,7 +47,7 @@ defmodule Cybernetic.Health.WebSocket do
     :telemetry.attach(
       "websocket-health",
       [:cybernetic, :health, :status_change],
-      &handle_health_event/4,
+      {__MODULE__, :handle_health_event, []},
       nil
     )
     
@@ -146,7 +146,7 @@ defmodule Cybernetic.Health.WebSocket do
     send(client_pid, {:websocket_push, message})
   end
   
-  defp handle_health_event(_event_name, measurements, metadata, _config) do
+  def handle_health_event(_event_name, measurements, metadata, _config) do
     send(__MODULE__, {:health_event, %{measurements: measurements, metadata: metadata}})
   end
 end
