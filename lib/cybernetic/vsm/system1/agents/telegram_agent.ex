@@ -84,6 +84,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
       command: text,
       chat_id: chat_id,
       routing_key: routing_key,
+      payload: enhanced_payload,
       response: "Command processed successfully"
     }}
   end
