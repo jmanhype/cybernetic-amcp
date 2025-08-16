@@ -79,7 +79,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
   end
 
   def handle_call({:query, criteria}, _from, %{crdt: crdt} = state) do
-    all_triples = DeltaCrdt.read(crdt) |> Map.values()
+    all_triples = DeltaCrdt.to_map(crdt) |> Map.values()
     
     # Filter triples based on criteria
     filtered_triples = filter_triples(all_triples, normalize_criteria(criteria))
