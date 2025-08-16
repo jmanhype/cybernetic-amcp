@@ -182,7 +182,10 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
 
   def handle_cast({:force_state, new_state_value}, state) do
     Logger.info("Circuit breaker '#{state.name}' forced to state: #{new_state_value}")
-    new_state = %{state | state: new_state_value}
+    new_state = %{state | 
+      state: new_state_value,
+      transition_ref: nil  # Clear transition ref when forcing state
+    }
     {:noreply, new_state}
   end
 
