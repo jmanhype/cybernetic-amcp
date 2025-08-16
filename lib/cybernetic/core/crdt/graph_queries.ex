@@ -5,7 +5,6 @@ defmodule Cybernetic.Core.CRDT.GraphQueries do
   """
   
   alias Cybernetic.Core.CRDT.Graph
-  alias Cybernetic.Core.Transport.AMQP.Publisher
   require Logger
   
   @max_depth 10
