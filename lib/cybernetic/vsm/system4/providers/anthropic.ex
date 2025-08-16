@@ -76,9 +76,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   end
 
   @impl Cybernetic.VSM.System4.LLMProvider
-  def analyze_episode(episode, opts \\ [])
-  
-  # 3-arity version for tests with provider/context
+  # 3-arity version for tests with provider/context  
   def analyze_episode(_provider, episode, context_or_opts) when is_map(context_or_opts) do
     analyze_episode(episode, [])
   end
@@ -87,7 +85,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     analyze_episode(episode, opts)
   end
   
-  def analyze_episode(episode, opts) do
+  def analyze_episode(episode, opts \\ []) do
     start_time = System.monotonic_time(:millisecond)
     
     # OpenTelemetry.Tracer.with_span "anthropic.analyze_episode", %{
