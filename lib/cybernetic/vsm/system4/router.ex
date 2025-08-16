@@ -48,41 +48,23 @@ defmodule Cybernetic.VSM.System4.Router do
   @doc """
   Select provider chain based on episode kind and routing policy.
   """
-  def select_chain(%Episode{kind: :policy_review}, opts) do
-    Keyword.get(opts, :override_chain, [:anthropic, :ollama])
+  def select_chain(%Episode{} = episode, opts) do
+    # Check for override chain first
+    case Keyword.get(opts, :override_chain) do
+      nil -> select_chain_by_kind(episode.kind)
+      override_chain -> override_chain
+    end
   end
 
-  def select_chain(%Episode{kind: :code_gen}, _opts) do
-    [:openai, :together, :anthropic]  # Together has good code models
-  end
-
-  def select_chain(%Episode{kind: :root_cause}, _opts) do
-    [:anthropic, :together, :openai]  # Together for fast analysis
-  end
-
-  def select_chain(%Episode{kind: :anomaly_detection}, _opts) do
-    [:together, :anthropic, :ollama]  # Together for rapid detection
-  end
-
-  def select_chain(%Episode{kind: :compliance_check}, _opts) do
-    [:anthropic, :ollama]
-  end
-
-  def select_chain(%Episode{kind: :optimization}, _opts) do
-    [:openai, :together, :anthropic]  # Together has optimization models
-  end
-
-  def select_chain(%Episode{kind: :prediction}, _opts) do
-    [:together, :anthropic, :openai]  # Together for fast predictions
-  end
-
-  def select_chain(%Episode{kind: :classification}, _opts) do
-    [:together, :openai, :ollama]  # Together is good at classification
-  end
-
-  def select_chain(_episode, opts) do
-    Keyword.get(opts, :override_chain, default_chain())
-  end
+  defp select_chain_by_kind(:policy_review), do: [:anthropic, :ollama]
+  defp select_chain_by_kind(:code_gen), do: [:openai, :together, :anthropic]
+  defp select_chain_by_kind(:root_cause), do: [:anthropic, :together, :openai]
+  defp select_chain_by_kind(:anomaly_detection), do: [:together, :anthropic, :ollama]
+  defp select_chain_by_kind(:compliance_check), do: [:anthropic, :ollama]
+  defp select_chain_by_kind(:optimization), do: [:openai, :together, :anthropic]
+  defp select_chain_by_kind(:prediction), do: [:together, :anthropic, :openai]
+  defp select_chain_by_kind(:classification), do: [:together, :openai, :ollama]
+  defp select_chain_by_kind(_), do: default_chain()
 
   @doc """
   Get default provider chain from configuration.
