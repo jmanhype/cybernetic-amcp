@@ -124,7 +124,8 @@ defmodule Cybernetic.VSM.System4.Service do
   
   @impl true
   def handle_call(:health_check, _from, state) do
-    health = Enum.reduce(state.providers, %{}, fn {name, provider}, acc ->
+    # Check provider health
+    provider_health = Enum.reduce(state.providers, %{}, fn {name, provider}, acc ->
       status = try do
         provider.health_check()
       rescue
@@ -133,7 +134,30 @@ defmodule Cybernetic.VSM.System4.Service do
       Map.put(acc, name, status)
     end)
     
-    {:reply, %{status: :up, providers: health}, state}
+    # Check circuit breaker status
+    breaker_health = Enum.reduce(state.providers, %{}, fn {name, _}, acc ->
+      circuit_breaker_name = :"s4_provider_#{name}"
+      status = try do
+        cb_state = AdaptiveCircuitBreaker.get_state(circuit_breaker_name)
+        %{
+          state: cb_state.state,
+          failure_count: cb_state.failure_count,
+          success_count: cb_state.success_count,
+          health_score: cb_state.health_score
+        }
+      rescue
+        _ -> %{state: :unknown}
+      end
+      Map.put(acc, name, status)
+    end)
+    
+    health = %{
+      status: :up,
+      providers: provider_health,
+      circuit_breakers: breaker_health
+    }
+    
+    {:reply, health, state}
   end
   
   # Private Functions
