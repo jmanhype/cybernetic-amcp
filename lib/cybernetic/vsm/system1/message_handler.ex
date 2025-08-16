@@ -55,7 +55,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
 
   defp handle_status_update(payload, meta) do
     # Handle status updates from other systems
-    Logger.debug("System1: Status update from #{Map.get(meta, :source_node, 'unknown')}")
+    Logger.debug("System1: Status update from #{Map.get(meta, :source_node, "unknown")}")
     
     # Update local state or forward to monitoring
     broadcast_status_internally(payload, meta)
