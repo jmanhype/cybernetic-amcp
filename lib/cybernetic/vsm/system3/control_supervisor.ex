@@ -45,7 +45,7 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   end
   
   @impl true
-  def init(opts) do
+  def init(_opts) do
     Logger.info("System 3 Control Supervisor initializing...")
     
     # Subscribe to relevant AMQP channels
