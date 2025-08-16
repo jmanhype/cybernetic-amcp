@@ -45,22 +45,22 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     end
   end
 
-  defp handle_analyze(payload, meta) do
+  defp handle_analyze(payload, _meta) do
     Logger.info("System4: Analyzing data - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_learn(payload, meta) do
+  defp handle_learn(payload, _meta) do
     Logger.debug("System4: Learning from data - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_predict(payload, meta) do
+  defp handle_predict(payload, _meta) do
     Logger.info("System4: Making prediction - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_intelligence_update(payload, meta) do
+  defp handle_intelligence_update(payload, _meta) do
     Logger.debug("System4: Intelligence update - #{inspect(payload)}")
     :ok
   end
@@ -81,7 +81,7 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     end
   end
 
-  defp handle_default(payload, meta) do
+  defp handle_default(payload, _meta) do
     Logger.debug("System4: Default handler - #{inspect(payload)}")
     :ok
   end
