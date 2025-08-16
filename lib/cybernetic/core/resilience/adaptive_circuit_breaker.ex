@@ -413,7 +413,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     :telemetry.attach(
       {:circuit_breaker_health, name},
       [:cybernetic, :system, :health],
-      fn _event, measurements, metadata, _config ->
+      fn _event, measurements, _metadata, _config ->
         GenServer.cast(via_name(name), {:health_update, measurements})
       end,
       nil
