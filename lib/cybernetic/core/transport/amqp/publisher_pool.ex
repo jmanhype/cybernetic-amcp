@@ -236,9 +236,11 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
     end
     
     # Add trace context for OpenTelemetry
-    trace_headers = case :otel_propagator_text_map.inject([]) do
-      [] -> []
-      trace_ctx -> [{"x-trace-context", Jason.encode!(trace_ctx)}]
+    trace_headers = try do
+      case :otel_propagator_text_map.inject([]) do
+        [] -> []
+        trace_ctx -> [{"x-trace-context", Jason.encode!(trace_ctx)}]
+      end
     rescue
       _ -> []  # Graceful fallback if OpenTelemetry not available
     end
