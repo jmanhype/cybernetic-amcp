@@ -14,7 +14,7 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   
   use GenServer
   require Logger
-  alias Cybernetic.Security.AuditLogger
+  # AuditLogger removed temporarily
   alias Cybernetic.VSM.System3.{Monitor, Auditor, Intervener, PolicyEnforcer}
   alias Cybernetic.Core.Transport.AMQP.Publisher
   
@@ -155,8 +155,8 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     # Send audit results to S4 for analysis
     send_to_s4(:audit_results, audit_results)
     
-    # Log audit completion
-    AuditLogger.log(:system3_audit, audit_results)
+    # Log audit completion (AuditLogger disabled for now)
+    Logger.info("System3 audit completed: #{inspect(Map.keys(audit_results))}")
     
     # Schedule next audit
     Process.send_after(self(), :audit_cycle, @audit_interval)
@@ -262,11 +262,8 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
           state: :intervening
         }
         
-        # Log intervention
-        AuditLogger.log(:intervention_started, %{
-          intervention: intervention,
-          result: result
-        })
+        # Log intervention (AuditLogger disabled for now)
+        Logger.info("Intervention started: #{intervention.id} - #{result}")
         
         {:reply, {:ok, intervention.id}, new_state}
       
