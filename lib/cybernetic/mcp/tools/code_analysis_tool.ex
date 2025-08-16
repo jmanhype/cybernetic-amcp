@@ -192,7 +192,7 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
     complexity = calculate_cyclomatic_complexity(code)
     
     index = 171 - 5.2 * :math.log(loc) - 0.23 * complexity
-    Float.round(max(0, min(100, index)), 2)
+    Float.round(max(0.0, min(100.0, index / 1.0)), 2)
   end
   
   defp calculate_technical_debt(code) do
@@ -200,7 +200,7 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
     loc = length(String.split(code, "\n"))
     issues = length(detect_anti_patterns(code, "elixir"))
     
-    Float.round(issues / max(loc, 1) * 100, 2)
+    Float.round(issues / max(loc, 1) * 100.0, 2)
   end
   
   # ========== PATTERN DETECTION ==========
@@ -507,7 +507,7 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
       operands: operands,
       vocabulary: operators + operands,
       length: operators + operands,
-      difficulty: Float.round(operators / max(operands, 1), 2)
+      difficulty: Float.round(operators / max(operands, 1) * 1.0, 2)
     }
   end
   
