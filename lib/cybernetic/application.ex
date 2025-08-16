@@ -7,9 +7,18 @@ defmodule Cybernetic.Application do
   require Logger
 
   def start(_type, _args) do
-    # Initialize OpenTelemetry
-    Cybernetic.Telemetry.OTEL.setup()
-    Logger.info("OpenTelemetry initialized for service: cybernetic")
+    # Validate critical configuration before starting
+    with :ok <- validate_configuration() do
+      # Initialize OpenTelemetry with error handling
+      try do
+        Cybernetic.Telemetry.OTEL.setup()
+        Logger.info("OpenTelemetry initialized for service: cybernetic")
+      rescue
+        e ->
+          Logger.warning("OpenTelemetry initialization failed: #{inspect(e)}")
+          # Continue without OpenTelemetry for now
+          :ok
+      end
     
     children = [
       {Cluster.Supervisor, [Application.get_env(:libcluster, :topologies, []), [name: Cybernetic.ClusterSupervisor]]},
