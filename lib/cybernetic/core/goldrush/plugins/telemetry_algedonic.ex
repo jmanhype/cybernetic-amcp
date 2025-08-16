@@ -37,7 +37,7 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
   # Plugin Behaviour Implementation
   
   @impl true
-  def init(opts) do
+  def init_plugin(opts) do
     {:ok, opts}
   end
   
