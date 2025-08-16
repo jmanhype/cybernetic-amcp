@@ -6,7 +6,7 @@ defmodule Cybernetic.Core.Plugins.Behaviour do
   @doc """
   Initialize the plugin with options.
   """
-  @callback init(opts :: keyword()) :: {:ok, any()} | {:error, term()}
+  @callback init_plugin(opts :: keyword()) :: {:ok, any()} | {:error, term()}
 
   @doc """
   Activate the plugin with configuration.
