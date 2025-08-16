@@ -123,24 +123,27 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       
       :open ->
         if should_attempt_recovery?(state) do
-          # Use UUID for atomic transition - no race condition possible
-          transition_id = UUID.uuid4()
-          if state.transition_ref == nil do
-            # Claim the transition atomically
-            new_state = %{state | transition_ref: transition_id}
-            new_state = transition_to_half_open(new_state)
-            # Wrap in try to ensure cleanup on exception
-            try do
-              execute_and_handle_result(fun, new_state)
-            rescue
-              error ->
-                # Clear transition ref on error
-                cleared_state = %{new_state | transition_ref: nil}
-                {:reply, {:error, error}, cleared_state}
-            end
-          else
-            emit_circuit_breaker_telemetry(state, :rejected)
-            {:reply, {:error, :circuit_breaker_open}, state}
+          case state.transition_ref do
+            nil ->
+              # Atomically claim transition by setting UUID and transitioning
+              transition_id = UUID.uuid4()
+              new_state = %{state | transition_ref: transition_id}
+              new_state = transition_to_half_open(new_state)
+              
+              # Execute function and handle result
+              try do
+                execute_and_handle_result(fun, new_state)
+              rescue
+                error ->
+                  # Clear transition ref on error
+                  cleared_state = %{new_state | transition_ref: nil}
+                  {:reply, {:error, error}, cleared_state}
+              end
+            
+            _existing_transition_id ->
+              # Another request is already transitioning
+              emit_circuit_breaker_telemetry(state, :rejected)
+              {:reply, {:error, :circuit_breaker_open}, state}
           end
         else
           emit_circuit_breaker_telemetry(state, :rejected)
