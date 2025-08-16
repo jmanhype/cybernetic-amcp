@@ -223,8 +223,8 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   
   defp analyze_with_claude(state, analysis_type, context) do
     if state.anthropic_provider do
-      prompt = build_policy_prompt(analysis_type, context)
-      Anthropic.analyze_episode(state.anthropic_provider, prompt, [])
+      episode = build_policy_episode(analysis_type, context)
+      Anthropic.analyze_episode(episode, [])
     else
       {:error, :no_claude}
     end
