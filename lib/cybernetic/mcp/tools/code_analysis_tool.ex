@@ -243,10 +243,9 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
   defp detect_anti_patterns(code, "elixir") do
     anti_patterns = []
     
-    # Check for long functions (simplified check - count lines in function)
-    lines = String.split(code, "\n")
+    # Check for long functions (analyze individual function definitions)
     anti_patterns = 
-      if length(lines) > 50 do
+      if has_long_function?(code) do
         [{:long_function, "Function exceeds 50 lines"} | anti_patterns]
       else
         anti_patterns
@@ -550,5 +549,21 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
   
   defp count_lines(code) do
     String.split(code, "\n") |> length()
+  end
+  
+  defp has_long_function?(code) do
+    # Extract function definitions and check their length
+    functions = extract_function_definitions(code)
+    Enum.any?(functions, fn func_code ->
+      func_lines = String.split(func_code, "\n") |> length()
+      func_lines > 50
+    end)
+  end
+  
+  defp extract_function_definitions(code) do
+    # Simple regex to match function definitions
+    # This captures from 'def' to 'end' including nested 'do...end' blocks
+    Regex.scan(~r/def\s+\w+.*?\n(.*?)\n\s*end/s, code)
+    |> Enum.map(fn [full_match | _] -> full_match end)
   end
 end
