@@ -82,6 +82,7 @@ defmodule Cybernetic.Core.Resilience.CircuitBreakerAlerts do
     {:noreply, new_state}
   end
   
+  @impl true
   def terminate(_reason, _state) do
     # Detach telemetry handlers
     :telemetry.detach(:circuit_breaker_alerts)
