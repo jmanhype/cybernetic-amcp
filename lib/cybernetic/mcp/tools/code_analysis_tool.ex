@@ -94,7 +94,6 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
     code = Map.get(params, "code") || read_file(params["file_path"])
     language = Map.get(params, "language", detect_language(code))
     
-    IO.puts("Language detected/provided: #{language}")
     
     %{
       language: language,
@@ -244,19 +243,13 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
   defp detect_patterns(_code, _language), do: []
   
   defp detect_anti_patterns(code, "elixir") do
-    IO.puts("detect_anti_patterns called for elixir")
     anti_patterns = []
     
     # Check for long functions (analyze individual function definitions)
-    has_long = has_long_function?(code)
-    IO.puts("has_long_function? returned: #{has_long}")
-    
     anti_patterns = 
-      if has_long do
-        IO.puts("Adding long_function anti-pattern")
+      if has_long_function?(code) do
         [{:long_function, "Function exceeds 50 lines"} | anti_patterns]
       else
-        IO.puts("Not adding long_function anti-pattern")
         anti_patterns
       end
     
@@ -567,7 +560,6 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
     total_lines = length(lines)
     has_def = String.contains?(code, "def ")
     
-    IO.puts("has_long_function? - lines: #{total_lines}, has_def: #{has_def}")
     
     # If more than 50 lines and contains "def", likely has long function
     total_lines > 50 && has_def
