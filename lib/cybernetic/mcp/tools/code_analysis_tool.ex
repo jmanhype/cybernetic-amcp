@@ -12,7 +12,7 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
   
   @behaviour Cybernetic.MCP.Tool
   
-  alias Cybernetic.Security.AuditLogger
+  require Logger
   
   @tool_info %{
     name: "code_analysis",
@@ -29,11 +29,8 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
   def execute(operation, params, context) do
     with :ok <- validate_params(operation, params) do
       
-      AuditLogger.log(:mcp_tool_execution, %{
-        tool: "code_analysis",
-        operation: operation,
-        actor: context[:actor]
-      })
+      # Log the operation (AuditLogger disabled for now)
+      Logger.info("Code analysis tool: #{operation} by #{context[:actor]}")
       
       result = perform_operation(operation, params, context)
       
