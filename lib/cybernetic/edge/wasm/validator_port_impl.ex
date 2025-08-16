@@ -7,7 +7,9 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
   
   ## Temp File Management
   The WASM bytecode is written to a temp file for wasmtime to execute.
-  Call `cleanup/1` when done with the validator to remove the temp file.
+  **IMPORTANT**: You MUST call `cleanup/1` when done with the validator to remove 
+  the temp file, or temp files will accumulate. Consider using a process to manage
+  the validator lifecycle and call cleanup in the terminate callback.
   """
   @behaviour Cybernetic.Edge.WASM.Behaviour
   require Logger
