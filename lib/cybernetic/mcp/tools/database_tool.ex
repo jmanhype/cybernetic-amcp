@@ -11,7 +11,8 @@ defmodule Cybernetic.MCP.Tools.DatabaseTool do
   
   @behaviour Cybernetic.MCP.Tool
   
-  alias Cybernetic.Security.{AuthManager, AuditLogger}
+  alias Cybernetic.Security.AuthManager
+  require Logger
   
   @tool_info %{
     name: "database",
@@ -30,12 +31,8 @@ defmodule Cybernetic.MCP.Tools.DatabaseTool do
     with :ok <- authorize_operation(operation, context),
          :ok <- validate_params(operation, params) do
       
-      # Log the operation
-      AuditLogger.log(:mcp_tool_execution, %{
-        tool: "database",
-        operation: operation,
-        actor: context[:actor]
-      })
+      # Log the operation (AuditLogger disabled for now)
+      Logger.info("Database tool: #{operation} by #{context[:actor]}")
       
       # Execute the operation
       result = perform_operation(operation, params, context)
