@@ -413,17 +413,34 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
       :critical ->
         # Immediate intervention
         intervention = create_policy_intervention(violation)
-        execute_intervention(intervention, state)
-        state
+        case execute_intervention(intervention, state) do
+          {:ok, _result} ->
+            # Track active intervention and change state
+            new_interventions = Map.put(
+              state.active_interventions,
+              intervention.id,
+              intervention
+            )
+            
+            %{state | 
+              active_interventions: new_interventions,
+              state: :critical
+            }
+          
+          {:error, _reason} ->
+            # Still change state to indicate violation detected
+            %{state | state: :critical}
+        end
       
       :high ->
-        # Trigger circuit breaker
-        trigger_circuit_breaker(violation.component, state)
+        # Trigger circuit breaker and change state
+        new_state = trigger_circuit_breaker(violation.component, state)
+        %{new_state | state: :warning}
       
       :medium ->
         # Send warning to S2 for coordination adjustment
         send_to_s2(:policy_warning, violation)
-        state
+        %{state | state: :warning}
       
       :low ->
         # Log and monitor
