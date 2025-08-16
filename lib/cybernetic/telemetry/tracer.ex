@@ -40,7 +40,7 @@ defmodule Cybernetic.Telemetry.Tracer do
   def force_flush do
     try do
       # Get the tracer provider
-      tracer_provider = :opentelemetry.get_tracer_provider()
+      tracer_provider = :opentelemetry.get_tracer()
       
       # Force flush through the provider
       case tracer_provider do
