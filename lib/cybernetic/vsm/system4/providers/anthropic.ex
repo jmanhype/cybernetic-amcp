@@ -348,7 +348,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
           {:error, reason} -> {:error, {:json_decode_error, reason}}
         end
         
-      {:ok, %{status: 429} = response} ->
+      {:ok, %{status_code: 429} = response} ->
         Logger.warning("Rate limited by Anthropic API, retrying in #{get_retry_delay(response)} ms")
         :timer.sleep(get_retry_delay(response))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
