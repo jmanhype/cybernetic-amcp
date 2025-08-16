@@ -138,7 +138,7 @@ defmodule Cybernetic.Core.CRDT.Cache do
       expired_entries: expired_entries,
       max_size: state.max_size,
       ttl_ms: state.ttl_ms,
-      cache_size_bytes: estimate_cache_memory_usage(state.cache)
+      cache_size_bytes: map_size(state.cache) * 64  # Rough estimate without expensive calculation
     }
     
     {:reply, stats, state}
