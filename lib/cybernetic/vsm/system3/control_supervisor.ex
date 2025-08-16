@@ -14,8 +14,6 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   
   use GenServer
   require Logger
-  # AuditLogger removed temporarily
-  alias Cybernetic.VSM.System3.{Monitor, Auditor, Intervener, PolicyEnforcer}
   alias Cybernetic.Core.Transport.AMQP.Publisher
   
   @type control_state :: :normal | :warning | :critical | :intervening
