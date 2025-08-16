@@ -48,6 +48,10 @@ defmodule Cybernetic.MCP.HermesClient do
           Logger.warning("Hermes MCP call failed: #{inspect(reason)}")
           {:error, %{tool: tool, error: :client_error, reason: reason}, state}
       end
+    rescue
+      error ->
+        Logger.error("Hermes MCP client error: #{inspect(error)}")
+        {:error, %{tool: tool, error: :client_error, details: inspect(error)}, state}
     catch
       :exit, {:noproc, _} ->
         Logger.warning("Hermes MCP client not started")
@@ -56,10 +60,6 @@ defmodule Cybernetic.MCP.HermesClient do
       :exit, reason ->
         Logger.warning("Hermes MCP process exit: #{inspect(reason)}")
         {:error, %{tool: tool, error: :client_error, reason: reason}, state}
-    rescue
-      error ->
-        Logger.error("Hermes MCP client error: #{inspect(error)}")
-        {:error, %{tool: tool, error: :client_error, details: inspect(error)}, state}
     end
   end
   
