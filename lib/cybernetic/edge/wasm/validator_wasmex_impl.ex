@@ -10,8 +10,8 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
 
   @impl true
   def load(bytes, opts) do
-    fuel = Keyword.fetch!(opts, :fuel)
-    max_pages = Keyword.fetch!(opts, :max_memory_pages)
+    fuel = Keyword.get(opts, :fuel, 5_000_000)
+    max_pages = Keyword.get(opts, :max_memory_pages, 64)
 
     start_time = System.monotonic_time(:microsecond)
     
@@ -39,7 +39,7 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
   @impl true
   def validate(validator_state, message, opts) do
     %{instance: instance, store: store, fuel_limit: fuel_limit} = validator_state
-    timeout = Keyword.fetch!(opts, :timeout_ms)
+    timeout = Keyword.get(opts, :timeout_ms, 50)
     
     # Reset fuel for each validation
     :ok = Wasmex.Store.set_fuel(store, fuel_limit)
