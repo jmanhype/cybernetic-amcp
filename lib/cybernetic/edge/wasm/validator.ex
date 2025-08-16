@@ -40,7 +40,7 @@ defmodule Cybernetic.Edge.WASM.Validator do
     :telemetry.execute(
       @telemetry ++ [:stop],
       %{duration: System.monotonic_time() - start},
-      %{result: if is_tuple(res), do: elem(res, 0), else: :unknown}
+      %{result: (if is_tuple(res), do: elem(res, 0), else: :unknown)}
     )
 
     res
