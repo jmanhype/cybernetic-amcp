@@ -7,7 +7,6 @@ defmodule Cybernetic.VSM.System5.SOPShim do
   """
   
   require Logger
-  alias Cybernetic.VSM.System4.Episode
   alias Cybernetic.VSM.System5.SOPEngine
 
   @doc """
