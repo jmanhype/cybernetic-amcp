@@ -55,10 +55,10 @@ defmodule Cybernetic.Transport.CircuitBreaker do
   @doc """
   Execute a function through the circuit breaker.
   """
-  def call(%__MODULE__{state: :open} = breaker, _fun) do
+  def call(%__MODULE__{state: :open} = breaker, fun) do
     if should_attempt_reset?(breaker) do
       # Try half-open state
-      call(%{breaker | state: :half_open, half_open_attempts: breaker.half_open_attempts}, _fun)
+      call(%{breaker | state: :half_open, half_open_attempts: breaker.half_open_attempts}, fun)
     else
       {:error, :circuit_open}
     end
