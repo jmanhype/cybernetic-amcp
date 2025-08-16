@@ -21,7 +21,7 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
     File.write!(temp_path, wasm_bytes)
     
     # Verify WASM is valid
-    case System.cmd(@wasmtime_path, ["compile", temp_path]) do
+    case System.cmd(wasmtime_path(), ["compile", temp_path]) do
       {_, 0} ->
         {:ok, %{
           wasm_path: temp_path,
