@@ -9,7 +9,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   @behaviour Cybernetic.VSM.System4.LLMProvider
   
   require Logger
-  alias Cybernetic.Telemetry.OTEL
+  # alias Cybernetic.Telemetry.OTEL  # Not used yet
   
   @default_model "claude-3-5-sonnet-20241022"
   @default_max_tokens 4096
@@ -79,20 +79,20 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   def analyze_episode(episode, opts \\ []) do
     start_time = System.monotonic_time(:millisecond)
     
-    OpenTelemetry.Tracer.with_span "anthropic.analyze_episode", %{
-      attributes: %{
-        model: get_model(opts),
-        episode_id: episode.id,
-        episode_kind: episode.kind
-      }
-    } do
+    # OpenTelemetry.Tracer.with_span "anthropic.analyze_episode", %{
+    #   attributes: %{
+    #     model: get_model(opts),
+    #     episode_id: episode.id,
+    #     episode_kind: episode.kind
+    #   }
+    # } do
       result = do_analyze_episode(episode, opts)
       
       latency = System.monotonic_time(:millisecond) - start_time
       add_usage_metrics(result, latency)
       
       result
-    end
+    # end
   end
 
   @impl Cybernetic.VSM.System4.LLMProvider
@@ -116,7 +116,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   end
 
   @impl Cybernetic.VSM.System4.LLMProvider
-  def embed(text, _opts \\ []) do
+  def embed(_text, _opts \\ []) do
     # Anthropic doesn't provide embeddings - return error
     {:error, :embeddings_not_supported}
   end
@@ -294,7 +294,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
 
   defp add_usage_metrics({:ok, result}, latency) do
     case result do
-      %{tokens: %{input: input, output: output}} ->
+      %{tokens: %{input: _input, output: _output}} ->
         result = Map.update!(result, :usage, fn usage ->
           Map.merge(usage, %{latency_ms: latency})
         end)
