@@ -9,7 +9,6 @@ defmodule Cybernetic.VSM.System4.LLMBridge do
   require Logger
 
   @telemetry [:cybernetic, :s4, :llm]
-  @sop_topic {:cybernetic, :s5, :sop, :suggestions}
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
