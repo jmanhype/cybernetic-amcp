@@ -107,8 +107,8 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
             # new_batch already includes state.pending_batch, so just check its length
             if length(new_batch) > @max_pending_size do
               Logger.error("Total pending messages exceeded limit, dropping oldest messages")
-              # new_batch already contains state.pending_batch, so just take from it
-              remaining = Enum.take(new_batch, @max_pending_size)
+              # Take from the end to keep newest messages (since we prepend)
+              remaining = Enum.take(new_batch, -@max_pending_size)
               {:noreply, %{state | pending_batch: remaining}}
             else
               {:noreply, %{state | pending_batch: new_batch}}
@@ -124,7 +124,8 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
         # Add to existing batch, but check memory limit
         if length(new_batch) > @max_pending_size do
           Logger.warning("Pending batch size exceeded limit during normal operation")
-          remaining = Enum.take(new_batch, @max_pending_size)
+          # Take from the end to keep newest messages
+          remaining = Enum.take(new_batch, -@max_pending_size)
           {:noreply, %{state | pending_batch: remaining}}
         else
           {:noreply, %{state | pending_batch: new_batch}}
@@ -145,6 +146,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
           
           {:error, _} ->
             # Retry later if no channel available
+            # Cancel old timer before creating new one
             new_state = cancel_batch_timer(state)
             timer = Process.send_after(self(), :flush_batch, @batch_timeout)
             {:noreply, %{new_state | batch_timer: timer}}
