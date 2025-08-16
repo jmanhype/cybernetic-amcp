@@ -82,7 +82,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     :ok
   end
 
-  defp handle_status_request(payload, meta) do
+  defp handle_status_request(_payload, meta) do
     Logger.debug("System2: Status request")
     
     # Collect status from all systems
@@ -128,7 +128,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
   end
 
   defp coordinate_systems(systems, payload, meta) do
-    action = Map.get(payload, "action", "coordinate")
+    _action = Map.get(payload, "action", "coordinate")
     
     Enum.each(systems, fn system ->
       Cybernetic.Transport.Behaviour.publish(
