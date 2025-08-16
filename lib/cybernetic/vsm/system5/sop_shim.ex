@@ -222,19 +222,10 @@ defmodule Cybernetic.VSM.System5.SOPShim do
   @doc """
   Get SOPs created from a specific episode.
   """
-  def get_sops_for_episode(episode_id) do
+  def get_sops_for_episode(_episode_id) do
+    # TODO: Implement when SOPEngine.list/0 is available
     # This would query the SOP store for SOPs with episode_id in metadata
-    # For now, return empty list as placeholder
-    case SOPEngine.list() do
-      {:ok, sops} ->
-        matching_sops = Enum.filter(sops, fn sop ->
-          get_in(sop, ["metadata", "episode_id"]) == episode_id
-        end)
-        {:ok, matching_sops}
-        
-      {:error, reason} ->
-        {:error, reason}
-    end
+    {:ok, []}
   end
 
   @doc """
