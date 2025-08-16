@@ -261,10 +261,10 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
         anti_patterns
       end
     
-    # Magic numbers
-    magic_numbers = Regex.scan(~r/\b\d{2,}\b/, code)
+    # Magic numbers (excluding common values like 100, 200, etc.)
+    magic_numbers = Regex.scan(~r/\b(?!(?:10|20|50|100|200|300|400|500|1000|2000|3000|5000)\b)\d{3,}\b/, code)
     anti_patterns = 
-      if length(magic_numbers) > 5 do
+      if length(magic_numbers) > 3 do
         [{:magic_numbers, "Multiple hardcoded values"} | anti_patterns]
       else
         anti_patterns
