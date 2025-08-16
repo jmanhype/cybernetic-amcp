@@ -260,7 +260,7 @@ defmodule Cybernetic.Health.Collector do
     end)
   end
   
-  defp handle_telemetry_event(_event_name, measurements, metadata, _config) do
+  def handle_telemetry_event(_event_name, measurements, metadata, _config) do
     send(self(), {:telemetry_event, measurements, metadata})
   end
   
