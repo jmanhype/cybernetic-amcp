@@ -502,7 +502,6 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
   defp state_to_numeric(:closed), do: 0
   defp state_to_numeric(:open), do: 1
   defp state_to_numeric(:half_open), do: 2
-  end
 
   defp attach_health_monitoring(name) do
     # Subscribe to system health updates
