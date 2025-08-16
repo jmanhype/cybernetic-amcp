@@ -10,6 +10,7 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   require Logger
   require OpenTelemetry.Tracer
   alias Cybernetic.VSM.System4.Providers.Anthropic
+  alias Cybernetic.VSM.System4.Episode
   alias Cybernetic.VSM.System5.Policy
   
   @telemetry [:cybernetic, :s5, :policy_intelligence]
