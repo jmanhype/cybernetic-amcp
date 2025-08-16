@@ -10,8 +10,11 @@ defmodule TestUUIDRaceFree do
     IO.puts("\n🔬 Testing UUID-based Race-Free Circuit Breaker Transitions")
     IO.puts("=" <> String.duplicate("=", 60))
     
-    # Start registry for circuit breakers
-    {:ok, _} = Registry.start_link(keys: :unique, name: Cybernetic.CircuitBreakerRegistry)
+    # Start registry for circuit breakers if not already started
+    case Registry.start_link(keys: :unique, name: Cybernetic.CircuitBreakerRegistry) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+    end
     
     # Test 1: Single transition attempt
     test_single_transition()
