@@ -416,14 +416,26 @@ defmodule Cybernetic.Security.AuthManager do
     # Load users from environment or secure store
     users = get_configured_users()
     
-    # If no users configured, create default test user only in dev/test
-    users = if Map.size(users) == 0 and Mix.env() in [:dev, :test] do
+    # If no users configured, create default users for test environment
+    users = if map_size(users) == 0 and Mix.env() in [:dev, :test] do
       %{
-        "test_user" => %{
-          id: "user_test",
-          username: "test_user",
-          password_hash: hash_password(System.get_env("TEST_PASSWORD", "test123")),
+        "admin" => %{
+          id: "user_admin",
+          username: "admin",
+          password_hash: hash_password("admin123"),
+          roles: [:admin]
+        },
+        "operator" => %{
+          id: "user_operator", 
+          username: "operator",
+          password_hash: hash_password("operator123"),
           roles: [:operator]
+        },
+        "viewer" => %{
+          id: "user_viewer",
+          username: "viewer", 
+          password_hash: hash_password("viewer123"),
+          roles: [:viewer]
         }
       }
     else
