@@ -150,7 +150,7 @@ defmodule Cybernetic.Telemetry.OTEL do
   def record_exception(exception, stacktrace \\ nil) do
     span_ctx = Tracer.current_span_ctx()
     Span.record_exception(span_ctx, exception, stacktrace)
-    Span.set_status(span_ctx, :error, Exception.message(exception))
+    Span.set_status(span_ctx, :error)
   end
   
   @doc """
