@@ -113,18 +113,13 @@ defmodule Cybernetic.MCP.Tools.DatabaseTool do
     database = params["database"] || "default"
     
     # In production, use actual database connection
-    case execute_query(sql, database) do
-      {:ok, results} ->
-        %{
-          rows: results,
-          row_count: length(results),
-          execution_time: 42,
-          database: database
-        }
-      
-      {:error, reason} ->
-        %{error: reason}
-    end
+    {:ok, results} = execute_query(sql, database)
+    %{
+      rows: results,
+      row_count: length(results),
+      execution_time: 42,
+      database: database
+    }
   end
   
   defp perform_operation("schema", params, _context) do
