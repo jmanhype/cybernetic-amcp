@@ -75,7 +75,6 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     }
   end
 
-  @impl Cybernetic.VSM.System4.LLMProvider
   # 3-arity version for tests with provider/context  
   def analyze_episode(_provider, episode, context_or_opts) when is_map(context_or_opts) do
     analyze_episode(episode, [])
@@ -85,6 +84,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     analyze_episode(episode, opts)
   end
   
+  @impl Cybernetic.VSM.System4.LLMProvider
   def analyze_episode(episode, opts \\ []) do
     start_time = System.monotonic_time(:millisecond)
     
