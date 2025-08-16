@@ -353,7 +353,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
         :timer.sleep(get_retry_delay(response))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
         
-      {:ok, %{status: status, body: _body}} when status >= 500 ->
+      {:ok, %{status_code: status, body: _body}} when status >= 500 ->
         Logger.warning("Server error #{status}, retrying... (#{retries_left} retries left)")
         :timer.sleep(exponential_backoff(4 - retries_left))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
