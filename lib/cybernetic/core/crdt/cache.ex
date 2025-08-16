@@ -19,7 +19,8 @@ defmodule Cybernetic.Core.CRDT.Cache do
   defstruct [:max_size, :ttl_ms, :cache, :access_order, :cleanup_timer]
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
   end
 
   def init(opts) do
