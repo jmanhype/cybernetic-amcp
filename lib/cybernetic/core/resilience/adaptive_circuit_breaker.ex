@@ -243,7 +243,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
 
   # Private helper functions
 
-  defp via_name(name), do: {:via, Registry, {Cybernetic.CircuitBreakerRegistry, name}}
+  defp via_name(name), do: {:via, Registry, {Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry, name}}
 
   defp execute_and_handle_result(fun, state) do
     start_time = System.monotonic_time(:microsecond)
