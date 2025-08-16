@@ -6,7 +6,6 @@ defmodule Cybernetic.Core.MCP.Handler do
   require Logger
   
   alias Cybernetic.Core.MCP.Hermes.Registry
-  alias Cybernetic.Transport.Message
 
   @doc """
   Process an incoming MCP message
