@@ -128,7 +128,7 @@ defmodule Cybernetic.Health.Collector do
   end
   
   @impl true
-  def handle_info({:telemetry_event, measurements, metadata}, state) do
+  def handle_info({:telemetry_event, measurements, _metadata}, state) do
     # Handle telemetry events
     updated_metrics = Map.merge(state.metrics, measurements)
     {:noreply, %{state | metrics: updated_metrics}}
@@ -200,7 +200,7 @@ defmodule Cybernetic.Health.Collector do
   defp get_vsm_message_count do
     # Get message count from VSM layers
     [:system1, :system2, :system3, :system4, :system5]
-    |> Enum.map(fn layer ->
+    |> Enum.map(fn _layer ->
       # This would query each VSM layer for message counts
       0  # Placeholder
     end)
@@ -260,8 +260,8 @@ defmodule Cybernetic.Health.Collector do
     end)
   end
   
-  defp handle_telemetry_event(_event_name, measurements, _metadata, _config) do
-    send(self(), {:telemetry_event, measurements, _metadata})
+  defp handle_telemetry_event(_event_name, measurements, metadata, _config) do
+    send(self(), {:telemetry_event, measurements, metadata})
   end
   
   defp broadcast_metrics(metrics) do
