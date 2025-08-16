@@ -71,14 +71,14 @@ defmodule Cybernetic.Transport.CircuitBreaker do
         {:ok, _} = success ->
           {:ok, elem(success, 1), record_success(breaker)}
         {:error, _} = error ->
-          new_breaker = record_failure(breaker)
+          _new_breaker = record_failure(breaker)
           {:error, elem(error, 1)}
         other ->
           {:ok, other, record_success(breaker)}
       end
     rescue
       error ->
-        new_breaker = record_failure(breaker)
+        _new_breaker = record_failure(breaker)
         {:error, error}
     end
   end
