@@ -142,11 +142,6 @@ defmodule Cybernetic.Telemetry.OTEL do
   Record an exception on the current span
   """
   def record_exception(exception, stacktrace \\ nil) do
-    base_attributes = %{
-      "exception.type" => exception.__struct__ |> to_string(),
-      "exception.message" => Exception.message(exception)
-    }
-    
     span_ctx = Tracer.current_span_ctx()
     Span.record_exception(span_ctx, exception, stacktrace)
     Span.set_status(span_ctx, :error, Exception.message(exception))
