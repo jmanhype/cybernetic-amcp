@@ -207,8 +207,18 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
 
   def handle_info(:attempt_recovery, state) do
     if state.state == :open do
-      new_state = transition_to_half_open(state)
-      {:noreply, new_state}
+      case state.transition_ref do
+        nil ->
+          # Safe to attempt automatic recovery
+          transition_id = UUID.uuid4()
+          new_state = %{state | transition_ref: transition_id}
+          new_state = transition_to_half_open(new_state)
+          {:noreply, new_state}
+        
+        _existing_transition ->
+          # Manual transition already in progress, skip automatic recovery
+          {:noreply, state}
+      end
     else
       {:noreply, state}
     end
