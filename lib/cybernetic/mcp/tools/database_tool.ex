@@ -91,20 +91,35 @@ defmodule Cybernetic.MCP.Tools.DatabaseTool do
   
   defp authorize_operation(operation, context) do
     # Check if user has permission for this operation
-    required_permission = 
-      case operation do
-        "query" -> :database_read
-        "schema" -> :database_admin
-        "transaction" -> :database_write
-        "analyze" -> :database_read
-        _ -> :database_admin
-      end
-    
-    AuthManager.authorize(
-      context[:auth_context],
-      :database,
-      required_permission
-    )
+    case operation do
+      "query" ->
+        # Allow both specific database_read permission and general read permission
+        auth_context = context[:auth_context]
+        case AuthManager.authorize(auth_context, :database, :database_read) do
+          :ok -> :ok
+          {:error, :unauthorized} ->
+            # Fallback to general read permission for backward compatibility
+            AuthManager.authorize(auth_context, :database, :read)
+        end
+        
+      "analyze" ->
+        # Same logic for analyze operations
+        auth_context = context[:auth_context]
+        case AuthManager.authorize(auth_context, :database, :database_read) do
+          :ok -> :ok
+          {:error, :unauthorized} ->
+            AuthManager.authorize(auth_context, :database, :read)
+        end
+        
+      "schema" ->
+        AuthManager.authorize(context[:auth_context], :database, :database_admin)
+        
+      "transaction" ->
+        AuthManager.authorize(context[:auth_context], :database, :database_write)
+        
+      _ ->
+        AuthManager.authorize(context[:auth_context], :database, :database_admin)
+    end
   end
   
   defp perform_operation("query", params, _context) do
