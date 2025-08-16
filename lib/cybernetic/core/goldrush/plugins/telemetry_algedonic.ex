@@ -109,6 +109,7 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     {:noreply, new_state}
   end
   
+  @impl GenServer
   def handle_info(:cleanup_window, state) do
     now = System.monotonic_time(:millisecond)
     cutoff = now - @window_size
