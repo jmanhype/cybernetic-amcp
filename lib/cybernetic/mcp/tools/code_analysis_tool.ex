@@ -546,7 +546,7 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
     end
   end
   
-  defp scan_directory(directory) do
+  defp scan_directory(_directory) do
     # Simplified directory scanning
     "# Directory scanning not implemented"
   end
