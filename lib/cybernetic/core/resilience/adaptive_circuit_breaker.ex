@@ -436,4 +436,9 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
         GenServer.cast(pid, {:circuit_breaker_event, breaker_name, event, data})
     end
   end
+
+  defp safe_error_type(error) when is_exception(error), do: error.__struct__
+  defp safe_error_type(error) when is_atom(error), do: error
+  defp safe_error_type(error) when is_tuple(error), do: elem(error, 0)
+  defp safe_error_type(_error), do: :unknown
 end
