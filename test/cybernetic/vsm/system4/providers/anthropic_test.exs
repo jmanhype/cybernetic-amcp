@@ -4,7 +4,6 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
   alias Cybernetic.VSM.System4.Episode
   
   import ExUnit.CaptureLog
-  import Mock
   
   describe "new/1" do
     test "creates provider with API key from options" do
