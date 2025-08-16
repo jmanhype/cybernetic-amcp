@@ -134,9 +134,14 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisToolTest do
       end
       """
       
+      IO.puts("Generated code lines: #{String.split(long_function, "\n") |> length()}")
+      IO.puts("Contains 'def ': #{String.contains?(long_function, "def ")}")
+      
       params = %{"code" => long_function}
       
       assert {:ok, result} = CodeAnalysisTool.execute("analyze", params, @test_context)
+      
+      IO.puts("Anti-patterns found: #{inspect(result.result.anti_patterns)}")
       
       anti_patterns = result.result.anti_patterns
       assert Enum.any?(anti_patterns, fn {type, _} -> type == :long_function end)
