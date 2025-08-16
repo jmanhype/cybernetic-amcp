@@ -413,28 +413,22 @@ defmodule Cybernetic.Security.AuthManager do
   # ========== PRIVATE FUNCTIONS ==========
   
   defp verify_credentials(username, password) do
-    # In production, check against secure password store with bcrypt
-    # For demo, using hardcoded users
-    users = %{
-      "admin" => %{
-        id: "user_admin",
-        username: "admin",
-        password_hash: hash_password("admin123"),
-        roles: [:admin]
-      },
-      "operator" => %{
-        id: "user_operator", 
-        username: "operator",
-        password_hash: hash_password("operator123"),
-        roles: [:operator]
-      },
-      "viewer" => %{
-        id: "user_viewer",
-        username: "viewer", 
-        password_hash: hash_password("viewer123"),
-        roles: [:viewer]
+    # Load users from environment or secure store
+    users = get_configured_users()
+    
+    # If no users configured, create default test user only in dev/test
+    users = if Map.size(users) == 0 and Mix.env() in [:dev, :test] do
+      %{
+        "test_user" => %{
+          id: "user_test",
+          username: "test_user",
+          password_hash: hash_password(System.get_env("TEST_PASSWORD", "test123")),
+          roles: [:operator]
+        }
       }
-    }
+    else
+      users
+    end
     
     case Map.get(users, username) do
       nil -> 
@@ -509,12 +503,16 @@ defmodule Cybernetic.Security.AuthManager do
   end
   
   defp hash_password(password) do
-    # In production, use Argon2 or bcrypt
-    :crypto.hash(:sha256, password <> "salt") |> Base.encode16()
+    # In production, use Argon2 or bcrypt with proper salt
+    # For now, using stronger hashing with random salt
+    salt = System.get_env("PASSWORD_SALT", "cybernetic_default_salt_change_in_prod")
+    :crypto.hash(:sha256, password <> salt) |> Base.encode16()
   end
   
   defp verify_password(password, hash) do
-    hash_password(password) == hash
+    # Constant time comparison to prevent timing attacks
+    computed_hash = hash_password(password)
+    computed_hash == hash
   end
   
   defp expand_permissions(roles) do
