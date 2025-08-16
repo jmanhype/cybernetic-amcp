@@ -134,12 +134,14 @@ defmodule Cybernetic.Core.CRDT.Cache do
       end)
     
     stats = %{
-      total_entries: map_size(state.cache),
+      total_entries: active_entries + expired_entries,
       active_entries: active_entries,
       expired_entries: expired_entries,
       max_size: state.max_size,
       ttl_ms: state.ttl_ms,
-      cache_size_bytes: map_size(state.cache) * 64  # Rough estimate without expensive calculation
+      cache_size_bytes: map_size(state.cache) * 64,  # Rough estimate without expensive calculation
+      hits: Map.get(state, :hits, 0),
+      misses: Map.get(state, :misses, 0)
     }
     
     {:reply, stats, state}
