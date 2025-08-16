@@ -218,7 +218,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
         new_state = handle_failure(state, error)
         emit_circuit_breaker_telemetry(new_state, :failure, %{
           duration_us: duration,
-          error: error.__struct__
+          error_type: safe_error_type(error)
         })
         
         {:reply, {:error, error}, new_state}
