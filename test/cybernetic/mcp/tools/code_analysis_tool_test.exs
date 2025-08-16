@@ -15,6 +15,13 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisToolTest do
     def init(opts) do
       {:ok, %{data: opts}}
     end
+    
+    def handle_call(request, _from, state) do
+      case request do
+        :get_data -> {:reply, state.data, state}
+        _ -> {:reply, :error, state}
+      end
+    end
   end
   """
   
