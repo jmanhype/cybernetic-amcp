@@ -57,13 +57,16 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
     setup do
       {:ok, provider} = Anthropic.new(api_key: "test-key")
       
-      episode = %{
-        "id" => "ep-123",
-        "type" => "coordination_conflict",
-        "severity" => "high",
-        "timestamp" => "2024-01-15T10:30:00Z",
-        "details" => %{"resource" => "cpu", "conflict_systems" => ["s1a", "s1b"]}
-      }
+      episode = Episode.new(
+        :coordination_conflict,
+        "Test Coordination Conflict",
+        %{
+          "resource" => "cpu",
+          "conflict_systems" => ["s1a", "s1b"],
+          "severity" => "high"
+        },
+        priority: :high
+      )
       
       %{provider: provider, episode: episode}
     end
