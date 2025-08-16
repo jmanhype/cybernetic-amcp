@@ -9,6 +9,12 @@ defmodule Cybernetic.Transport.Backpressure do
   @default_max_demand 100
   @default_min_demand 10
 
+  def init(opts) do
+    # This module is primarily a collection of GenStage implementations
+    # The main entry point is build_pipeline/1
+    {:ok, opts}
+  end
+
   # Producer implementation
   defmodule Producer do
     use GenStage
