@@ -176,7 +176,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       health_score: 1.0,
       failure_history: :queue.new(),
       success_history: :queue.new(),
-      recovery_timer: cancel_recovery_timer(state.recovery_timer)
+      recovery_timer: cancel_recovery_timer(state.recovery_timer),
+      transitioning: false
     }
     {:noreply, new_state}
   end
