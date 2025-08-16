@@ -107,9 +107,8 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
             total_pending = length(state.pending_batch) + length(new_batch)
             if total_pending > @max_pending_size do
               Logger.error("Total pending messages exceeded limit, dropping oldest messages")
-              # Keep newest messages up to limit
-              all_messages = new_batch ++ state.pending_batch
-              remaining = Enum.take(all_messages, @max_pending_size)
+              # new_batch already contains state.pending_batch, so just take from it
+              remaining = Enum.take(new_batch, @max_pending_size)
               {:noreply, %{state | pending_batch: remaining}}
             else
               {:noreply, %{state | pending_batch: new_batch}}
