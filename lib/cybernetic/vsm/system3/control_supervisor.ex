@@ -452,22 +452,6 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     end
   end
   
-  
-  defp send_to_system(system_num, message) do
-    routing_key = "vsm.system#{system_num}.control"
-    
-    Publisher.publish(
-      "vsm_exchange",
-      routing_key,
-      %{
-        type: "control_directive",
-        message: message,
-        from: :system3,
-        timestamp: DateTime.utc_now()
-      }
-    )
-  end
-  
   # ========== PRIVATE FUNCTIONS - INITIALIZATION ==========
   
   defp init_health_monitors do
