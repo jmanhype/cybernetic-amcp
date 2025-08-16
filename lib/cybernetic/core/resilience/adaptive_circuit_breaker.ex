@@ -473,10 +473,35 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     
     measurements = %{
       failure_count: state.failure_count,
-      success_count: state.success_count
+      success_count: state.success_count,
+      health_score: state.health_score,
+      adaptive_threshold: state.adaptive_threshold,
+      state_numeric: state_to_numeric(state.state)
     }
     
+    # Emit the specific event
     :telemetry.execute([:cyb, :circuit_breaker, event], measurements, full_metadata)
+    
+    # Emit state gauge metric for Prometheus
+    :telemetry.execute([:cyb, :circuit_breaker, :state], measurements, full_metadata)
+    
+    # Emit current counts as gauges for dashboards
+    :telemetry.execute([:cyb, :circuit_breaker, :failure_count], measurements, full_metadata)
+    :telemetry.execute([:cyb, :circuit_breaker, :success_count], measurements, full_metadata)
+    :telemetry.execute([:cyb, :circuit_breaker, :health_score], measurements, full_metadata)
+    :telemetry.execute([:cyb, :circuit_breaker, :adaptive_threshold], measurements, full_metadata)
+    
+    # Emit operation duration if available
+    if Map.has_key?(metadata, :duration_us) do
+      duration_measurements = %{duration: metadata.duration_us}
+      :telemetry.execute([:cyb, :circuit_breaker, :operation_duration], duration_measurements, full_metadata)
+    end
+  end
+  
+  # Convert circuit breaker state to numeric for Prometheus gauges
+  defp state_to_numeric(:closed), do: 0
+  defp state_to_numeric(:open), do: 1
+  defp state_to_numeric(:half_open), do: 2
   end
 
   defp attach_health_monitoring(name) do
