@@ -308,7 +308,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
           {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
         end
       ] do
-        {:ok, _result} = Anthropic.analyze_episode(provider, episode, context)
+        {:ok, _result} = Anthropic.analyze_episode(episode, context: context)
       end
     end
     
