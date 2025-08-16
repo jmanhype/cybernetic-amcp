@@ -57,7 +57,7 @@ defmodule CircuitBreakerSystemProof do
         IO.puts("   ✅ Circuit breaker module file exists")
       else
         IO.puts("   ❌ Circuit breaker module file missing")
-        return :error
+        throw :error
       end
       
       # Test alerts module
@@ -66,7 +66,7 @@ defmodule CircuitBreakerSystemProof do
         IO.puts("   ✅ Circuit breaker alerts module file exists")
       else
         IO.puts("   ❌ Circuit breaker alerts module file missing")
-        return :error
+        throw :error
       end
       
       # Test prometheus metrics
@@ -77,11 +77,11 @@ defmodule CircuitBreakerSystemProof do
           IO.puts("   ✅ Circuit breaker metrics found in Prometheus config")
         else
           IO.puts("   ❌ Circuit breaker metrics missing from Prometheus config")
-          return :error
+          throw :error
         end
       else
         IO.puts("   ❌ Prometheus module file missing")
-        return :error
+        throw :error
       end
       
       IO.puts("   ✅ All modules present and properly configured")
@@ -133,7 +133,7 @@ defmodule CircuitBreakerSystemProof do
         IO.puts("   ✅ Telemetry event emission configured")
       else
         IO.puts("   ❌ Telemetry event emission not configured")
-        return :error
+        throw :error
       end
       
       if length(found_metrics) >= 5 do
@@ -179,7 +179,7 @@ defmodule CircuitBreakerSystemProof do
         IO.puts("   ✅ GenServer-based alert system")
       else
         IO.puts("   ❌ Alert system not properly structured")
-        return :error
+        throw :error
       end
       
       IO.puts("   ✅ Alert system properly configured")
@@ -219,7 +219,7 @@ defmodule CircuitBreakerSystemProof do
         IO.puts("   ✅ Supervisor-based architecture")
       else
         IO.puts("   ❌ Supervisor architecture not found")
-        return :error
+        throw :error
       end
       
       IO.puts("   ✅ Application integration verified")
