@@ -107,6 +107,10 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
   end
 
   def handle_cast({:add_handler, name, handler_fun}, state) do
+    # Log if overwriting existing handler
+    if Map.has_key?(state.handlers, name) do
+      Logger.warning("Overwriting existing batched telemetry handler: #{inspect(name)}")
+    end
     new_handlers = Map.put(state.handlers, name, handler_fun)
     {:noreply, %{state | handlers: new_handlers}}
   end
@@ -182,7 +186,11 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
       [:cybernetic, :system3, :health]
     ]
     
-    handler_id = {:batched_collector, make_ref()}
+    # Use a stable handler ID to prevent duplicates
+    handler_id = :batched_collector_main
+    
+    # Detach any existing handler with this ID first
+    :telemetry.detach(handler_id)
     
     :telemetry.attach_many(
       handler_id,
