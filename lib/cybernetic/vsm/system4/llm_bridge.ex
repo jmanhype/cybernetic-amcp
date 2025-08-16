@@ -51,8 +51,8 @@ defmodule Cybernetic.VSM.System4.LLMBridge do
     :ok = :telemetry.attach_many(
       {:s4_bridge, make_ref()},
       [[:cybernetic, :aggregator, :episode]],
-      {__MODULE__, :handle_episode_event, [pid]},
-      nil
+      &__MODULE__.handle_episode_event/4,
+      pid
     )
   end
 
