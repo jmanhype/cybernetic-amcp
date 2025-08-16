@@ -2,9 +2,7 @@
 
 # Test script for circuit breaker alerting system
 
-Mix.install([
-  {:elixir_uuid, "~> 1.6"}
-])
+Mix.install([])
 
 defmodule CircuitBreakerAlertsTest do
   @moduledoc """
