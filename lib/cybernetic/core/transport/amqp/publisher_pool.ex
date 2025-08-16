@@ -104,7 +104,8 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
             # Keep in batch if no channel available, but limit size
             if length(new_batch) > @max_pending_size do
               Logger.error("Pending batch size exceeded limit, dropping oldest messages")
-              {_dropped, remaining} = Enum.split(new_batch, length(new_batch) - @max_pending_size)
+              # new_batch = [newest | ... | oldest], so take from head to keep newest
+              remaining = Enum.take(new_batch, @max_pending_size)
               {:noreply, %{state | pending_batch: remaining}}
             else
               {:noreply, %{state | pending_batch: new_batch}}
