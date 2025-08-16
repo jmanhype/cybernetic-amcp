@@ -264,8 +264,6 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
       :ets.insert(@registry_table, {name, tool})
     end)
     
-    length(tools)
-    
     Logger.info("Registered #{length(tools)} builtin MCP tools")
   end
 
