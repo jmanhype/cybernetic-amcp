@@ -86,6 +86,9 @@ defmodule Cybernetic.Transport.Backpressure do
   # Consumer implementation
   defmodule Consumer do
     use GenStage
+    
+    @default_max_demand 100
+    @default_min_demand 50
 
     def start_link(opts) do
       GenStage.start_link(__MODULE__, opts, name: Keyword.get(opts, :name))
@@ -133,6 +136,9 @@ defmodule Cybernetic.Transport.Backpressure do
   # ProducerConsumer for transformations
   defmodule Transformer do
     use GenStage
+    
+    @default_max_demand 100
+    @default_min_demand 50
 
     def start_link(opts) do
       GenStage.start_link(__MODULE__, opts, name: Keyword.get(opts, :name))
