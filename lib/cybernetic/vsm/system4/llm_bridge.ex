@@ -43,12 +43,16 @@ defmodule Cybernetic.VSM.System4.LLMBridge do
     :ok
   end
 
+  def handle_episode_event(_event, _measurements, metadata, pid) do
+    send(pid, {:episode, metadata.episode})
+  end
+
   def default_subscribe(pid) do
     # Replace with your real aggregator subscription; minimal safe default:
     :ok = :telemetry.attach_many(
       {:s4_bridge, make_ref()},
       [[:cybernetic, :aggregator, :episode]],
-      fn _event, _meas, meta, _cfg -> send(pid, {:episode, meta.episode}) end,
+      {__MODULE__, :handle_episode_event, [pid]},
       nil
     )
   end
