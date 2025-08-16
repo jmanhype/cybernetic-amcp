@@ -140,6 +140,23 @@ defmodule Cybernetic.Telemetry.Prometheus do
       reporter_options: [buckets: [100, 500, 1000, 5000, 10000, 25000, 50000, 100000]]
     ),
     
+    # Circuit Breaker Health Metrics
+    Telemetry.Metrics.last_value("cybernetic.health.circuit_breakers.healthy_count",
+      description: "Number of healthy circuit breakers"
+    ),
+    Telemetry.Metrics.last_value("cybernetic.health.circuit_breakers.warning_count",
+      description: "Number of circuit breakers in warning state"
+    ),
+    Telemetry.Metrics.last_value("cybernetic.health.circuit_breakers.degraded_count",
+      description: "Number of degraded circuit breakers"
+    ),
+    Telemetry.Metrics.last_value("cybernetic.health.circuit_breakers.critical_count",
+      description: "Number of critical circuit breakers"
+    ),
+    Telemetry.Metrics.last_value("cybernetic.health.circuit_breakers.total_count",
+      description: "Total number of circuit breakers monitored"
+    ),
+    
     # Memory Metrics
     Telemetry.Metrics.counter("cybernetic.memory.store.count",
       tags: [:conversation_id],
