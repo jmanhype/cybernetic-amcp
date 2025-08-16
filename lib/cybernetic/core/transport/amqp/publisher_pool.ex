@@ -31,6 +31,15 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
   def handle_continue(:setup_pool, state) do
     channels = setup_channel_pool()
     new_state = %{state | channels: channels}
+    
+    # If no channels were created, schedule retry
+    if length(channels) == 0 do
+      Logger.warning("No AMQP channels available, scheduling retry in 5 seconds")
+      Process.send_after(self(), :retry_setup, 5_000)
+    else
+      Logger.info("AMQP publisher pool initialized with #{length(channels)} channels")
+    end
+    
     {:noreply, new_state}
   end
 
