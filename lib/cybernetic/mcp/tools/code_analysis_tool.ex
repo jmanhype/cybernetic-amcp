@@ -159,10 +159,12 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
   defp detect_language(code) do
     cond do
       String.contains?(code, "defmodule") -> "elixir"
-      String.contains?(code, "def ") && !String.contains?(code, ":") -> "elixir"
+      String.contains?(code, "use GenServer") -> "elixir"
+      String.contains?(code, "@spec ") -> "elixir"
       String.contains?(code, "function") && String.contains?(code, "{") -> "javascript"
-      String.contains?(code, "def ") && String.contains?(code, ":") -> "python"
       String.contains?(code, "package main") -> "go"
+      String.contains?(code, "def ") && String.contains?(code, ":") -> "python"
+      String.contains?(code, "def ") -> "elixir"  # Default def to elixir after other checks
       true -> "unknown"
     end
   end
