@@ -118,8 +118,14 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
         {:noreply, %{state | pending_batch: new_batch, batch_timer: timer}}
       
       true ->
-        # Add to existing batch
-        {:noreply, %{state | pending_batch: new_batch}}
+        # Add to existing batch, but check memory limit
+        if length(new_batch) > @max_pending_size do
+          Logger.warning("Pending batch size exceeded limit during normal operation")
+          remaining = Enum.take(new_batch, @max_pending_size)
+          {:noreply, %{state | pending_batch: remaining}}
+        else
+          {:noreply, %{state | pending_batch: new_batch}}
+        end
     end
   end
 
