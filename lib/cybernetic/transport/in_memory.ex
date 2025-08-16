@@ -8,7 +8,7 @@ defmodule Cybernetic.Transport.InMemory do
   require Logger
 
   @impl true
-  def publish(exchange, routing_key, message, opts) do
+  def publish(_exchange, routing_key, message, opts) do
     Logger.debug("InMemory transport: #{routing_key} -> #{inspect(message)}")
     
     # Route based on routing key to appropriate VSM system
@@ -29,7 +29,7 @@ defmodule Cybernetic.Transport.InMemory do
         send_to_system(:system5, message, opts)
       
       _ ->
-        Logger.warn("InMemory transport: Unknown routing key #{routing_key}")
+        Logger.warning("InMemory transport: Unknown routing key #{routing_key}")
         {:error, :unknown_routing_key}
     end
   end
