@@ -3,7 +3,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
   Enhanced AMQP publisher with confirms, durability, and causal headers.
   """
   use GenServer
-  alias AMQP.{Basic, Channel, Confirm}
+  alias AMQP.{Basic, Confirm}
   alias Cybernetic.Core.Security.NonceBloom
   require Logger
 
