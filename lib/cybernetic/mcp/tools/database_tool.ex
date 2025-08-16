@@ -218,7 +218,7 @@ defmodule Cybernetic.MCP.Tools.DatabaseTool do
     |> String.replace("*/", "")
   end
   
-  defp execute_query(sql, database) do
+  defp execute_query(_sql, _database) do
     # Mock implementation - replace with actual database connection
     {:ok, [
       %{id: 1, name: "Test", value: 100},
