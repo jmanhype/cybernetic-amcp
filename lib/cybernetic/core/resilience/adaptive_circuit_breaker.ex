@@ -269,7 +269,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       failure_count: new_failure_count,
       last_failure_time: now,
       health_score: new_health_score,
-      failure_history: new_failure_history
+      failure_history: new_failure_history,
+      transitioning: false  # Clear transitioning flag on failure
     }
     
     Logger.warning("Circuit breaker '#{state.name}' recorded failure: #{inspect(error)}")
