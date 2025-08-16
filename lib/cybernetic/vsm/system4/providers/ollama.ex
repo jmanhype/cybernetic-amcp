@@ -213,7 +213,7 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
     }
   end
 
-  defp make_ollama_request(payload, _endpoint \\ "/api/chat") do
+  defp make_ollama_request(payload, endpoint \\ "/api/chat") do
     url = "#{get_endpoint()}#{endpoint}"
     headers = [{"Content-Type", "application/json"}]
     
