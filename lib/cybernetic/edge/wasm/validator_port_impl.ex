@@ -36,7 +36,8 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
       end
     rescue
       e ->
-        File.rm(temp_path)
+        # Only try to remove if file exists
+        if File.exists?(temp_path), do: File.rm(temp_path)
         {:error, {:load_failed, e}}
     end
   end
