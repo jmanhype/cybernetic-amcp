@@ -310,12 +310,10 @@ defmodule DogfoodTest do
     
     # Get workflow stats
     breaker_state = AdaptiveCircuitBreaker.get_state(:workflow_breaker)
-    cache_stats = Cache.get_stats()
     
     Logger.info("\n  📈 Integrated Workflow Stats:")
     Logger.info("    • Successful workflows: #{Enum.count(results, &match?({:ok, _}, &1))}/10")
     Logger.info("    • Circuit breaker health: #{breaker_state.health_score}")
-    Logger.info("    • Cache hit ratio: #{cache_stats.hits}/(#{cache_stats.hits + cache_stats.misses})")
     
     Logger.info("\n  ✓ Integrated workflow test completed")
   end
