@@ -20,7 +20,6 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   @episode_table :cyb_episodes
   @emit_every_ms 5_000
   @window_ms 60_000
-  @episode_threshold 10  # Min facts to form an episode
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
