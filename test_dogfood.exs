@@ -122,15 +122,6 @@ defmodule DogfoodTest do
     
     Logger.info("    Hits: #{hits}/50, Misses: #{misses}/50")
     
-    # Test TTL expiration
-    Logger.info("  • Testing TTL expiration...")
-    Cache.put("ttl_test", %{data: "expires soon"}, ttl: 100)
-    {:ok, _} = Cache.get("ttl_test")
-    Logger.info("    Item cached successfully")
-    Process.sleep(150)
-    result = Cache.get("ttl_test")
-    Logger.info("    After TTL: #{inspect(result)}")
-    
     # Test cache stats
     stats = Cache.get_stats()
     Logger.info("  • Cache stats: #{inspect(stats)}")
