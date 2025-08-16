@@ -68,7 +68,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
       object: object, 
       meta: Map.merge(%{timestamp: System.system_time(:millisecond)}, meta)
     }
-    DeltaCrdt.mutate(crdt, :add, [key, value])
+    DeltaCrdt.put(crdt, key, value)
     {:noreply, state}
   end
   
