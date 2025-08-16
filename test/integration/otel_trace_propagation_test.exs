@@ -1,6 +1,8 @@
 defmodule Cybernetic.Integration.OTELTracePropagationTest do
   use ExUnit.Case
   alias Cybernetic.Telemetry.OTEL
+  
+  @moduletag :integration
   alias Cybernetic.VSM.System2.Coordinator
   alias Cybernetic.Core.Security.NonceBloom
   
