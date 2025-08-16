@@ -11,6 +11,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
   @pool_size 5
   @batch_size 10
   @batch_timeout 50
+  @max_pending_size 1000  # Prevent memory exhaustion
 
   defstruct [:channels, :pending_batch, :batch_timer, :round_robin_index]
 
