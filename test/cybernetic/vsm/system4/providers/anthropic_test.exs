@@ -227,7 +227,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
       
       with_mock HTTPoison, [:passthrough], [
         post: fn _url, _body, _headers, _opts ->
-          {:ok, %{status: 401, body: error_body, headers: []}}
+          {:ok, %HTTPoison.Response{status_code: 401, body: error_body, headers: []}}
         end
       ] do
         log = capture_log(fn ->
