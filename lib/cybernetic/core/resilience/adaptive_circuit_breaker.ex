@@ -369,7 +369,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
   defp calculate_backoff(failure_count, base_timeout) do
     # Exponential backoff with jitter
     exponential = min(base_timeout * :math.pow(2, failure_count - 1), 300_000)  # Max 5 minutes
-    jitter = :rand.uniform(trunc(exponential * 0.1))  # ±10% jitter
+    jitter_range = max(1, trunc(exponential * 0.1))  # Ensure minimum 1 for rand.uniform
+    jitter = :rand.uniform(jitter_range)  # ±10% jitter
     trunc(exponential + jitter)
   end
 
