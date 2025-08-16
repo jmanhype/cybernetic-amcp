@@ -223,7 +223,8 @@ defmodule Cybernetic.VSM.System4.Router do
     delay = min(base_delay * :math.pow(2, attempts), max_delay)
     jitter = :rand.uniform() * 0.5 * delay
     
-    round(delay + jitter)
+    # Ensure final result doesn't exceed max_delay
+    min(round(delay + jitter), max_delay)
   end
 
   # Telemetry emission functions
