@@ -321,7 +321,7 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
       metadata: attrs[:metadata] || %{test: true}
     }
     
-    Map.merge(base_episode, Map.take(attrs, [:title, :description, :priority, :context, :data, :metadata]))
+    Map.merge(base_episode, Map.take(attrs, [:title, :priority, :context, :data, :metadata]))
   end
   
   defp test_sop_generation(analysis, episode) do
