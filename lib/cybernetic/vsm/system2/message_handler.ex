@@ -96,7 +96,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     :ok
   end
 
-  defp handle_priority_update(payload, meta) do
+  defp handle_priority_update(payload, _meta) do
     Logger.info("System2: Priority update - #{inspect(payload)}")
     :ok
   end
@@ -122,7 +122,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     :ok
   end
 
-  defp handle_default(payload, meta) do
+  defp handle_default(payload, _meta) do
     Logger.debug("System2: Default handler - #{inspect(payload)}")
     :ok
   end
@@ -153,7 +153,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     end
   end
 
-  defp coordinate_operation(payload, meta) do
+  defp coordinate_operation(payload, _meta) do
     # Simulate coordination logic
     coordination_id = Map.get(payload, "coordination_id", generate_coordination_id())
     
