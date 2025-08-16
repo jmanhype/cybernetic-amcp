@@ -314,22 +314,13 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   
   defp check_system_health(system) do
     # Query system health endpoint
-    case query_system_status(system) do
-      {:ok, status} ->
-        %{
-          status: determine_health_status(status),
-          metrics: status.metrics,
-          errors: status.errors || [],
-          last_checked: DateTime.utc_now()
-        }
-      
-      {:error, reason} ->
-        %{
-          status: :failed,
-          error: reason,
-          last_checked: DateTime.utc_now()
-        }
-    end
+    {:ok, status} = query_system_status(system)
+    %{
+      status: determine_health_status(status),
+      metrics: status.metrics,
+      errors: status.errors || [],
+      last_checked: DateTime.utc_now()
+    }
   end
   
   defp check_resource_utilization do
