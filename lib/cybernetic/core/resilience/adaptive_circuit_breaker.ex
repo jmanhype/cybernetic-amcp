@@ -231,6 +231,16 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     {:noreply, new_state}
   end
 
+  def terminate(_reason, state) do
+    # Clean up resources on termination
+    cancel_recovery_timer(state.recovery_timer)
+    
+    # Detach telemetry handlers
+    :telemetry.detach({:circuit_breaker_health, state.name})
+    
+    :ok
+  end
+
   # Private helper functions
 
   defp via_name(name), do: {:via, Registry, {Cybernetic.CircuitBreakerRegistry, name}}
