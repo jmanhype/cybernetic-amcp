@@ -8,10 +8,6 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
   @behaviour Cybernetic.Edge.WASM.Behaviour
   require Logger
   
-  # Find wasmtime at runtime, not compile time
-  defp wasmtime_path do
-    System.find_executable("wasmtime") || "/usr/local/bin/wasmtime"
-  end
   @telemetry [:cybernetic, :wasm, :port]
   
   @impl true
