@@ -107,15 +107,15 @@ defmodule CircuitBreakerSystemProof do
       prometheus_file = "lib/cybernetic/telemetry/prometheus.ex"
       content = File.read!(prometheus_file)
       
-      # Define expected metrics
+      # Define expected metrics (using actual metric names from code)
       expected_metrics = [
-        "cyb_circuit_breaker_state",
-        "cyb_circuit_breaker_success_count", 
-        "cyb_circuit_breaker_failure_count",
-        "cyb_circuit_breaker_health_score",
-        "cyb_circuit_breaker_adaptive_threshold",
-        "cybernetic_health_circuit_breakers_total_count",
-        "cybernetic_alerts_circuit_breaker_count"
+        "cyb.circuit_breaker.state",
+        "cyb.circuit_breaker.success.count", 
+        "cyb.circuit_breaker.failure.count",
+        "cyb.circuit_breaker.health_score",
+        "cyb.circuit_breaker.adaptive_threshold",
+        "cybernetic.health.circuit_breakers.total_count",
+        "cybernetic.alerts.circuit_breaker.count"
       ]
       
       {found_metrics, missing_metrics} = 
