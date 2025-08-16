@@ -358,7 +358,7 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
         :timer.sleep(exponential_backoff(4 - retries_left))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
         
-      {:ok, %{status: status, body: body}} ->
+      {:ok, %{status_code: status, body: body}} ->
         Logger.error("Anthropic API error: #{status} - #{body}")
         {:error, {:http_error, status, parse_error_body(body)}}
         
