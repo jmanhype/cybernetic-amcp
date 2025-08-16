@@ -89,13 +89,55 @@ defmodule Cybernetic.Telemetry.Prometheus do
     ),
     
     # Circuit Breaker Metrics
-    Telemetry.Metrics.last_value("cybernetic.circuit_breaker.state",
-      tags: [:service],
-      description: "Circuit breaker state (0=closed, 1=open, 2=half_open)"
+    Telemetry.Metrics.last_value("cyb.circuit_breaker.state",
+      tags: [:circuit_breaker, :state],
+      description: "Circuit breaker current state (0=closed, 1=open, 2=half_open)"
     ),
-    Telemetry.Metrics.counter("cybernetic.circuit_breaker.trip.count",
-      tags: [:service],
-      description: "Circuit breaker trips"
+    Telemetry.Metrics.counter("cyb.circuit_breaker.success.count",
+      tags: [:circuit_breaker, :state],
+      description: "Circuit breaker successful operations"
+    ),
+    Telemetry.Metrics.counter("cyb.circuit_breaker.failure.count",
+      tags: [:circuit_breaker, :state, :error_type],
+      description: "Circuit breaker failed operations"
+    ),
+    Telemetry.Metrics.counter("cyb.circuit_breaker.rejected.count",
+      tags: [:circuit_breaker, :state],
+      description: "Circuit breaker rejected operations (circuit open)"
+    ),
+    Telemetry.Metrics.counter("cyb.circuit_breaker.opened.count",
+      tags: [:circuit_breaker],
+      description: "Circuit breaker state transitions to open"
+    ),
+    Telemetry.Metrics.counter("cyb.circuit_breaker.closed.count",
+      tags: [:circuit_breaker],
+      description: "Circuit breaker state transitions to closed (recovered)"
+    ),
+    Telemetry.Metrics.counter("cyb.circuit_breaker.half_opened.count",
+      tags: [:circuit_breaker],
+      description: "Circuit breaker state transitions to half-open"
+    ),
+    Telemetry.Metrics.last_value("cyb.circuit_breaker.health_score",
+      tags: [:circuit_breaker],
+      description: "Circuit breaker health score (0.0-1.0)"
+    ),
+    Telemetry.Metrics.last_value("cyb.circuit_breaker.failure_count",
+      tags: [:circuit_breaker],
+      description: "Current failure count"
+    ),
+    Telemetry.Metrics.last_value("cyb.circuit_breaker.success_count",
+      tags: [:circuit_breaker],
+      description: "Current success count"
+    ),
+    Telemetry.Metrics.last_value("cyb.circuit_breaker.adaptive_threshold",
+      tags: [:circuit_breaker],
+      description: "Dynamic failure threshold"
+    ),
+    Telemetry.Metrics.distribution("cyb.circuit_breaker.operation_duration",
+      tags: [:circuit_breaker, :state],
+      unit: {:native, :microsecond},
+      description: "Circuit breaker operation duration",
+      reporter_options: [buckets: [100, 500, 1000, 5000, 10000, 25000, 50000, 100000]]
     ),
     
     # Memory Metrics
