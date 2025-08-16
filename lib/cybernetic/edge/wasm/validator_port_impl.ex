@@ -10,13 +10,6 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
   
   @telemetry [:cybernetic, :wasm, :port]
   
-  # Clean up temp files on process exit
-  def terminate(_reason, %{wasm_path: path}) when is_binary(path) do
-    File.rm(path)
-    :ok
-  end
-  def terminate(_reason, _state), do: :ok
-  
   @impl true
   def load(wasm_bytes, opts) do
     # Write WASM to temporary file
