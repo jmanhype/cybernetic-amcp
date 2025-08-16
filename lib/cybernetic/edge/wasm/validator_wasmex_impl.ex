@@ -61,7 +61,11 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
     )
     
     validation_time = System.monotonic_time(:microsecond) - start_time
-    fuel_consumed = fuel_limit - Wasmex.Store.fuel_remaining(store)
+    fuel_consumed = try do
+      fuel_limit - Wasmex.Store.fuel_remaining(store)
+    rescue
+      _ -> 0  # If fuel tracking fails, report 0 consumption
+    end
     
     :telemetry.execute(
       @telemetry ++ [:executed],
