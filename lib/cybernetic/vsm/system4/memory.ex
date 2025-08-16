@@ -344,7 +344,7 @@ defmodule Cybernetic.VSM.System4.Memory do
   
   defp broadcast_memory_update(episode_id, entry) do
     # Broadcast to CRDT for distributed sync
-    message = %{
+    _message = %{
       type: :memory_update,
       episode_id: episode_id,
       entry: entry,
