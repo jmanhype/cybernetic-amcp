@@ -138,6 +138,24 @@ defmodule Cybernetic.VSM.System4.Service do
   
   # Private Functions
   
+  defp init_circuit_breakers(providers) do
+    # Start circuit breakers for each provider
+    for {provider, _module} <- providers do
+      circuit_breaker_name = :"s4_provider_#{provider}"
+      
+      {:ok, _pid} = AdaptiveCircuitBreaker.start_link(
+        name: circuit_breaker_name,
+        failure_threshold: 3,
+        success_threshold: 2,
+        timeout_ms: 30_000
+      )
+      
+      Logger.info("Started circuit breaker for S4 provider: #{provider}")
+    end
+    
+    :ok
+  end
+
   defp init_providers(opts) do
     providers = Keyword.get(opts, :providers, [:anthropic, :openai, :together, :ollama])
     
