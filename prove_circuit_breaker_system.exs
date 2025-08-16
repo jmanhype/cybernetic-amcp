@@ -74,7 +74,7 @@ defmodule CircuitBreakerSystemProof do
       prometheus_file = "lib/cybernetic/telemetry/prometheus.ex"
       if File.exists?(prometheus_file) do
         content = File.read!(prometheus_file)
-        if String.contains?(content, "cyb_circuit_breaker") do
+        if String.contains?(content, "cyb.circuit_breaker") do
           IO.puts("   ✅ Circuit breaker metrics found in Prometheus config")
         else
           IO.puts("   ❌ Circuit breaker metrics missing from Prometheus config")
