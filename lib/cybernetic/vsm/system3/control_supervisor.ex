@@ -547,7 +547,7 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   
   # ========== PRIVATE FUNCTIONS - INTERVENTIONS ==========
   
-  defp execute_intervention(intervention, state) do
+  defp execute_intervention(intervention, _state) do
     Logger.info("Executing intervention: #{inspect(intervention)}")
     
     case intervention.action do
