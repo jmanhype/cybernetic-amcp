@@ -194,7 +194,7 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
     complexity = calculate_cyclomatic_complexity(code)
     
     index = 171 - 5.2 * :math.log(loc) - 0.23 * complexity
-    Float.round(max(0.0, min(100.0, index / 1.0)), 2)
+    Float.round(max(0.0, min(100.0, index)), 2)
   end
   
   defp calculate_technical_debt(code) do
