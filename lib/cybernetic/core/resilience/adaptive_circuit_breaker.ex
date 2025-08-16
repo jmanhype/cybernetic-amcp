@@ -253,9 +253,15 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
       duration = System.monotonic_time(:microsecond) - start_time
       
       new_state = handle_success(state)
-      emit_circuit_breaker_telemetry(new_state, :success, %{duration_us: duration})
+      # Clear transition_ref after successful execution (for half_open -> half_open partial success)
+      final_state = if state.state == :half_open and new_state.state == :half_open do
+        %{new_state | transition_ref: nil}
+      else
+        new_state
+      end
+      emit_circuit_breaker_telemetry(final_state, :success, %{duration_us: duration})
       
-      {:reply, {:ok, result}, new_state}
+      {:reply, {:ok, result}, final_state}
     rescue
       error ->
         duration = System.monotonic_time(:microsecond) - start_time
