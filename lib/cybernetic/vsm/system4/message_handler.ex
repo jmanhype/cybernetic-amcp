@@ -86,7 +86,7 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     :ok
   end
 
-  defp handle_pain_signal(payload, meta) do
+  defp handle_pain_signal(payload, _meta) do
     # Process pain signal and generate intervention
     data = Map.get(payload, "data", %{})
     severity = Map.get(data, :severity, :moderate)
@@ -123,7 +123,7 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     :ok
   end
 
-  defp handle_pleasure_signal(payload, meta) do
+  defp handle_pleasure_signal(payload, _meta) do
     # Process pleasure signal and generate optimization
     data = Map.get(payload, "data", %{})
     intensity = Map.get(data, :intensity, :mild)
@@ -160,7 +160,7 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     :ok
   end
 
-  defp process_intelligence_analysis(payload, meta) do
+  defp process_intelligence_analysis(payload, _meta) do
     # Analyze the intelligence data from S2
     coordination_id = Map.get(payload, "coordination_id")
     analysis_type = Map.get(payload, "analysis_request", "general")
