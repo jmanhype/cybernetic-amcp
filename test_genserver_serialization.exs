@@ -89,8 +89,8 @@ defmodule TestGenServerSerialization do
     state_changes = count_state_transitions(results_with_timing)
     IO.puts("State transitions: #{state_changes}")
     
-    # Cleanup
-    Enum.each(tasks, &Task.await(&1, 100))
+    # Cleanup tasks properly
+    Enum.each(tasks, &Task.await(&1, 1000))
     Process.exit(cb, :normal)
   end
   
