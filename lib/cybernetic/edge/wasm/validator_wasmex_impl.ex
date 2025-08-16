@@ -1,39 +1,140 @@
 defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
-  @moduledoc false
+  @moduledoc """
+  Production WASM validator with enhanced security and monitoring.
+  Provides deterministic sandboxed execution with fuel limiting.
+  """
   @behaviour Cybernetic.Edge.WASM.Behaviour
+  require Logger
+
+  @telemetry [:cybernetic, :wasm, :validator]
 
   @impl true
   def load(bytes, opts) do
     fuel = Keyword.fetch!(opts, :fuel)
     max_pages = Keyword.fetch!(opts, :max_memory_pages)
 
-    with {:ok, store} <- Wasmex.Store.new(),
+    start_time = System.monotonic_time(:microsecond)
+    
+    with {:ok, store} <- Wasmex.Store.new(limits: %{fuel: fuel}),
          {:ok, module} <- Wasmex.Module.compile(store, bytes),
-         {:ok, instance} <-
-           Wasmex.Instance.new(store, module, %{},
+         {:ok, imports} <- build_imports(store),
+         {:ok, instance} <- Wasmex.Instance.new(store, module, imports,
              fuel: fuel,
              memory_limits: %{max_pages: max_pages}
            ) do
-      {:ok, instance}
+      
+      load_time = System.monotonic_time(:microsecond) - start_time
+      :telemetry.execute(@telemetry ++ [:loaded], %{duration_us: load_time}, %{})
+      
+      {:ok, %{instance: instance, store: store, fuel_limit: fuel}}
     else
-      {:error, r} -> {:error, r}
-      other -> {:error, other}
+      {:error, r} ->
+        Logger.error("WASM load failed: #{inspect(r)}")
+        {:error, r}
+      other ->
+        {:error, other}
     end
   end
 
   @impl true
-  def validate(instance, message, opts) do
+  def validate(validator_state, message, opts) do
+    %{instance: instance, store: store, fuel_limit: fuel_limit} = validator_state
     timeout = Keyword.fetch!(opts, :timeout_ms)
+    
+    # Reset fuel for each validation
+    :ok = Wasmex.Store.set_fuel(store, fuel_limit)
+    
+    start_time = System.monotonic_time(:microsecond)
     json = Jason.encode!(message)
-
-    Wasmex.Instance.call_exported_function(instance, "validate", [json],
+    
+    # Add security context
+    context = %{
+      timestamp: System.system_time(:millisecond),
+      nonce: :crypto.strong_rand_bytes(16) |> Base.encode16()
+    }
+    
+    result = Wasmex.Instance.call_exported_function(
+      instance, 
+      "validate", 
+      [json, Jason.encode!(context)],
       timeout: timeout
     )
-    |> case do
-      {:ok, 0} -> :ok
-      {:ok, code} when is_integer(code) -> {:error, {:wasm_error_code, code}}
-      {:error, reason} -> {:error, reason}
-      other -> {:error, {:unexpected_return, other}}
+    
+    validation_time = System.monotonic_time(:microsecond) - start_time
+    fuel_consumed = fuel_limit - Wasmex.Store.fuel_remaining(store)
+    
+    :telemetry.execute(
+      @telemetry ++ [:executed],
+      %{
+        duration_us: validation_time,
+        fuel_consumed: fuel_consumed
+      },
+      %{result: elem(result, 0)}
+    )
+    
+    case result do
+      {:ok, 0} ->
+        {:ok, %{valid: true, fuel_consumed: fuel_consumed, duration_us: validation_time}}
+      {:ok, code} when is_integer(code) ->
+        {:error, %{
+          valid: false,
+          error_code: code,
+          error_message: decode_error(code),
+          fuel_consumed: fuel_consumed
+        }}
+      {:error, :timeout} ->
+        Logger.warning("WASM validation timeout after #{timeout}ms")
+        {:error, :validation_timeout}
+      {:error, :out_of_fuel} ->
+        Logger.warning("WASM exhausted fuel limit: #{fuel_limit}")
+        {:error, :fuel_exhausted}
+      {:error, reason} ->
+        {:error, reason}
+      other ->
+        {:error, {:unexpected_return, other}}
+    end
+  rescue
+    e ->
+      Logger.error("WASM validation exception: #{Exception.format(:error, e, __STACKTRACE__)}")
+      {:error, {:exception, e}}
+  end
+  
+  defp build_imports(_store) do
+    # Host functions available to WASM
+    {:ok, %{
+      "env" => %{
+        # Current timestamp for validation
+        "host_time_ms" => fn -> System.system_time(:millisecond) end,
+        
+        # Secure random for nonces
+        "host_random" => fn size -> 
+          :crypto.strong_rand_bytes(size) |> :binary.decode_unsigned()
+        end,
+        
+        # HMAC for signatures
+        "host_hmac_sha256" => fn data, key ->
+          :crypto.mac(:hmac, :sha256, key, data) |> Base.encode16()
+        end,
+        
+        # Logging for debugging
+        "host_log" => fn level, msg ->
+          Logger.log(String.to_atom(level), "WASM: #{msg}")
+          0
+        end
+      }
+    }}
+  end
+  
+  defp decode_error(code) do
+    case code do
+      1 -> "Invalid JSON input"
+      2 -> "Missing required field"
+      3 -> "Invalid message signature"
+      4 -> "Timestamp outside allowed window"
+      5 -> "Invalid or replay nonce"
+      6 -> "Permission denied"
+      7 -> "Resource limit exceeded"
+      _ -> "Unknown error code: #{code}"
     end
   end
 end
