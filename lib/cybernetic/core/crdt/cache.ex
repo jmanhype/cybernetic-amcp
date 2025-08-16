@@ -133,7 +133,7 @@ defmodule Cybernetic.Core.CRDT.Cache do
       expired_entries: expired_entries,
       max_size: state.max_size,
       ttl_ms: state.ttl_ms,
-      memory_usage: :erlang.memory(:total) - :erlang.memory(:total)
+      cache_size_bytes: estimate_cache_memory_usage(state.cache)
     }
     
     {:reply, stats, state}
