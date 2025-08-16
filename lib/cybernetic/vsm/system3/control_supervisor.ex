@@ -933,7 +933,59 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   # Placeholder functions - implement based on actual system
   defp query_system_status(_system), do: {:ok, %{metrics: %{}, errors: []}}
   defp determine_health_status(_status), do: :healthy
-  defp check_resource_limit_policy(_policy, _state), do: []
+  defp check_resource_limit_policy(policy, state) do
+    violations = []
+    
+    # Check CPU usage against policy
+    violations = 
+      if Map.has_key?(policy.rules, :max_cpu) do
+        current_cpu = get_current_cpu_usage()
+        max_cpu = policy.rules.max_cpu
+        
+        if current_cpu > max_cpu do
+          violation = %{
+            type: :resource_limit,
+            resource: :cpu,
+            severity: :critical,
+            current_value: current_cpu,
+            limit: max_cpu,
+            component: :system,
+            description: "CPU usage #{current_cpu} exceeds limit #{max_cpu}"
+          }
+          [violation | violations]
+        else
+          violations
+        end
+      else
+        violations
+      end
+    
+    # Check memory usage against policy
+    violations = 
+      if Map.has_key?(policy.rules, :max_memory) do
+        current_memory = get_current_memory_usage()
+        max_memory = policy.rules.max_memory
+        
+        if current_memory > max_memory do
+          violation = %{
+            type: :resource_limit,
+            resource: :memory,
+            severity: :high,
+            current_value: current_memory,
+            limit: max_memory,
+            component: :system,
+            description: "Memory usage #{current_memory} exceeds limit #{max_memory}"
+          }
+          [violation | violations]
+        else
+          violations
+        end
+      else
+        violations
+      end
+    
+    violations
+  end
   defp check_operational_policy(_policy, _state), do: []
   defp check_security_policy(_policy, _state), do: []
   defp check_sla_policy(_policy, _state), do: []
