@@ -81,7 +81,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     
     case Jason.encode(secured_message) do
       {:ok, json} ->
-        result = Basic.publish(
+        Basic.publish(
           channel,
           exchange,
           routing_key,
