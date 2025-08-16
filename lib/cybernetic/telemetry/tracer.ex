@@ -15,7 +15,7 @@ defmodule Cybernetic.Telemetry.Tracer do
     Application.put_env(:opentelemetry, :traces_exporter, :otlp)
     
     # Set resource attributes
-    resource_attributes = %{
+    _resource_attributes = %{
       "service.name" => "cybernetic",
       "service.version" => "0.1.0",
       "deployment.environment" => Mix.env() |> to_string()
@@ -45,7 +45,7 @@ defmodule Cybernetic.Telemetry.Tracer do
       # Force flush through the provider
       case tracer_provider do
         :undefined -> 
-          Logger.warn("No tracer provider available")
+          Logger.warning("No tracer provider available")
           :ok
         _ ->
           # Use the batch processor's force flush
@@ -55,7 +55,7 @@ defmodule Cybernetic.Telemetry.Tracer do
       end
     rescue
       e ->
-        Logger.warn("Failed to force flush: #{inspect(e)}")
+        Logger.warning("Failed to force flush: #{inspect(e)}")
         :ok
     end
   end

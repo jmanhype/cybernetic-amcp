@@ -197,7 +197,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
         Logger.debug("System2: Forwarded intelligence to S4")
         :ok
       error ->
-        Logger.warn("System2: Failed to forward to S4: #{inspect(error)}")
+        Logger.warning("System2: Failed to forward to S4: #{inspect(error)}")
         error
     end
   end

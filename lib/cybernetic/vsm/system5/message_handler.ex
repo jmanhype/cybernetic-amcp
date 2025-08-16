@@ -15,7 +15,7 @@ defmodule Cybernetic.VSM.System5.MessageHandler do
       "compliance_check" -> handle_compliance_check(payload, meta)
       "default" -> handle_default(payload, meta)
       _ -> 
-        Logger.warn("Unknown operation for System5: #{operation}")
+        Logger.warning("Unknown operation for System5: #{operation}")
         {:error, :unknown_operation}
     end
   rescue

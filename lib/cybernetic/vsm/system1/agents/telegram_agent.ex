@@ -17,7 +17,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
 
   def init(_opts) do
     # Subscribe to Telegram updates if configured
-    if bot_token = System.get_env("TELEGRAM_BOT_TOKEN") do
+    if _bot_token = System.get_env("TELEGRAM_BOT_TOKEN") do
       Logger.info("Telegram agent initialized with bot token")
       # Start polling or webhook listener
       Process.send_after(self(), :start_polling, 1000)
@@ -124,7 +124,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
       # Send via Telegram API
       send_telegram_message(chat_id, text, options, state.bot_token)
     else
-      Logger.warn("No Telegram bot token configured")
+      Logger.warning("No Telegram bot token configured")
     end
     {:noreply, state}
   end
@@ -141,7 +141,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
         {:noreply, new_state}
       
       nil ->
-        Logger.warn("Received response for unknown correlation_id: #{correlation_id}")
+        Logger.warning("Received response for unknown correlation_id: #{correlation_id}")
         {:noreply, state}
     end
   end

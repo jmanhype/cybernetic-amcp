@@ -21,7 +21,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
       "success" -> handle_success(payload, meta)
       "default" -> handle_default(payload, meta)
       _ -> 
-        Logger.warn("Unknown operation for System1: #{operation}")
+        Logger.warning("Unknown operation for System1: #{operation}")
         {:error, :unknown_operation}
     end
   rescue
@@ -37,7 +37,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     # Process the operation locally - just verify the supervisor is running
     operation_result = case Process.whereis(Cybernetic.VSM.System1.Operational) do
       nil -> 
-        Logger.warn("System1 operational supervisor not found")
+        Logger.warning("System1 operational supervisor not found")
         {:error, :supervisor_not_found}
       _pid -> 
         # Operation processed successfully - no circular call needed
@@ -87,7 +87,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
       "stop" -> stop_coordination_task(payload, meta)
       "update" -> update_coordination_task(payload, meta)
       _ -> 
-        Logger.warn("Unknown coordination action")
+        Logger.warning("Unknown coordination action")
         {:error, :unknown_coordination_action}
     end
   end
@@ -107,7 +107,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
 
   defp handle_error(payload, meta) do
     # Handle error events and trigger algedonic pain signals
-    Logger.warn("System1: Error event - #{inspect(payload)}")
+    Logger.warning("System1: Error event - #{inspect(payload)}")
     
     # Record error for algedonic analysis
     record_algedonic_event(:pain, payload, meta)
@@ -159,7 +159,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   defp respond_to_requester(allocation, meta) do
     # Send response back through transport
     case Map.get(meta, :source_node) do
-      nil -> Logger.warn("System1: No source node for response")
+      nil -> Logger.warning("System1: No source node for response")
       source_node ->
         response = %{
           "status" => "allocated",
@@ -177,17 +177,17 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     end
   end
 
-  defp start_coordination_task(payload, _meta) do
+  defp start_coordination_task(payload, meta) do
     Logger.info("System1: Starting coordination task - #{Map.get(payload, "task_id", "unknown")}")
     :ok
   end
 
-  defp stop_coordination_task(payload, _meta) do
+  defp stop_coordination_task(payload, meta) do
     Logger.info("System1: Stopping coordination task - #{Map.get(payload, "task_id", "unknown")}")
     :ok
   end
 
-  defp update_coordination_task(payload, _meta) do
+  defp update_coordination_task(payload, meta) do
     Logger.info("System1: Updating coordination task - #{Map.get(payload, "task_id", "unknown")}")
     :ok
   end
@@ -214,7 +214,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
         Logger.debug("System1: Forwarded operation to S2 for coordination")
         :ok
       error -> 
-        Logger.warn("System1: Failed to forward to S2: #{inspect(error)}")
+        Logger.warning("System1: Failed to forward to S2: #{inspect(error)}")
         error
     end
   end
@@ -299,7 +299,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
         Logger.info("System1: Emitted #{type} algedonic signal")
         :ok
       error ->
-        Logger.warn("System1: Failed to emit algedonic signal: #{inspect(error)}")
+        Logger.warning("System1: Failed to emit algedonic signal: #{inspect(error)}")
         error
     end
   end

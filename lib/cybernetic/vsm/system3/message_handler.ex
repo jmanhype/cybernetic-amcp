@@ -14,7 +14,7 @@ defmodule Cybernetic.VSM.System3.MessageHandler do
       "alert" -> handle_alert(payload, meta)
       "default" -> handle_default(payload, meta)
       _ -> 
-        Logger.warn("Unknown operation for System3: #{operation}")
+        Logger.warning("Unknown operation for System3: #{operation}")
         {:error, :unknown_operation}
     end
   rescue
@@ -34,7 +34,7 @@ defmodule Cybernetic.VSM.System3.MessageHandler do
   end
 
   defp handle_alert(payload, meta) do
-    Logger.warn("System3: Alert received - #{inspect(payload)}")
+    Logger.warning("System3: Alert received - #{inspect(payload)}")
     :ok
   end
 

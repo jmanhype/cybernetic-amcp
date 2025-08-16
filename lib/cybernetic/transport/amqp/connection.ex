@@ -70,7 +70,7 @@ defmodule Cybernetic.Transport.AMQP.Connection do
   end
   
   def handle_info({:DOWN, _, :process, _pid, reason}, state) do
-    Logger.warn("AMQP connection lost: #{inspect(reason)}")
+    Logger.warning("AMQP connection lost: #{inspect(reason)}")
     Process.send_after(self(), :connect, @reconnect_interval)
     {:noreply, %{state | connection: nil, channel: nil, status: :disconnected}}
   end
