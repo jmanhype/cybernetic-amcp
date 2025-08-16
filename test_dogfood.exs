@@ -155,10 +155,8 @@ defmodule DogfoodTest do
     Logger.info("  • Forcing batch flush...")
     BatchedCollector.flush()
     
-    # Get collector stats
+    # Wait for batch processing
     Process.sleep(100)
-    stats = BatchedCollector.get_stats()
-    Logger.info("  • Collector stats: #{inspect(stats)}")
     
     # Clean up handler
     BatchedCollector.remove_handler(handler_ref)
