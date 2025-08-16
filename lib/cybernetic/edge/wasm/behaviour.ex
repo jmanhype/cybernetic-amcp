@@ -6,5 +6,5 @@ defmodule Cybernetic.Edge.WASM.Behaviour do
   @callback load(module_bytes :: binary(), opts :: keyword) ::
               {:ok, term()} | {:error, term()}
   @callback validate(instance :: term(), message :: map(), opts :: keyword) ::
-              :ok | {:error, term()}
+              {:ok, map()} | {:error, term()}
 end
