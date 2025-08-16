@@ -129,7 +129,7 @@ defmodule Cybernetic.Telemetry.Tracer do
         services = Jason.decode!(body)["data"] || []
         
         if "cybernetic" in services do
-          IO.puts("   ✅ 'cybernetic' service found in Jaeger!")
+          IO.puts("   ✅ \"cybernetic\" service found in Jaeger!")
           check_traces()
         else
           IO.puts("   ⚠️  Service not found. Available: #{inspect(services)}")
