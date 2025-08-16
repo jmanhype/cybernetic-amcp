@@ -131,7 +131,7 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     :ok
   end
 
-  defp handle_default(payload, meta) do
+  defp handle_default(payload, _meta) do
     # Handle default/unknown messages
     Logger.debug("System1: Default handler - #{inspect(payload)}")
     :ok
@@ -177,17 +177,17 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     end
   end
 
-  defp start_coordination_task(payload, meta) do
+  defp start_coordination_task(payload, _meta) do
     Logger.info("System1: Starting coordination task - #{Map.get(payload, "task_id", "unknown")}")
     :ok
   end
 
-  defp stop_coordination_task(payload, meta) do
+  defp stop_coordination_task(payload, _meta) do
     Logger.info("System1: Stopping coordination task - #{Map.get(payload, "task_id", "unknown")}")
     :ok
   end
 
-  defp update_coordination_task(payload, meta) do
+  defp update_coordination_task(payload, _meta) do
     Logger.info("System1: Updating coordination task - #{Map.get(payload, "task_id", "unknown")}")
     :ok
   end
