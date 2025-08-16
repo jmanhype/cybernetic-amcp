@@ -468,32 +468,32 @@ defmodule Cybernetic.Security.AuthManager do
   
   # Unused function - kept for future JWT validation needs
   # defp verify_jwt(token) do
-    case String.split(token, ".") do
-      [payload_b64, signature_b64] ->
-        case Base.decode64(payload_b64, padding: false) do
-          {:ok, payload} ->
-            expected_signature = :crypto.mac(:hmac, :sha256, @jwt_secret, payload) |> Base.encode64(padding: false)
-        
-            if signature_b64 == expected_signature do
-              claims = Jason.decode!(payload)
-              
-              # Check expiration
-              if claims["exp"] > DateTime.to_unix(DateTime.utc_now()) do
-                {:ok, claims}
-              else
-                {:error, :expired}
-              end
-            else
-              {:error, :invalid_signature}
-            end
-          
-          :error ->
-            {:error, :invalid_format}
-        end
-      
-      # _ ->
-        # {:error, :invalid_format}
-    # end
+  #   case String.split(token, ".") do
+  #     [payload_b64, signature_b64] ->
+  #       case Base.decode64(payload_b64, padding: false) do
+  #         {:ok, payload} ->
+  #           expected_signature = :crypto.mac(:hmac, :sha256, @jwt_secret, payload) |> Base.encode64(padding: false)
+  #       
+  #           if signature_b64 == expected_signature do
+  #             claims = Jason.decode!(payload)
+  #             
+  #             # Check expiration
+  #             if claims["exp"] > DateTime.to_unix(DateTime.utc_now()) do
+  #               {:ok, claims}
+  #             else
+  #               {:error, :expired}
+  #             end
+  #           else
+  #             {:error, :invalid_signature}
+  #           end
+  #         
+  #         :error ->
+  #           {:error, :invalid_format}
+  #       end
+  #     
+  #     _ ->
+  #       {:error, :invalid_format}
+  #   end
   # end
   
   defp generate_refresh_token(_user) do
