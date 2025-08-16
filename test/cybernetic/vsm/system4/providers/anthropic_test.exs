@@ -1,6 +1,7 @@
 defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
   use ExUnit.Case, async: true
   alias Cybernetic.VSM.System4.Providers.Anthropic
+  alias Cybernetic.VSM.System4.Episode
   
   import ExUnit.CaptureLog
   
