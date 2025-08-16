@@ -46,15 +46,18 @@ defmodule Cybernetic.Telemetry.OTEL do
     end
     
     # Configure text map propagator for B3 and W3C (with fallback)
-    case function_exported?(:otel_propagator_text_map, :set, 1) do
-      true ->
+    try do
+      if function_exported?(:otel_propagator_text_map, :set, 1) do
         :otel_propagator_text_map.set([
           :otel_propagator_b3,
           :otel_propagator_trace_context
         ])
-      false ->
+      else
         # Fallback for older OpenTelemetry versions
         :ok
+      end
+    rescue
+      _ -> :ok
     end
     
     :ok
