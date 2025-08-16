@@ -50,7 +50,8 @@ defmodule CircuitBreakerSystemProof do
   defp test_compilation do
     IO.puts("\n1️⃣ Testing Module Compilation...")
     
-    try do
+    catch_error = fn ->
+      try do
       # Test circuit breaker module
       circuit_breaker_file = "lib/cybernetic/core/resilience/adaptive_circuit_breaker.ex"
       if File.exists?(circuit_breaker_file) do
@@ -84,19 +85,25 @@ defmodule CircuitBreakerSystemProof do
         throw :error
       end
       
-      IO.puts("   ✅ All modules present and properly configured")
-      :ok
-    rescue
-      error ->
-        IO.puts("   ❌ Compilation test failed: #{inspect(error)}")
-        :error
+        IO.puts("   ✅ All modules present and properly configured")
+        :ok
+      rescue
+        error ->
+          IO.puts("   ❌ Compilation test failed: #{inspect(error)}")
+          :error
+      catch
+        :error -> :error
+      end
     end
+    
+    catch_error.()
   end
   
   defp test_prometheus_metrics do
     IO.puts("\n2️⃣ Testing Prometheus Metrics Configuration...")
     
-    try do
+    catch_error = fn ->
+      try do
       prometheus_file = "lib/cybernetic/telemetry/prometheus.ex"
       content = File.read!(prometheus_file)
       
@@ -111,16 +118,14 @@ defmodule CircuitBreakerSystemProof do
         "cybernetic_alerts_circuit_breaker_count"
       ]
       
-      found_metrics = []
-      missing_metrics = []
-      
-      for metric <- expected_metrics do
-        if String.contains?(content, metric) do
-          found_metrics = [metric | found_metrics]
-        else
-          missing_metrics = [metric | missing_metrics]
-        end
-      end
+      {found_metrics, missing_metrics} = 
+        Enum.reduce(expected_metrics, {[], []}, fn metric, {found, missing} ->
+          if String.contains?(content, metric) do
+            {[metric | found], missing}
+          else
+            {found, [metric | missing]}
+          end
+        end)
       
       IO.puts("   ✅ Found #{length(found_metrics)} out of #{length(expected_metrics)} expected metrics")
       
@@ -138,22 +143,28 @@ defmodule CircuitBreakerSystemProof do
       
       if length(found_metrics) >= 5 do
         IO.puts("   ✅ Sufficient metrics configured for monitoring")
-        :ok
-      else
-        IO.puts("   ❌ Insufficient metrics configured")
-        :error
+          :ok
+        else
+          IO.puts("   ❌ Insufficient metrics configured")
+          :error
+        end
+      rescue
+        error ->
+          IO.puts("   ❌ Metrics test failed: #{inspect(error)}")
+          :error
+      catch
+        :error -> :error
       end
-    rescue
-      error ->
-        IO.puts("   ❌ Metrics test failed: #{inspect(error)}")
-        :error
     end
+    
+    catch_error.()
   end
   
   defp test_alert_system do
     IO.puts("\n3️⃣ Testing Alert System Configuration...")
     
-    try do
+    catch_error = fn ->
+      try do
       alerts_file = "lib/cybernetic/core/resilience/circuit_breaker_alerts.ex"
       content = File.read!(alerts_file)
       
@@ -182,19 +193,25 @@ defmodule CircuitBreakerSystemProof do
         throw :error
       end
       
-      IO.puts("   ✅ Alert system properly configured")
-      :ok
-    rescue
-      error ->
-        IO.puts("   ❌ Alert system test failed: #{inspect(error)}")
-        :error
+        IO.puts("   ✅ Alert system properly configured")
+        :ok
+      rescue
+        error ->
+          IO.puts("   ❌ Alert system test failed: #{inspect(error)}")
+          :error
+      catch
+        :error -> :error
+      end
     end
+    
+    catch_error.()
   end
   
   defp test_application_integration do
     IO.puts("\n4️⃣ Testing Application Integration...")
     
-    try do
+    catch_error = fn ->
+      try do
       app_file = "lib/cybernetic/application.ex"
       content = File.read!(app_file)
       
@@ -222,13 +239,18 @@ defmodule CircuitBreakerSystemProof do
         throw :error
       end
       
-      IO.puts("   ✅ Application integration verified")
-      :ok
-    rescue
-      error ->
-        IO.puts("   ❌ Integration test failed: #{inspect(error)}")
-        :error
+        IO.puts("   ✅ Application integration verified")
+        :ok
+      rescue
+        error ->
+          IO.puts("   ❌ Integration test failed: #{inspect(error)}")
+          :error
+      catch
+        :error -> :error
+      end
     end
+    
+    catch_error.()
   end
   
   defp test_telemetry_events do
