@@ -16,11 +16,11 @@ defmodule TestS4CircuitBreaker do
     end
     
     # Test 1: Basic S4 Service initialization with circuit breakers
-    IO.puts("\n📌 Test 1: S4 Service Initialization")
+    IO.puts("\n📌 Test 1: S4 Service Status")
     
-    {:ok, service_pid} = Cybernetic.VSM.System4.Service.start_link(
-      providers: [:anthropic, :together]
-    )
+    # S4 Service is already started by the application, just check it's running
+    service_pid = Process.whereis(Cybernetic.VSM.System4.Service)
+    IO.puts("  S4 Service PID: #{inspect(service_pid)}")
     
     # Wait a bit for initialization
     Process.sleep(100)
