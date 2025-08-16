@@ -110,7 +110,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
     {:noreply, %{state | neighbors: neighbors}}
   end
   
-  def handle_info({:nodeup, node, _info}, %{crdt: crdt} = state) do
+  def handle_info({:nodeup, node, _info}, state) do
     Logger.info("Node joined cluster: #{node}")
     # Re-wire neighbors when a new node joins
     Process.send_after(self(), :wire_neighbors, 500)
