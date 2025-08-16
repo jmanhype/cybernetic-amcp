@@ -139,7 +139,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
           {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
         end
       ] do
-        {:ok, result} = Anthropic.analyze_episode(provider, episode)
+        {:ok, result} = Anthropic.analyze_episode(episode, [])
         
         assert result.summary == "This is a plain text analysis that couldn't be parsed as JSON"
         assert result.root_causes == []
