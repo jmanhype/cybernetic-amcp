@@ -68,6 +68,7 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
   
+  @impl GenServer
   def init(_opts) do
     # Attach to telemetry events
     :telemetry.attach_many(
@@ -91,7 +92,8 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
   
   # Callbacks
   
-  def handle_cast({:telemetry_event, event_name, measurements, metadata}, state) do
+  @impl GenServer
+  def handle_cast({:telemetry_event, event_name, measurements, _metadata}, state) do
     event = %{
       name: event_name,
       measurements: measurements,
@@ -227,12 +229,12 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       :severe ->
         # Severe pain: Route to S3 (Control) for intervention
         Publisher.publish(events_exchange, signal, routing_key: "vsm.s3.algedonic.pain.severe")
-        Logger.warn("SEVERE PAIN signal sent to S3 Control: success_rate=#{success_rate}")
+        Logger.warning("SEVERE PAIN signal sent to S3 Control: success_rate=#{success_rate}")
         
       _ ->
         # Mild/moderate pain: Route to S4 (Intelligence) for analysis
         Publisher.publish(events_exchange, signal, routing_key: "vsm.s4.algedonic.pain")
-        Logger.warn("PAIN signal sent to S4 Intelligence: success_rate=#{success_rate}, severity=#{severity}")
+        Logger.warning("PAIN signal sent to S4 Intelligence: success_rate=#{success_rate}, severity=#{severity}")
     end
     
     # Emit telemetry event
@@ -326,7 +328,7 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     end
   end
   
-  defp generate_pleasure_recommendations(success_rate, avg_latency) do
+  defp generate_pleasure_recommendations(_success_rate, _avg_latency) do
     [
       "System performing optimally",
       "Consider increasing throughput capacity",
