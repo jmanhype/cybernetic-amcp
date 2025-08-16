@@ -2,6 +2,8 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
   use ExUnit.Case, async: false
   alias Cybernetic.VSM.System5.PolicyIntelligence
   
+  @moduletag :integration
+  
   describe "Policy Intelligence Engine" do
     setup do
       # Start the PolicyIntelligence process for testing
