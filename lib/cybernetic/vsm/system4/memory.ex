@@ -263,7 +263,7 @@ defmodule Cybernetic.VSM.System4.Memory do
     Enum.reverse(kept)
   end
   
-  defp find_related_context(episode_id, direct_context, state) do
+  defp find_related_context(_episode_id, direct_context, state) do
     # Use episode metadata to find related episodes
     # This would use semantic search in production
     
@@ -324,7 +324,7 @@ defmodule Cybernetic.VSM.System4.Memory do
     Enum.map(1..768, fn _ -> :rand.uniform() end)
   end
   
-  defp search_by_embedding(query_embedding, threshold, limit, state) do
+  defp search_by_embedding(_query_embedding, _threshold, limit, _state) do
     # Placeholder for semantic search
     # Would compute cosine similarity with cached embeddings
     
@@ -351,11 +351,13 @@ defmodule Cybernetic.VSM.System4.Memory do
       node: node()
     }
     
-    Cybernetic.Core.CRDT.ContextGraph.add_event(
-      "s4_memory",
-      episode_id,
-      message
-    )
+    # TODO: Implement CRDT integration when ContextGraph.add_event/3 is available
+    # Cybernetic.Core.CRDT.ContextGraph.add_event(
+    #   "s4_memory",
+    #   episode_id,
+    #   message
+    # )
+    :ok
   rescue
     _ -> :ok  # Fail silently if CRDT not available
   end
