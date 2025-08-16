@@ -205,6 +205,4 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
   defp generate_coordination_id do
     "coord_#{:os.system_time(:millisecond)}_#{:rand.uniform(1000)}"
   end
-  
-  defp return(value), do: value
 end
