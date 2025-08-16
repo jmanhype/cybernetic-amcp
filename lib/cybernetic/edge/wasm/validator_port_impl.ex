@@ -150,14 +150,6 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
           Port.close(port)
         end
         {:error, :timeout}
-        
-    after
-      timeout ->
-        Process.cancel_timer(timer)
-        if Port.info(port) != nil do
-          Port.close(port)
-        end
-        {:error, :timeout}
     end
   end
   
