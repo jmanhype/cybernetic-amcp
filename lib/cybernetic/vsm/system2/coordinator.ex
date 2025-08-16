@@ -135,7 +135,7 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   end
   
   # Handle transport messages from in-memory transport
-  def handle_cast({:transport_message, message, opts}, state) do
+  def handle_cast({:transport_message, message, _opts}, state) do
     # Extract operation from type field first (for routing keys), then fallback to operation field
     operation = case Map.get(message, :type) || Map.get(message, "type") do
       "vsm.s2.coordinate" -> "coordinate"
