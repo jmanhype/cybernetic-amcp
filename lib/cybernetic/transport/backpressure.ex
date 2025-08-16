@@ -44,7 +44,7 @@ defmodule Cybernetic.Transport.Backpressure do
 
     def handle_cast({:push, event}, %{queue: queue, max_buffer: max_buffer} = state) do
       if :queue.len(queue) >= max_buffer do
-        Logger.warn("Backpressure: Queue full (#{max_buffer}), dropping event")
+        Logger.warning("Backpressure: Queue full (#{max_buffer}), dropping event")
         {:noreply, [], state}
       else
         new_queue = :queue.in(event, queue)
