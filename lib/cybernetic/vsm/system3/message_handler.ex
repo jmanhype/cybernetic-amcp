@@ -23,22 +23,22 @@ defmodule Cybernetic.VSM.System3.MessageHandler do
       {:error, error}
   end
 
-  defp handle_control(payload, meta) do
+  defp handle_control(payload, _meta) do
     Logger.info("System3: Control action - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_monitor(payload, meta) do
+  defp handle_monitor(payload, _meta) do
     Logger.debug("System3: Monitor update - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_alert(payload, meta) do
+  defp handle_alert(payload, _meta) do
     Logger.warning("System3: Alert received - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_default(payload, meta) do
+  defp handle_default(payload, _meta) do
     Logger.debug("System3: Default handler - #{inspect(payload)}")
     :ok
   end
