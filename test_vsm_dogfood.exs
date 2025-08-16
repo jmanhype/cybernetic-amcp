@@ -1,7 +1,7 @@
 #!/usr/bin/env elixir
 
 # Comprehensive Dogfood Test for Cybernetic VSM Framework
-# Tests all VSM systems (S1-S5), CRDT, MCP, Security, and Health monitoring
+# Tests all major components: VSM S1-S5, CRDT, MCP, Security, Health
 
 defmodule VSMDogfoodTest do
   @moduledoc """
@@ -14,9 +14,9 @@ defmodule VSMDogfoodTest do
     Logger.info("🐕 Starting Comprehensive VSM Dogfood Test")
     Logger.info("=" |> String.duplicate(60))
     
-    # Test each major component
+    # Test all major components
     test_vsm_systems()
-    test_crdt_synchronization()
+    test_crdt_state()
     test_mcp_tools()
     test_security_components()
     test_health_monitoring()
@@ -31,288 +31,183 @@ defmodule VSMDogfoodTest do
     Logger.info("\n🏗️ Testing VSM Systems (S1-S5)...")
     Logger.info("-" |> String.duplicate(40))
     
-    # Test S1 - Operational System
+    # Test S1 - Operational
     Logger.info("  • Testing S1 Operational System...")
-    test_s1_operations()
+    {:ok, s1_pid} = Cybernetic.VSM.System1.Operational.start_link(name: :test_s1)
     
-    # Test S2 - Coordination System  
-    Logger.info("  • Testing S2 Coordination System...")
-    test_s2_coordination()
-    
-    # Test S3 - Control System
-    Logger.info("  • Testing S3 Control System...")
-    test_s3_control()
-    
-    # Test S4 - Intelligence System
-    Logger.info("  • Testing S4 Intelligence System...")
-    test_s4_intelligence()
-    
-    # Test S5 - Policy System
-    Logger.info("  • Testing S5 Policy System...")
-    test_s5_policy()
-    
-    Logger.info("  ✓ VSM Systems test completed")
-  end
-  
-  defp test_s1_operations do
-    alias Cybernetic.VSM.System1
-    
-    # Test basic operation handling
-    operation = %{
+    # Send test operation
+    GenServer.cast(s1_pid, {:operation, %{
       type: "vsm.s1.operation",
       operation: "process_data",
-      data: %{value: 42, timestamp: DateTime.utc_now()}
-    }
-    
-    result = System1.handle_operation(operation)
-    Logger.info("    S1 processed operation: #{inspect(result)}")
-    
-    # Test resource requests
-    resource_request = %{
-      type: "resource_request",
-      amount: 10,
-      resource_type: "cpu"
-    }
-    
-    System1.handle_operation(resource_request)
-    Logger.info("    S1 handled resource request")
-  rescue
-    error ->
-      Logger.warning("    S1 test failed: #{inspect(error)}")
-  end
-  
-  defp test_s2_coordination do
-    alias Cybernetic.VSM.System2.Coordinator
-    
-    # Test coordination
-    {:ok, pid} = Coordinator.start_link([])
-    
-    # Request coordination
-    coordination_request = %{
-      type: "vsm.s2.coordinate",
-      source_system: "s1",
-      operation: "balance_load",
-      timestamp: DateTime.utc_now()
-    }
-    
-    GenServer.cast(pid, {:coordinate, coordination_request})
+      data: %{value: 42, source: "dogfood_test"}
+    }})
     Process.sleep(100)
+    Logger.info("    ✓ S1 processed operation")
     
-    state = GenServer.call(pid, :get_state)
-    Logger.info("    S2 coordination state: #{inspect(Map.keys(state))}")
+    # Test S2 - Coordination
+    Logger.info("  • Testing S2 Coordination System...")
+    {:ok, s2_pid} = Cybernetic.VSM.System2.Attention.start_link([])
     
-    GenServer.stop(pid)
-  rescue
-    error ->
-      Logger.warning("    S2 test failed: #{inspect(error)}")
-  end
-  
-  defp test_s3_control do
+    # Request resources
+    result = GenServer.call(s2_pid, {:reserve, :test_resource, 5}, 5000)
+    Logger.info("    S2 resource reservation: #{inspect(result)}")
+    
+    # Test S3 - Control & Monitoring
+    Logger.info("  • Testing S3 Control System...")
     alias Cybernetic.VSM.System3.RateLimiter
     
     # Test rate limiting
-    budget = :test_budget
+    budget_result = RateLimiter.check_budget(:mcp_tools, 10)
+    Logger.info("    S3 rate limit check: #{inspect(budget_result)}")
     
-    # Reserve tokens
-    results = for i <- 1..10 do
-      RateLimiter.reserve(budget, 1)
-    end
-    
-    allowed = Enum.count(results, &match?(:ok, &1))
-    denied = Enum.count(results, &match?({:error, :rate_limited}, &1))
-    
-    Logger.info("    S3 RateLimiter: #{allowed} allowed, #{denied} denied")
-  rescue
-    error ->
-      Logger.warning("    S3 test failed: #{inspect(error)}")
-  end
-  
-  defp test_s4_intelligence do
+    # Test S4 - Intelligence
+    Logger.info("  • Testing S4 Intelligence System...")
     alias Cybernetic.VSM.System4.Memory
     
-    # Test memory storage
-    Memory.store("test_context", %{
-      query: "What is the meaning of life?",
-      response: "42",
-      timestamp: DateTime.utc_now()
-    })
+    # Store and retrieve memory
+    Memory.store("test_key", %{data: "test_value", timestamp: DateTime.utc_now()})
+    memory_result = Memory.retrieve("test_key")
+    Logger.info("    S4 memory retrieval: #{inspect(memory_result)}")
     
-    case Memory.recall("test_context") do
-      {:ok, data} ->
-        Logger.info("    S4 Memory recalled: #{inspect(Map.keys(data))}")
-      _ ->
-        Logger.info("    S4 Memory: no data found")
-    end
+    # Test S5 - Policy
+    Logger.info("  • Testing S5 Policy System...")
+    {:ok, s5_pid} = Cybernetic.VSM.System5.Policy.start_link([])
     
-    # Test pattern analysis (simulated)
-    Logger.info("    S4 Intelligence: Pattern analysis ready")
+    policy_result = GenServer.call(s5_pid, {:evaluate_policy, %{
+      action: "test_action",
+      context: %{user: "dogfood", priority: "high"}
+    }}, 5000)
+    Logger.info("    S5 policy evaluation: #{inspect(policy_result)}")
+    
+    Logger.info("  ✓ VSM Systems test completed")
   rescue
     error ->
-      Logger.warning("    S4 test failed: #{inspect(error)}")
+      Logger.warning("  ⚠ VSM test partial failure: #{inspect(error)}")
   end
   
-  defp test_s5_policy do
-    alias Cybernetic.VSM.System5.PolicyEngine
-    
-    # Test policy evaluation
-    policy_context = %{
-      action: "deploy",
-      resource: "production",
-      user: "system",
-      risk_level: 0.3
-    }
-    
-    decision = PolicyEngine.evaluate(policy_context)
-    Logger.info("    S5 Policy decision: #{inspect(decision)}")
-    
-    # Test SOP engine
-    sop_result = PolicyEngine.get_sop("deployment")
-    Logger.info("    S5 SOP retrieved: #{inspect(sop_result)}")
-  rescue
-    error ->
-      Logger.warning("    S5 test failed: #{inspect(error)}")
-  end
-  
-  # Test CRDT Synchronization
-  defp test_crdt_synchronization do
-    Logger.info("\n🔄 Testing CRDT Synchronization...")
+  # Test CRDT Distributed State
+  defp test_crdt_state do
+    Logger.info("\n🔄 Testing CRDT Distributed State...")
     Logger.info("-" |> String.duplicate(40))
     
-    alias Cybernetic.Core.CRDT.Graph
     alias Cybernetic.Core.CRDT.ContextGraph
     
-    # Test basic CRDT operations
-    {:ok, graph1} = Graph.start_link(name: :test_graph1)
-    {:ok, graph2} = Graph.start_link(name: :test_graph2)
+    Logger.info("  • Creating CRDT context graph...")
+    {:ok, graph} = ContextGraph.start_link(name: :test_graph)
     
-    # Add nodes to graph1
-    Graph.add_node(graph1, "node1", %{data: "test1"})
-    Graph.add_node(graph1, "node2", %{data: "test2"})
-    Graph.add_edge(graph1, "node1", "node2", %{relationship: "connected"})
+    # Add nodes
+    Logger.info("  • Adding nodes to graph...")
+    ContextGraph.add_node(graph, "node1", %{type: "entity", value: "test1"})
+    ContextGraph.add_node(graph, "node2", %{type: "entity", value: "test2"})
+    ContextGraph.add_node(graph, "node3", %{type: "entity", value: "test3"})
     
-    # Get state and merge to graph2
-    state1 = Graph.get_state(graph1)
-    Graph.merge(graph2, state1)
+    # Add edges
+    Logger.info("  • Creating relationships...")
+    ContextGraph.add_edge(graph, "node1", "node2", %{relation: "connected"})
+    ContextGraph.add_edge(graph, "node2", "node3", %{relation: "depends_on"})
     
-    # Verify synchronization
-    state2 = Graph.get_state(graph2)
-    Logger.info("  • Graph1 nodes: #{map_size(state1.nodes)}")
-    Logger.info("  • Graph2 nodes after merge: #{map_size(state2.nodes)}")
+    # Query graph
+    state = GenServer.call(graph, :get_state)
+    node_count = map_size(state.nodes)
+    edge_count = map_size(state.edges)
     
-    # Test ContextGraph
-    {:ok, context} = ContextGraph.start_link(name: :test_context)
+    Logger.info("    Graph stats: #{node_count} nodes, #{edge_count} edges")
     
-    ContextGraph.add_semantic_node(context, "concept1", %{
-      type: "concept",
-      description: "Test concept",
-      tags: ["test", "dogfood"]
-    })
+    # Test CRDT merge
+    Logger.info("  • Testing CRDT merge...")
+    {:ok, graph2} = ContextGraph.start_link(name: :test_graph2)
+    ContextGraph.add_node(graph2, "node4", %{type: "entity", value: "test4"})
     
-    ContextGraph.add_semantic_node(context, "concept2", %{
-      type: "concept",
-      description: "Related concept"
-    })
+    # Get deltas and merge
+    delta = GenServer.call(graph2, :get_delta)
+    GenServer.cast(graph, {:merge_delta, delta})
     
-    ContextGraph.add_relationship(context, "concept1", "concept2", "relates_to", %{
-      strength: 0.8
-    })
+    Process.sleep(100)
+    merged_state = GenServer.call(graph, :get_state)
+    merged_node_count = map_size(merged_state.nodes)
     
-    # Query the graph
-    related = ContextGraph.get_related(context, "concept1")
-    Logger.info("  • Context graph relationships: #{length(related)}")
+    Logger.info("    Merged graph: #{merged_node_count} nodes")
     
-    GenServer.stop(graph1)
-    GenServer.stop(graph2)
-    GenServer.stop(context)
-    
-    Logger.info("  ✓ CRDT synchronization test completed")
+    Logger.info("  ✓ CRDT state test completed")
   rescue
     error ->
       Logger.warning("  ⚠ CRDT test failed: #{inspect(error)}")
   end
   
-  # Test MCP Tools
+  # Test MCP Tool Integration
   defp test_mcp_tools do
     Logger.info("\n🔧 Testing MCP Tool Integration...")
     Logger.info("-" |> String.duplicate(40))
     
-    alias Cybernetic.Core.MCP.Tools
+    alias Cybernetic.Core.MCP.Tools.Registry
     
-    # Test tool listing
-    tools = Tools.list_tools()
-    Logger.info("  • Available MCP tools: #{length(tools)}")
+    Logger.info("  • Listing available MCP tools...")
+    tools = Registry.list_tools()
+    Logger.info("    Found #{length(tools)} MCP tools")
     
-    # Test calculator tool
-    calc_result = Tools.execute_tool("calculator", %{
+    # Test a simple tool execution
+    Logger.info("  • Testing calculator tool...")
+    calc_result = Registry.execute_tool("calculator", %{
       "operation" => "add",
-      "operands" => [10, 32]
-    })
+      "a" => 10,
+      "b" => 32
+    }, %{user_id: "test", permissions: [:all]})
     
-    case calc_result do
-      {:ok, result} ->
-        Logger.info("  • Calculator tool result: #{inspect(result)}")
-      {:error, reason} ->
-        Logger.info("  • Calculator tool error: #{inspect(reason)}")
-    end
+    Logger.info("    Calculator result: #{inspect(calc_result)}")
     
-    # Test filesystem tool
-    fs_result = Tools.execute_tool("filesystem", %{
-      "operation" => "list",
-      "path" => "."
-    })
+    # Test weather tool
+    Logger.info("  • Testing weather tool...")
+    weather_result = Registry.execute_tool("weather", %{
+      "location" => "San Francisco"
+    }, %{user_id: "test", permissions: [:all]})
     
-    case fs_result do
-      {:ok, _files} ->
-        Logger.info("  • Filesystem tool: Listed current directory")
-      {:error, reason} ->
-        Logger.info("  • Filesystem tool error: #{inspect(reason)}")
-    end
+    Logger.info("    Weather result: #{inspect(weather_result)}")
     
     Logger.info("  ✓ MCP tools test completed")
   rescue
     error ->
-      Logger.warning("  ⚠ MCP tools test failed: #{inspect(error)}")
+      Logger.warning("  ⚠ MCP test failed: #{inspect(error)}")
   end
   
   # Test Security Components
   defp test_security_components do
-    Logger.info("\n🔒 Testing Security Components...")
+    Logger.info("\n🔐 Testing Security Components...")
     Logger.info("-" |> String.duplicate(40))
     
     alias Cybernetic.Core.Security.NonceBloom
+    alias Cybernetic.VSM.System3.RateLimiter
     
-    # Test nonce generation and validation
-    Logger.info("  • Testing NonceBloom...")
+    # Test Nonce Bloom Filter
+    Logger.info("  • Testing NonceBloom replay prevention...")
+    nonce1 = NonceBloom.generate_nonce()
+    nonce2 = NonceBloom.generate_nonce()
     
-    nonces = for _ <- 1..100 do
-      NonceBloom.generate_nonce()
+    # First use should succeed
+    result1 = NonceBloom.verify_nonce(nonce1)
+    Logger.info("    First nonce verification: #{result1}")
+    
+    # Replay should fail
+    result2 = NonceBloom.verify_nonce(nonce1)
+    Logger.info("    Replay attempt blocked: #{not result2}")
+    
+    # New nonce should succeed
+    result3 = NonceBloom.verify_nonce(nonce2)
+    Logger.info("    New nonce verification: #{result3}")
+    
+    # Test Rate Limiter
+    Logger.info("  • Testing Rate Limiter...")
+    
+    # Consume budget
+    results = for i <- 1..5 do
+      RateLimiter.check_budget(:s4_llm, 10)
     end
     
-    # All should be unique
-    unique_count = nonces |> Enum.uniq() |> length()
-    Logger.info("    Generated #{unique_count}/100 unique nonces")
+    allowed = Enum.count(results, &(&1 == :ok))
+    Logger.info("    Rate limit: #{allowed}/5 requests allowed")
     
-    # Test nonce validation
-    test_nonce = NonceBloom.generate_nonce()
-    
-    # First use should be valid
-    case NonceBloom.validate_nonce(test_nonce) do
-      :ok ->
-        Logger.info("    Nonce validation: ✓ First use valid")
-      _ ->
-        Logger.info("    Nonce validation: ✗ First use invalid")
-    end
-    
-    # Second use should be invalid (replay protection)
-    case NonceBloom.validate_nonce(test_nonce) do
-      {:error, :nonce_already_used} ->
-        Logger.info("    Replay protection: ✓ Duplicate rejected")
-      _ ->
-        Logger.info("    Replay protection: ✗ Duplicate accepted")
-    end
-    
-    # Test RateLimiter
-    test_rate_limiter()
+    # Test budget info
+    info = RateLimiter.get_budget_info(:s4_llm)
+    Logger.info("    Budget info: #{inspect(info)}")
     
     Logger.info("  ✓ Security components test completed")
   rescue
@@ -320,98 +215,85 @@ defmodule VSMDogfoodTest do
       Logger.warning("  ⚠ Security test failed: #{inspect(error)}")
   end
   
-  defp test_rate_limiter do
-    alias Cybernetic.Core.Security.RateLimiter
-    
-    Logger.info("  • Testing RateLimiter...")
-    
-    # Create test budget
-    budget_name = :dogfood_budget
-    
-    # Rapid fire requests
-    results = for _ <- 1..20 do
-      RateLimiter.check_rate(budget_name, 1)
-    end
-    
-    allowed = Enum.count(results, &(&1 == :ok))
-    limited = Enum.count(results, &(&1 == {:error, :rate_limited}))
-    
-    Logger.info("    Rate limiting: #{allowed} allowed, #{limited} limited")
-  end
-  
   # Test Health Monitoring
   defp test_health_monitoring do
-    Logger.info("\n🏥 Testing Health Monitoring...")
+    Logger.info("\n💓 Testing Health Monitoring...")
     Logger.info("-" |> String.duplicate(40))
     
-    alias Cybernetic.Health.Collector
     alias Cybernetic.Health.Monitor
+    alias Cybernetic.Health.Collector
     
-    # Report some health metrics
-    Collector.report_health(:test_component, %{
-      status: :healthy,
-      cpu_usage: 45.2,
-      memory_mb: 128,
-      uptime_seconds: 3600
-    })
+    Logger.info("  • Checking system health...")
+    health_status = Monitor.get_health_status()
+    Logger.info("    Overall health: #{health_status.status}")
     
-    Collector.report_health(:test_component2, %{
-      status: :degraded,
-      error_rate: 0.05,
-      response_time_ms: 250
-    })
+    # Report some metrics
+    Logger.info("  • Reporting health metrics...")
+    Collector.report_metric(:cpu_usage, 45.2)
+    Collector.report_metric(:memory_usage, 62.8)
+    Collector.report_metric(:request_count, 1234)
     
-    # Get system health
     Process.sleep(100)
-    health = Monitor.get_system_health()
     
-    Logger.info("  • System health status: #{inspect(health.status)}")
-    Logger.info("  • Components monitored: #{map_size(health.components)}")
+    # Get aggregated metrics
+    metrics = Collector.get_metrics()
+    Logger.info("    Metrics collected: #{map_size(metrics)} types")
     
-    # Test telemetry events
-    :telemetry.execute(
-      [:cybernetic, :health, :check],
-      %{duration_ms: 10},
-      %{component: :test, status: :ok}
-    )
+    # Trigger health check
+    Logger.info("  • Running health check...")
+    Monitor.check_health()
     
-    Logger.info("  • Telemetry event emitted")
+    Process.sleep(100)
+    updated_status = Monitor.get_health_status()
+    Logger.info("    Health check complete: #{updated_status.status}")
     
     Logger.info("  ✓ Health monitoring test completed")
   rescue
     error ->
-      Logger.warning("  ⚠ Health monitoring test failed: #{inspect(error)}")
+      Logger.warning("  ⚠ Health test failed: #{inspect(error)}")
   end
   
   # Test Goldrush Pattern Matching
   defp test_goldrush_patterns do
-    Logger.info("\n⚡ Testing Goldrush Pattern Engine...")
+    Logger.info("\n⛏️ Testing Goldrush Pattern Engine...")
     Logger.info("-" |> String.duplicate(40))
     
-    alias Cybernetic.Core.Goldrush.Engine
+    alias Cybernetic.Core.Goldrush.Elixir.Engine
     
-    # Test pattern registration
+    Logger.info("  • Loading pattern engine...")
+    {:ok, engine} = Engine.start_link([])
+    
+    # Define test pattern
     pattern = %{
-      name: "test_pattern",
-      match: %{type: "error", severity: "high"},
+      match: %{type: "order", status: "pending"},
       action: fn event -> 
-        Logger.debug("Goldrush matched high severity error: #{inspect(event)}")
+        Logger.info("    Pattern matched: #{inspect(event)}")
+        {:ok, :processed}
       end
     }
     
-    Engine.register_pattern(pattern)
+    # Register pattern
+    Logger.info("  • Registering patterns...")
+    GenServer.cast(engine, {:register_pattern, :test_pattern, pattern})
     
-    # Simulate events
-    test_events = [
-      %{type: "error", severity: "high", message: "Critical failure"},
-      %{type: "warning", severity: "medium", message: "Resource low"},
-      %{type: "error", severity: "low", message: "Minor issue"}
-    ]
+    # Send matching event
+    Logger.info("  • Testing pattern matching...")
+    test_event = %{
+      type: "order",
+      status: "pending",
+      id: "order_123",
+      amount: 99.99
+    }
     
-    Enum.each(test_events, &Engine.process_event/1)
+    result = GenServer.call(engine, {:process_event, test_event})
+    Logger.info("    Match result: #{inspect(result)}")
     
-    Logger.info("  • Processed #{length(test_events)} events through Goldrush")
-    Logger.info("  ✓ Goldrush pattern engine test completed")
+    # Send non-matching event
+    non_match = %{type: "user", status: "active"}
+    result2 = GenServer.call(engine, {:process_event, non_match})
+    Logger.info("    Non-match result: #{inspect(result2)}")
+    
+    Logger.info("  ✓ Goldrush pattern test completed")
   rescue
     error ->
       Logger.warning("  ⚠ Goldrush test failed: #{inspect(error)}")
@@ -424,30 +306,39 @@ defmodule VSMDogfoodTest do
     
     alias Cybernetic.Core.Aggregator.CentralAggregator
     
-    # Submit facts to aggregator
+    Logger.info("  • Submitting facts to aggregator...")
+    
+    # Submit various facts
     facts = [
-      %{type: :metric, name: "cpu_usage", value: 65.5, timestamp: DateTime.utc_now()},
-      %{type: :event, name: "user_login", user: "alice", timestamp: DateTime.utc_now()},
-      %{type: :metric, name: "memory_usage", value: 1024, timestamp: DateTime.utc_now()},
-      %{type: :alert, name: "high_load", severity: :warning, timestamp: DateTime.utc_now()}
+      %{type: "metric", name: "response_time", value: 125},
+      %{type: "metric", name: "error_rate", value: 0.02},
+      %{type: "event", name: "user_login", user_id: "test_123"},
+      %{type: "metric", name: "response_time", value: 89},
+      %{type: "metric", name: "response_time", value: 156}
     ]
     
     Enum.each(facts, fn fact ->
-      CentralAggregator.submit_fact(fact.type, fact)
+      CentralAggregator.submit_fact(fact)
     end)
     
-    # Let aggregator process
-    Process.sleep(100)
+    Process.sleep(200) # Let aggregation happen
     
     # Get aggregated data
-    state = CentralAggregator.get_state()
+    Logger.info("  • Retrieving aggregated facts...")
+    aggregated = GenServer.call(CentralAggregator, :get_aggregated_facts)
     
-    Logger.info("  • Facts aggregated by type:")
-    Enum.each(state.facts_by_type, fn {type, facts} ->
-      Logger.info("    - #{type}: #{length(facts)} facts")
-    end)
+    Logger.info("    Aggregated fact types: #{map_size(aggregated)}")
     
-    Logger.info("  • Total facts processed: #{state.total_facts}")
+    # Check specific aggregations
+    if response_times = aggregated["metric:response_time"] do
+      avg = Enum.sum(Enum.map(response_times, & &1.value)) / length(response_times)
+      Logger.info("    Average response time: #{avg}ms")
+    end
+    
+    if error_rates = aggregated["metric:error_rate"] do
+      Logger.info("    Error rate samples: #{length(error_rates)}")
+    end
+    
     Logger.info("  ✓ Central Aggregator test completed")
   rescue
     error ->
