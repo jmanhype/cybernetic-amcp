@@ -16,8 +16,6 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   require Logger
 
   @table :cyb_agg_window
-  @facts_table :cyb_facts_store
-  @episode_table :cyb_episodes
   @emit_every_ms 5_000
   @window_ms 60_000
 
