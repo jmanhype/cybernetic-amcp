@@ -121,9 +121,10 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
         execute_and_handle_result(fun, state)
       
       :open ->
-        if should_attempt_recovery?(state) do
-          # Transition to half-open and try
-          new_state = transition_to_half_open(state)
+        if should_attempt_recovery?(state) and not state.transitioning do
+          # Transition to half-open and try (with race condition guard)
+          transition_state = %{state | transitioning: true}
+          new_state = transition_to_half_open(transition_state)
           execute_and_handle_result(fun, new_state)
         else
           emit_circuit_breaker_telemetry(state, :rejected)
