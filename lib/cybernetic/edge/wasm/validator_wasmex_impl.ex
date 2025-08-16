@@ -116,9 +116,17 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
           :crypto.mac(:hmac, :sha256, key, data) |> Base.encode16()
         end,
         
-        # Logging for debugging
+        # Logging for debugging  
         "host_log" => fn level, msg ->
-          Logger.log(String.to_atom(level), "WASM: #{msg}")
+          # Safe atom conversion with whitelist
+          safe_level = case level do
+            "debug" -> :debug
+            "info" -> :info
+            "warning" -> :warning
+            "error" -> :error
+            _ -> :info  # Default to info for unknown levels
+          end
+          Logger.log(safe_level, "WASM: #{msg}")
           0
         end
       }
