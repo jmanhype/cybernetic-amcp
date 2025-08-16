@@ -137,7 +137,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
       
       with_mock HTTPoison, [:passthrough], [
         post: fn _url, _body, _headers, _opts ->
-          {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
+          {:ok, %HTTPoison.Response{status_code: 200, body: Jason.encode!(mock_response), headers: []}}
         end
       ] do
         {:ok, result} = Anthropic.analyze_episode(episode, [])
@@ -306,7 +306,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
           # Verify context is included in the prompt
           assert user_message =~ Jason.encode!(context, pretty: true)
           
-          {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
+          {:ok, %HTTPoison.Response{status_code: 200, body: Jason.encode!(mock_response), headers: []}}
         end
       ] do
         {:ok, _result} = Anthropic.analyze_episode(episode, context: context)
@@ -342,7 +342,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
         
         with_mock HTTPoison, [:passthrough], [
           post: fn _url, _body, _headers, _opts ->
-            {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
+            {:ok, %HTTPoison.Response{status_code: 200, body: Jason.encode!(mock_response), headers: []}}
           end
         ] do
           {:ok, _result} = Anthropic.analyze_episode(episode, [])
@@ -399,7 +399,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
           assert user_message["content"] =~ episode["id"]
           assert user_message["content"] =~ episode["type"]
           
-          {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
+          {:ok, %HTTPoison.Response{status_code: 200, body: Jason.encode!(mock_response), headers: []}}
         end
       ] do
         {:ok, _result} = Anthropic.analyze_episode(episode, [])
