@@ -36,12 +36,13 @@ defmodule Cybernetic.MCP.HermesClient do
     
     try do
       case call_tool(tool, params, timeout: 30_000) do
-        {:ok, %{is_error: false, result: result}} ->
-          {:ok, %{tool: tool, result: result, success: true}, state}
-        
-        {:ok, %{is_error: true, result: error}} ->
-          Logger.warning("Hermes MCP tool error: #{inspect(error)}")
-          {:error, %{tool: tool, error: :tool_error, message: error["message"]}, state}
+        # TODO: Implement when call_tool is implemented
+        # {:ok, %{is_error: false, result: result}} ->
+        #   {:ok, %{tool: tool, result: result, success: true}, state}
+        # 
+        # {:ok, %{is_error: true, result: error}} ->
+        #   Logger.warning("Hermes MCP tool error: #{inspect(error)}")
+        #   {:error, %{tool: tool, error: :tool_error, message: error["message"]}, state}
         
         {:error, reason} ->
           Logger.warning("Hermes MCP call failed: #{inspect(reason)}")
