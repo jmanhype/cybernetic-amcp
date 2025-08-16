@@ -108,7 +108,7 @@ defmodule DogfoodTest do
       key = "test_key_#{i}"
       case Cache.get(key) do
         {:ok, _value} -> true
-        :not_found -> false
+        :miss -> false
       end
     end)
     
@@ -116,7 +116,7 @@ defmodule DogfoodTest do
       key = "nonexistent_key_#{i}"
       case Cache.get(key) do
         {:ok, _value} -> false
-        :not_found -> true
+        :miss -> true
       end
     end)
     
