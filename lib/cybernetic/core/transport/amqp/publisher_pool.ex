@@ -135,8 +135,9 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
           
           {:error, _} ->
             # Retry later if no channel available
+            new_state = cancel_batch_timer(state)
             timer = Process.send_after(self(), :flush_batch, @batch_timeout)
-            {:noreply, %{state | batch_timer: timer}}
+            {:noreply, %{new_state | batch_timer: timer}}
         end
     end
   end
