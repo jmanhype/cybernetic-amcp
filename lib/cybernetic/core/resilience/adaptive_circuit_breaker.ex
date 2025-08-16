@@ -121,18 +121,30 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
         execute_and_handle_result(fun, state)
       
       :open ->
-        if should_attempt_recovery?(state) and not state.transitioning do
-          # Transition to half-open and try (with race condition guard)
-          new_state = transition_to_half_open(%{state | transitioning: true})
-          # Note: execute_and_handle_result will handle success/failure and clear transitioning
-          execute_and_handle_result(fun, new_state)
+        if should_attempt_recovery?(state) do
+          # Atomically check and set transitioning flag
+          if state.transitioning do
+            emit_circuit_breaker_telemetry(state, :rejected)
+            {:reply, {:error, :circuit_breaker_open}, state}
+          else
+            # Set transitioning BEFORE transition
+            new_state = %{state | transitioning: true}
+            new_state = transition_to_half_open(new_state)
+            execute_and_handle_result(fun, new_state)
+          end
         else
           emit_circuit_breaker_telemetry(state, :rejected)
           {:reply, {:error, :circuit_breaker_open}, state}
         end
       
       :half_open ->
-        execute_and_handle_result(fun, state)
+        if state.transitioning do
+          # Already transitioning, reject
+          emit_circuit_breaker_telemetry(state, :rejected)
+          {:reply, {:error, :circuit_breaker_transitioning}, state}
+        else
+          execute_and_handle_result(fun, state)
+        end
     end
   end
 
@@ -378,7 +390,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     safe_exponent = min(failure_count - 1, 10)  # Cap at 2^10 = 1024x multiplier
     exponential = min(base_timeout * :math.pow(2, safe_exponent), 300_000)  # Max 5 minutes
     jitter_range = max(1, trunc(exponential * 0.1))  # Ensure minimum 1 for rand.uniform
-    jitter = :rand.uniform(jitter_range)  # ±10% jitter
+    # True jitter: ±10% (subtract half range then add random)
+    jitter = :rand.uniform(jitter_range) - div(jitter_range, 2)
     trunc(exponential + jitter)
   end
 
