@@ -241,13 +241,19 @@ defmodule Cybernetic.MCP.Tools.CodeAnalysisTool do
   defp detect_patterns(_code, _language), do: []
   
   defp detect_anti_patterns(code, "elixir") do
+    IO.puts("detect_anti_patterns called for elixir")
     anti_patterns = []
     
     # Check for long functions (analyze individual function definitions)
+    has_long = has_long_function?(code)
+    IO.puts("has_long_function? returned: #{has_long}")
+    
     anti_patterns = 
-      if has_long_function?(code) do
+      if has_long do
+        IO.puts("Adding long_function anti-pattern")
         [{:long_function, "Function exceeds 50 lines"} | anti_patterns]
       else
+        IO.puts("Not adding long_function anti-pattern")
         anti_patterns
       end
     
