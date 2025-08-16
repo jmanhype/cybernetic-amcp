@@ -203,7 +203,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
           :counters.add(call_count, 1, 1)
           
           case count do
-            0 -> {:ok, %{status: 500, body: "Internal Server Error", headers: []}}
+            0 -> {:ok, %HTTPoison.Response{status_code: 500, body: "Internal Server Error", headers: []}}
             _ -> {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
           end
         end
