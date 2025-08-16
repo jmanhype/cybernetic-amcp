@@ -91,6 +91,39 @@ defmodule Cybernetic.Application do
     end)
     
     {:ok, sup}
+    else
+      {:error, reason} ->
+        Logger.error("Configuration validation failed: #{reason}")
+        {:error, reason}
+    end
+  end
+
+  # Configuration validation
+  defp validate_configuration do
+    required_env_vars = [
+      "JWT_SECRET",
+      "PASSWORD_SALT"
+    ]
+    
+    missing = Enum.filter(required_env_vars, fn var ->
+      case System.get_env(var) do
+        nil -> true
+        "" -> true
+        _ -> false
+      end
+    end)
+    
+    if missing != [] do
+      {:error, "Missing required environment variables: #{Enum.join(missing, ", ")}"}
+    else
+      # Validate JWT secret strength
+      jwt_secret = System.get_env("JWT_SECRET")
+      if String.length(jwt_secret) < 32 do
+        Logger.warning("JWT_SECRET is shorter than recommended 32 characters")
+      end
+      
+      :ok
+    end
   end
   
   # Add health monitoring children conditionally
