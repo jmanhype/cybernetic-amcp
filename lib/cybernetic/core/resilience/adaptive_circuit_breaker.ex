@@ -363,7 +363,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     %{state |
       state: :closed,
       failure_count: 0,
-      success_count: 0
+      success_count: 0,
+      transition_ref: nil  # Clear transition ref when closing
     }
   end
 
