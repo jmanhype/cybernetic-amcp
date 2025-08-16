@@ -17,8 +17,6 @@ defmodule Cybernetic.Telemetry.OTEL do
   Record.defrecordp :span_ctx,
     Record.extract(:span_ctx, from_lib: "opentelemetry_api/include/opentelemetry.hrl")
   
-  @tracer_id :cybernetic
-  
   @doc """
   Initialize OpenTelemetry with resource attributes and exporters.
   Called from application.ex
