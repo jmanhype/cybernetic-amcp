@@ -246,12 +246,9 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
     grouped = Enum.group_by(batch, & &1.name)
     
     Enum.each(grouped, fn {event_name, events} ->
-      case aggregate_events(event_name, events) do
-        nil -> :ok
-        aggregated_metrics ->
-          # Emit aggregated metrics to external systems (Prometheus, etc.)
-          emit_aggregated_metrics(event_name, aggregated_metrics)
-      end
+      aggregated_metrics = aggregate_events(event_name, events)
+      # Emit aggregated metrics to external systems (Prometheus, etc.)
+      emit_aggregated_metrics(event_name, aggregated_metrics)
     end)
   end
 
