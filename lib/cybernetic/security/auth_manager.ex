@@ -609,7 +609,9 @@ defmodule Cybernetic.Security.AuthManager do
           acc
       end
     end)
-  end\n  defp load_api_keys do
+  end
+
+  defp load_api_keys do
     # Load any pre-configured API keys from environment
     if key = System.get_env("CYBERNETIC_SYSTEM_API_KEY") do
       key_hash = hash_api_key(key)
