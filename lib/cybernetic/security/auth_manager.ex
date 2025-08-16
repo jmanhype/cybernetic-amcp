@@ -581,7 +581,35 @@ defmodule Cybernetic.Security.AuthManager do
   #   "127.0.0.1"
   # end
   
-  defp get_configured_users do\n    # Load users from environment variables\n    # Format: CYBERNETIC_USER_<USERNAME>=<password>:<role1,role2>\n    # Example: CYBERNETIC_USER_ADMIN=secure_pass:admin,operator\n    \n    System.get_env()\n    |> Enum.filter(fn {key, _value} -> String.starts_with?(key, \"CYBERNETIC_USER_\") end)\n    |> Enum.reduce(%{}, fn {key, value}, acc ->\n      username = String.replace(key, \"CYBERNETIC_USER_\", \"\") |> String.downcase()\n      \n      case String.split(value, \":\", parts: 2) do\n        [password, roles_str] ->\n          roles = String.split(roles_str, \",\") |> Enum.map(&String.to_atom/1)\n          \n          user = %{\n            id: \"user_#{username}\",\n            username: username,\n            password_hash: hash_password(password),\n            roles: roles\n          }\n          \n          Map.put(acc, username, user)\n        \n        _ ->\n          Logger.warning(\"Invalid user config format for #{key}\")\n          acc\n      end\n    end)\n  end\n\n  defp load_api_keys do
+  defp get_configured_users do
+    # Load users from environment variables
+    # Format: CYBERNETIC_USER_<USERNAME>=<password>:<role1,role2>
+    # Example: CYBERNETIC_USER_ADMIN=secure_pass:admin,operator
+    
+    System.get_env()
+    |> Enum.filter(fn {key, _value} -> String.starts_with?(key, "CYBERNETIC_USER_") end)
+    |> Enum.reduce(%{}, fn {key, value}, acc ->
+      username = String.replace(key, "CYBERNETIC_USER_", "") |> String.downcase()
+      
+      case String.split(value, ":", parts: 2) do
+        [password, roles_str] ->
+          roles = String.split(roles_str, ",") |> Enum.map(&String.to_atom/1)
+          
+          user = %{
+            id: "user_#{username}",
+            username: username,
+            password_hash: hash_password(password),
+            roles: roles
+          }
+          
+          Map.put(acc, username, user)
+        
+        _ ->
+          Logger.warning("Invalid user config format for #{key}")
+          acc
+      end
+    end)
+  end\n  defp load_api_keys do
     # Load any pre-configured API keys from environment
     if key = System.get_env("CYBERNETIC_SYSTEM_API_KEY") do
       key_hash = hash_api_key(key)
