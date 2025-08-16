@@ -176,7 +176,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
         end
       ] do
         log = capture_log(fn ->
-          {:ok, result} = Anthropic.analyze_episode(provider, episode)
+          {:ok, result} = Anthropic.analyze_episode(episode, [])
           assert result.summary == "Analysis after retry"
         end)
         
@@ -208,7 +208,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
         end
       ] do
         log = capture_log(fn ->
-          {:ok, result} = Anthropic.analyze_episode(provider, episode)
+          {:ok, result} = Anthropic.analyze_episode(episode, [])
           assert result.summary == "Analysis after server error retry"
         end)
         
@@ -231,7 +231,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
       ] do
         log = capture_log(fn ->
           assert {:error, {:http_error, 401, "Invalid API key"}} = 
-            Anthropic.analyze_episode(provider, episode)
+            Anthropic.analyze_episode(episode, [])
         end)
         
         assert log =~ "Anthropic API error: 401"
@@ -262,7 +262,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
         end
       ] do
         log = capture_log(fn ->
-          {:ok, result} = Anthropic.analyze_episode(provider, episode)
+          {:ok, result} = Anthropic.analyze_episode(episode, [])
           assert result.summary == "Analysis after timeout retry"
         end)
         
@@ -278,7 +278,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
       ] do
         log = capture_log(fn ->
           assert {:error, :max_retries_exceeded} = 
-            Anthropic.analyze_episode(provider, episode)
+            Anthropic.analyze_episode(episode, [])
         end)
         
         assert log =~ "Request timeout, retrying"
@@ -344,7 +344,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
             {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
           end
         ] do
-          {:ok, _result} = Anthropic.analyze_episode(provider, episode)
+          {:ok, _result} = Anthropic.analyze_episode(episode, [])
           
           # Verify request telemetry
           assert_receive {:telemetry, [:cybernetic, :s4, :anthropic, :request], 
@@ -401,7 +401,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
           {:ok, %{status: 200, body: Jason.encode!(mock_response), headers: []}}
         end
       ] do
-        {:ok, _result} = Anthropic.analyze_episode(provider, episode)
+        {:ok, _result} = Anthropic.analyze_episode(episode, [])
       end
     end
   end
