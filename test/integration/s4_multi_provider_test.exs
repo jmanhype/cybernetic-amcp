@@ -313,7 +313,7 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
       id: UUID.uuid4() |> to_string(),
       kind: kind,
       title: attrs[:title] || "Test Episode",
-      description: attrs[:description] || "Test episode for S4 multi-provider integration",
+      context: attrs[:context] || "Test episode for S4 multi-provider integration",
       priority: attrs[:priority] || :medium,
       source_system: :s1,
       created_at: DateTime.utc_now(),
