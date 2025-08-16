@@ -147,12 +147,6 @@ defmodule Cybernetic.Telemetry.OTEL do
       "exception.message" => Exception.message(exception)
     }
     
-    attributes = if stacktrace do
-      Map.put(base_attributes, "exception.stacktrace", Exception.format_stacktrace(stacktrace))
-    else
-      base_attributes
-    end
-    
     span_ctx = Tracer.current_span_ctx()
     Span.record_exception(span_ctx, exception, stacktrace)
     Span.set_status(span_ctx, :error, Exception.message(exception))
