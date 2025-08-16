@@ -1013,7 +1013,7 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   defp redirect_traffic(_target), do: {:ok, :redirected}
   defp scale_resources(_target), do: {:ok, :scaled}
   defp emergency_stop(_target), do: {:ok, :stopped}
-  defp check_circuit_breaker_timeout(breaker, state), do: state
+  defp check_circuit_breaker_timeout(_breaker, state), do: state
   defp audit_resource_usage, do: %{cpu_usage: 0.5, memory_usage: 0.6}
   defp audit_policy_compliance(_state), do: %{compliant: true, violations: []}
   defp generate_recommendations(_state), do: []
