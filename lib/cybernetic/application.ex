@@ -71,6 +71,9 @@ defmodule Cybernetic.Application do
       # S3 Rate Limiter for budget management
       {Cybernetic.VSM.System3.RateLimiter, []},
       
+      # Security AuthManager for MCP tools
+      {Cybernetic.Security.AuthManager, []},
+      
       # Edge WASM Validator is stateless - use Cybernetic.Edge.WASM.Validator.load/2 where needed
       
       # VSM Supervisor (includes S1-S5)
