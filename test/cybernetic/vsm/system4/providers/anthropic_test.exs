@@ -62,8 +62,8 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
       # but that's expected since we're testing without mocking library
       assert is_function(&Anthropic.analyze_episode/2)
     end
-    
-    test "successfully analyzes episode with valid JSON response", %{provider: provider, episode: episode} do
+  end
+end
       # Create a mock for HTTPoison
       mock_response = %{
         "content" => [%{"text" => Jason.encode!(%{
