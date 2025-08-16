@@ -11,6 +11,7 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
   """
   use GenServer
   require Logger
+  alias UUID
 
   @default_failure_threshold 5
   @default_success_threshold 3
