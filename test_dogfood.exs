@@ -122,10 +122,6 @@ defmodule DogfoodTest do
     
     Logger.info("    Hits: #{hits}/50, Misses: #{misses}/50")
     
-    # Test cache stats
-    stats = Cache.get_stats()
-    Logger.info("  • Cache stats: #{inspect(stats)}")
-    
     Logger.info("  ✓ CRDT Cache test completed")
   end
   
