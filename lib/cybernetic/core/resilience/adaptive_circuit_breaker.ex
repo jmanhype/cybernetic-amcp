@@ -213,6 +213,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
           transition_id = UUID.uuid4()
           new_state = %{state | transition_ref: transition_id}
           new_state = transition_to_half_open(new_state)
+          # Clear transition_ref for automatic recovery (no user function to execute)
+          new_state = %{new_state | transition_ref: nil}
           {:noreply, new_state}
         
         _existing_transition ->
