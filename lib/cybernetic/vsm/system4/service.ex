@@ -28,9 +28,11 @@ defmodule Cybernetic.VSM.System4.Service do
   
   @impl true
   def init(opts) do
+    providers = init_providers(opts)
+    
     state = %{
-      providers: init_providers(opts),
-      circuit_breakers: %{},
+      providers: providers,
+      circuit_breakers: init_circuit_breakers(providers),
       stats: %{
         total_requests: 0,
         successful: 0,
