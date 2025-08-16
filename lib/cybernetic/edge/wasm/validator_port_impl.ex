@@ -119,19 +119,24 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
   
   defp parse_validation_result(output, duration) do
     # Parse WASM output - expecting "0" for valid or error code
-    case String.trim(output) do
-      "0" ->
+    trimmed = String.trim(output)
+    
+    cond do
+      trimmed == "0" ->
         {:ok, %{valid: true, duration_us: duration}}
-      error_code when error_code =~ ~r/^\d+$/ ->
+        
+      Regex.match?(~r/^\d+$/, trimmed) ->
+        code = String.to_integer(trimmed)
         {:error, %{
           valid: false,
-          error_code: String.to_integer(error_code),
-          error_message: decode_error(String.to_integer(error_code)),
+          error_code: code,
+          error_message: decode_error(code),
           duration_us: duration
         }}
-      other ->
-        Logger.warning("Unexpected WASM output: #{inspect(other)}")
-        {:error, {:invalid_output, other}}
+        
+      true ->
+        Logger.warning("Unexpected WASM output: #{inspect(trimmed)}")
+        {:error, {:invalid_output, trimmed}}
     end
   end
   
