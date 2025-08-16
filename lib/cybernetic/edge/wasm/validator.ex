@@ -10,11 +10,23 @@ defmodule Cybernetic.Edge.WASM.Validator do
 
   @telemetry [:cybernetic, :edge, :wasm, :validate]
   @default_limits [fuel: 5_000_000, timeout_ms: 50, max_memory_pages: 64]
+  
+  # Cache the implementation selection
+  @implementation (
+    cond do
+      System.find_executable("wasmtime") != nil ->
+        Cybernetic.Edge.WASM.Validator.PortImpl
+      Code.ensure_loaded?(Wasmex) ->
+        Cybernetic.Edge.WASM.Validator.WasmexImpl
+      true ->
+        Cybernetic.Edge.WASM.Validator.NoopImpl
+    end
+  )
 
   @impl true
   def load(bytes, opts \\ []) when is_binary(bytes) do
     # Merge defaults first, then user opts override
-    impl().load(bytes, Keyword.merge(@default_limits, opts))
+    @implementation.load(bytes, Keyword.merge(@default_limits, opts))
   end
 
   @impl true
@@ -23,7 +35,7 @@ defmodule Cybernetic.Edge.WASM.Validator do
     :telemetry.execute(@telemetry ++ [:start], %{count: 1}, %{opts: opts})
 
     # Merge defaults first, then user opts override
-    res = impl().validate(instance, message, Keyword.merge(@default_limits, opts))
+    res = @implementation.validate(instance, message, Keyword.merge(@default_limits, opts))
 
     :telemetry.execute(
       @telemetry ++ [:stop],
@@ -38,20 +50,8 @@ defmodule Cybernetic.Edge.WASM.Validator do
       {:error, {:exception, e}}
   end
 
-  # pick an implementation at runtime
-  defp impl do
-    cond do
-      # Check if wasmtime CLI is available
-      System.find_executable("wasmtime") != nil ->
-        Cybernetic.Edge.WASM.Validator.PortImpl
-        
-      # Fallback to Wasmex if available
-      Code.ensure_loaded?(Wasmex) ->
-        Cybernetic.Edge.WASM.Validator.WasmexImpl
-        
-      # Default to no-op
-      true ->
-        Cybernetic.Edge.WASM.Validator.NoopImpl
-    end
-  end
+  @doc """
+  Returns the current WASM implementation being used.
+  """
+  def implementation, do: @implementation
 end
