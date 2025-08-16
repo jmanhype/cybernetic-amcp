@@ -161,7 +161,7 @@ defmodule Cybernetic.VSM.Recursive.Supervisor do
   @doc """
   Get metrics for a specific child VSM.
   """
-  def get_child_metrics(child_id) do
+  def get_child_metrics(_child_id) do
     # In production, this would query Prometheus/Telemetry
     %{
       messages_processed: :rand.uniform(1000),
