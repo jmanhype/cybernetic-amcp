@@ -54,6 +54,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
     end
   end
   
+  @tag :integration
   describe "analyze_episode/3" do
     setup do
       {:ok, provider} = Anthropic.new(api_key: "test-key")
