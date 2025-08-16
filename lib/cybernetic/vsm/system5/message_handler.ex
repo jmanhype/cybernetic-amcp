@@ -24,22 +24,22 @@ defmodule Cybernetic.VSM.System5.MessageHandler do
       {:error, error}
   end
 
-  defp handle_policy_update(payload, meta) do
+  defp handle_policy_update(payload, _meta) do
     Logger.info("System5: Policy update - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_identity_check(payload, meta) do
+  defp handle_identity_check(payload, _meta) do
     Logger.debug("System5: Identity check - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_permission_request(payload, meta) do
+  defp handle_permission_request(payload, _meta) do
     Logger.info("System5: Permission request - #{inspect(payload)}")
     :ok
   end
 
-  defp handle_compliance_check(payload, meta) do
+  defp handle_compliance_check(payload, _meta) do
     Logger.debug("System5: Compliance check - #{inspect(payload)}")
     :ok
   end
