@@ -56,8 +56,9 @@ defmodule Cybernetic.MixProject do
       # Environment variable loading
       {:dotenv, "~> 3.1", only: [:dev, :test]},
       
-      # WASM runtime - using Extism which works with our rustler version
-      {:extism, "~> 1.0"},
+      # WASM runtime - conflicts with rustler 0.36, using Port implementation instead
+      # {:wasmex, "~> 0.9.2"},  # Requires rustler ~> 0.35
+      # {:extism, "~> 1.0"},     # Requires rustler ~> 0.29
       
       # Testing
       {:stream_data, "~> 1.0", only: [:test, :dev]},
