@@ -10,27 +10,40 @@ defmodule Cybernetic.Edge.WASM.Validator.PortImpl do
   
   @telemetry [:cybernetic, :wasm, :port]
   
+  # Clean up temp files on process exit
+  def terminate(_reason, %{wasm_path: path}) when is_binary(path) do
+    File.rm(path)
+    :ok
+  end
+  def terminate(_reason, _state), do: :ok
+  
   @impl true
   def load(wasm_bytes, opts) do
     # Write WASM to temporary file
     temp_path = Path.join(System.tmp_dir!(), "validator_#{:erlang.unique_integer([:positive])}.wasm")
-    File.write!(temp_path, wasm_bytes)
     
-    # Verify WASM is valid
-    case System.cmd(wasmtime_path(), ["compile", temp_path]) do
-      {_, 0} ->
-        {:ok, %{
-          wasm_path: temp_path,
-          fuel_limit: Keyword.get(opts, :fuel, 5_000_000),
-          max_memory: Keyword.get(opts, :max_memory_pages, 64)
-        }}
-      {error, _} ->
+    try do
+      File.write!(temp_path, wasm_bytes)
+      
+      # Verify WASM is valid
+      case System.cmd(wasmtime_path(), ["compile", temp_path]) do
+        {_, 0} ->
+          # Store cleanup handler
+          Process.flag(:trap_exit, true)
+          {:ok, %{
+            wasm_path: temp_path,
+            fuel_limit: Keyword.get(opts, :fuel, 5_000_000),
+            max_memory: Keyword.get(opts, :max_memory_pages, 64)
+          }}
+        {error, _} ->
+          File.rm(temp_path)
+          {:error, {:invalid_wasm, error}}
+      end
+    rescue
+      e ->
         File.rm(temp_path)
-        {:error, {:invalid_wasm, error}}
+        {:error, {:load_failed, e}}
     end
-  rescue
-    e ->
-      {:error, {:load_failed, e}}
   end
   
   @impl true
