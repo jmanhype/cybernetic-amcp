@@ -100,20 +100,15 @@ defmodule Cybernetic.MCP.HermesClient do
   Get available tools from the MCP server.
   """
   def get_available_tools do
-    case list_tools() do
-      {:ok, %{result: %{"tools" => tools}}} ->
-        formatted_tools = Enum.map(tools, fn tool ->
-          %{
-            name: tool["name"],
-            description: tool["description"],
-            input_schema: tool["inputSchema"]
-          }
-        end)
-        {:ok, formatted_tools}
-      
-      {:error, reason} ->
-        {:error, reason}
-    end
+    {:ok, %{result: %{"tools" => tools}}} = list_tools()
+    formatted_tools = Enum.map(tools, fn tool ->
+      %{
+        name: tool["name"],
+        description: tool["description"],
+        input_schema: tool["inputSchema"]
+      }
+    end)
+    {:ok, formatted_tools}
   end
 
   @doc """
