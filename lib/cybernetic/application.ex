@@ -100,29 +100,41 @@ defmodule Cybernetic.Application do
 
   # Configuration validation
   defp validate_configuration do
-    required_env_vars = [
-      "JWT_SECRET",
-      "PASSWORD_SALT"
-    ]
-    
-    missing = Enum.filter(required_env_vars, fn var ->
-      case System.get_env(var) do
-        nil -> true
-        "" -> true
-        _ -> false
-      end
-    end)
-    
-    if missing != [] do
-      {:error, "Missing required environment variables: #{Enum.join(missing, ", ")}"}
-    else
-      # Validate JWT secret strength
-      jwt_secret = System.get_env("JWT_SECRET")
-      if String.length(jwt_secret) < 32 do
-        Logger.warning("JWT_SECRET is shorter than recommended 32 characters")
-      end
-      
-      :ok
+    case Mix.env() do
+      env when env in [:test, :dev] ->
+        # In dev/test, just warn about missing production variables
+        if System.get_env("JWT_SECRET") == "dev-secret-change-in-production" do
+          Logger.info("Using default JWT_SECRET for #{env} environment")
+        end
+        :ok
+        
+      :prod ->
+        # In production, require proper configuration
+        required_env_vars = [
+          "JWT_SECRET", 
+          "PASSWORD_SALT"
+        ]
+        
+        missing = Enum.filter(required_env_vars, fn var ->
+          case System.get_env(var) do
+            nil -> true
+            "" -> true
+            "dev-secret-change-in-production" -> true  # Default not allowed in prod
+            _ -> false
+          end
+        end)
+        
+        if missing != [] do
+          {:error, "Missing/invalid required environment variables in production: #{Enum.join(missing, ", ")}"}
+        else
+          # Validate JWT secret strength in production
+          jwt_secret = System.get_env("JWT_SECRET")
+          if String.length(jwt_secret) < 32 do
+            {:error, "JWT_SECRET must be at least 32 characters in production"}
+          else
+            :ok
+          end
+        end
     end
   end
   
