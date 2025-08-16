@@ -181,6 +181,4 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     # Send analysis back to coordination or to other systems if needed
     analysis_result
   end
-  
-  defp return(value), do: value
 end
