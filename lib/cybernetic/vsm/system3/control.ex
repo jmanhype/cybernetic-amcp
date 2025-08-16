@@ -4,7 +4,7 @@ defmodule Cybernetic.VSM.System3.Control do
   @moduledoc """
   S3: Resource mgmt, policy enforcement hooks, algedonic signals.
   """
-  def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def start_link(_opts \\ []), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   def init(state), do: {:ok, Map.merge(%{metrics: %{}, policies: %{}}, state)}
   
   # Handle transport messages from in-memory transport
