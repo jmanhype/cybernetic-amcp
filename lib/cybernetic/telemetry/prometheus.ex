@@ -157,6 +157,16 @@ defmodule Cybernetic.Telemetry.Prometheus do
       description: "Total number of circuit breakers monitored"
     ),
     
+    # Circuit Breaker Alert Metrics
+    Telemetry.Metrics.counter("cybernetic.alerts.circuit_breaker.count",
+      tags: [:alert_key, :severity],
+      description: "Circuit breaker alerts triggered"
+    ),
+    Telemetry.Metrics.last_value("cybernetic.alerts.circuit_breaker.severity_numeric",
+      tags: [:alert_key],
+      description: "Alert severity level (1=info, 2=warning, 3=critical)"
+    ),
+    
     # Memory Metrics
     Telemetry.Metrics.counter("cybernetic.memory.store.count",
       tags: [:conversation_id],
