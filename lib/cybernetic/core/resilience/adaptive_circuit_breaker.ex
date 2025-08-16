@@ -269,7 +269,8 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
         if new_success_count >= state.success_threshold do
           transition_to_closed(new_state)
         else
-          new_state
+          # Clear transition_ref on partial success in half_open
+          %{new_state | transition_ref: nil}
         end
       
       _ ->
