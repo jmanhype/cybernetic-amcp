@@ -256,4 +256,13 @@ defmodule Cybernetic.Core.CRDT.Cache do
   defp schedule_cleanup do
     Process.send_after(self(), :cleanup_expired, @cleanup_interval)
   end
+
+  defp estimate_cache_memory_usage(cache) do
+    # Rough estimation of cache memory usage
+    Enum.reduce(cache, 0, fn {key, {value, _timestamp}}, acc ->
+      key_size = :erlang.external_size(key)
+      value_size = :erlang.external_size(value)
+      acc + key_size + value_size + 16  # Add overhead for map entry
+    end)
+  end
 end
