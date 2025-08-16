@@ -245,7 +245,7 @@ defmodule Cybernetic.VSM.System4.Service do
     end) do
       {:ok, result, new_breaker} ->
         # Update circuit breaker state
-        new_state = put_in(state.circuit_breakers[provider], new_breaker)
+        _new_state = put_in(state.circuit_breakers[provider], new_breaker)
         {:ok, result}
         
       {:error, :circuit_open} ->
