@@ -6,7 +6,7 @@ defmodule Cybernetic.VSM.System4.Router do
 
   require Logger
   require OpenTelemetry.Tracer
-  alias Cybernetic.VSM.System4.{Episode, LLMProvider}
+  alias Cybernetic.VSM.System4.Episode
 
   @telemetry_prefix [:cyb, :s4, :route]
 
