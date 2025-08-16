@@ -93,11 +93,11 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
   # Callbacks
   
   @impl GenServer
-  def handle_cast({:telemetry_event, event_name, measurements, _metadata}, state) do
+  def handle_cast({:telemetry_event, event_name, measurements, metadata}, state) do
     event = %{
       name: event_name,
       measurements: measurements,
-      metadata: _metadata,
+      metadata: metadata,
       timestamp: System.monotonic_time(:millisecond)
     }
     
