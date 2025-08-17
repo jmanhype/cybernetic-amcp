@@ -154,7 +154,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
   def handle_info(:poll_updates, state) do
     if state.bot_token do
       Task.start(fn -> 
-        do_poll_updates(state.bot_token)
+        do_poll_updates(state.bot_token, self())
       end)
       Process.send_after(self(), :poll_updates, 2000)
     end
