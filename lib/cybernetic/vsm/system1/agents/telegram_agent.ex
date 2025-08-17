@@ -234,20 +234,31 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     end
   end
 
-  defp do_poll_updates(bot_token) do
-    # Poll for updates without recursion
+  defp do_poll_updates(bot_token, parent_pid) do
+    # Poll for updates with proper offset tracking
     url = "https://api.telegram.org/bot#{bot_token}/getUpdates"
     
+    # Get stored offset
+    offset = Process.get(:telegram_offset, 0)
+    poll_url = if offset > 0, do: "#{url}?offset=#{offset}&timeout=5", else: "#{url}?timeout=5"
+    
     try do
-      case HTTPoison.get(url, [], recv_timeout: 5000) do
+      case HTTPoison.get(poll_url, [], recv_timeout: 10000) do
         {:ok, %{status_code: 200, body: body}} ->
           case Jason.decode(body) do
             {:ok, %{"result" => updates}} when updates != [] ->
-              Enum.each(updates, &process_update/1)
-              # Clear processed updates
+              Logger.debug("Got #{length(updates)} Telegram updates")
+              
+              # Process each update
+              Enum.each(updates, fn update ->
+                process_update(update)
+              end)
+              
+              # Update offset to last update_id + 1
               if last_update = List.last(updates) do
-                clear_url = "#{url}?offset=#{last_update["update_id"] + 1}"
-                HTTPoison.get(clear_url, [], recv_timeout: 1000)
+                new_offset = last_update["update_id"] + 1
+                Process.put(:telegram_offset, new_offset)
+                Logger.debug("Updated Telegram offset to #{new_offset}")
               end
             _ ->
               :ok
@@ -256,7 +267,9 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
           :ok
       end
     rescue
-      _ -> :ok
+      e -> 
+        Logger.error("Telegram polling error: #{inspect(e)}")
+        :ok
     end
   end
 
