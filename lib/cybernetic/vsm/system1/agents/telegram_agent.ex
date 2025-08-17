@@ -23,7 +23,10 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
       sessions: %{},
       pending_responses: %{},
       bot_token: System.get_env("TELEGRAM_BOT_TOKEN"),
-      telegram_offset: 0
+      telegram_offset: 0,
+      polling_task: nil,
+      polling_failures: 0,
+      last_poll_success: System.system_time(:second)
     }}
   end
 
@@ -145,33 +148,99 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
   end
 
   def handle_info(:start_polling, state) do
-    # Start Telegram polling loop
+    # Start Telegram polling loop and health checker
     if state.bot_token do
       send(self(), :poll_updates)
+      Process.send_after(self(), :check_health, 30_000)
     end
     {:noreply, state}
   end
   
   def handle_info(:poll_updates, state) do
     if state.bot_token do
-      # Poll in task and update offset via message
+      # Cancel previous task if still running
+      if state.polling_task && Process.alive?(state.polling_task) do
+        Process.exit(state.polling_task, :kill)
+      end
+      
+      # Start supervised polling task
       parent = self()
       offset = state.telegram_offset
+      bot_token = state.bot_token
       
-      Task.start(fn -> 
-        new_offset = do_poll_updates(state.bot_token, offset)
-        if new_offset && new_offset > offset do
-          send(parent, {:update_offset, new_offset})
-        end
+      task = spawn_link(fn -> 
+        result = do_poll_updates_safe(bot_token, offset)
+        send(parent, {:poll_result, result})
       end)
       
-      Process.send_after(self(), :poll_updates, 2000)
+      # Schedule next poll with backoff if failures
+      delay = calculate_poll_delay(state.polling_failures)
+      Process.send_after(self(), :poll_updates, delay)
+      
+      {:noreply, %{state | polling_task: task}}
+    else
+      {:noreply, state}
     end
-    {:noreply, state}
   end
   
-  def handle_info({:update_offset, new_offset}, state) do
-    {:noreply, %{state | telegram_offset: new_offset}}
+  def handle_info({:poll_result, {:ok, new_offset}}, state) when new_offset > state.telegram_offset do
+    # Successful poll with new messages
+    {:noreply, %{state | 
+      telegram_offset: new_offset,
+      polling_failures: 0,
+      last_poll_success: System.system_time(:second)
+    }}
+  end
+  
+  def handle_info({:poll_result, {:ok, _offset}}, state) do
+    # Successful poll but no new messages
+    {:noreply, %{state | 
+      polling_failures: 0,
+      last_poll_success: System.system_time(:second)
+    }}
+  end
+  
+  def handle_info({:poll_result, {:error, reason}}, state) do
+    Logger.warning("Telegram polling failed: #{inspect(reason)}")
+    failures = state.polling_failures + 1
+    
+    # Emit telemetry for monitoring
+    :telemetry.execute([:telegram, :polling, :failure], %{count: 1}, %{
+      failures: failures,
+      reason: reason
+    })
+    
+    {:noreply, %{state | polling_failures: failures}}
+  end
+  
+  def handle_info({:EXIT, pid, reason}, state) when pid == state.polling_task do
+    # Polling task crashed
+    Logger.error("Telegram polling task crashed: #{inspect(reason)}")
+    failures = state.polling_failures + 1
+    
+    # Schedule immediate retry with backoff
+    delay = calculate_poll_delay(failures)
+    Process.send_after(self(), :poll_updates, delay)
+    
+    {:noreply, %{state | 
+      polling_task: nil,
+      polling_failures: failures
+    }}
+  end
+  
+  def handle_info(:check_health, state) do
+    # Health check - restart polling if it's been too long
+    now = System.system_time(:second)
+    time_since_success = now - state.last_poll_success
+    
+    if time_since_success > 60 do  # 60 seconds without success
+      Logger.warning("Telegram polling unhealthy, restarting...")
+      send(self(), :poll_updates)
+    end
+    
+    # Schedule next health check
+    Process.send_after(self(), :check_health, 30_000)
+    {:noreply, state}
   end
 
   # Private functions
