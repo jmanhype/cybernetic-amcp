@@ -22,7 +22,8 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     {:ok, %{
       sessions: %{},
       pending_responses: %{},
-      bot_token: System.get_env("TELEGRAM_BOT_TOKEN")
+      bot_token: System.get_env("TELEGRAM_BOT_TOKEN"),
+      telegram_offset: 0
     }}
   end
 
