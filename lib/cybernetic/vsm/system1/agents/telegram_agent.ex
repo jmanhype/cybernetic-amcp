@@ -366,10 +366,19 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
               else
                 offset
               end
+            {:ok, %{"result" => []}} ->
+              # No updates, keep polling
+              Logger.debug("No new Telegram updates")
+              offset
             _ ->
+              Logger.debug("Unexpected Telegram response format")
               offset
           end
-        _ ->
+        {:ok, %{status_code: code}} ->
+          Logger.warning("Telegram API returned status #{code}")
+          offset
+        {:error, reason} ->
+          Logger.error("Telegram polling HTTP error: #{inspect(reason)}")
           offset
       end
     rescue
