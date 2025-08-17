@@ -154,12 +154,24 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
   
   def handle_info(:poll_updates, state) do
     if state.bot_token do
+      # Poll in task and update offset via message
+      parent = self()
+      offset = state.telegram_offset
+      
       Task.start(fn -> 
-        do_poll_updates(state.bot_token, self())
+        new_offset = do_poll_updates(state.bot_token, offset)
+        if new_offset && new_offset > offset do
+          send(parent, {:update_offset, new_offset})
+        end
       end)
+      
       Process.send_after(self(), :poll_updates, 2000)
     end
     {:noreply, state}
+  end
+  
+  def handle_info({:update_offset, new_offset}, state) do
+    {:noreply, %{state | telegram_offset: new_offset}}
   end
 
   # Private functions
@@ -235,12 +247,9 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     end
   end
 
-  defp do_poll_updates(bot_token, parent_pid) do
+  defp do_poll_updates(bot_token, offset) do
     # Poll for updates with proper offset tracking
     url = "https://api.telegram.org/bot#{bot_token}/getUpdates"
-    
-    # Get stored offset
-    offset = Process.get(:telegram_offset, 0)
     poll_url = if offset > 0, do: "#{url}?offset=#{offset}&timeout=5", else: "#{url}?timeout=5"
     
     try do
@@ -255,22 +264,24 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
                 process_update(update)
               end)
               
-              # Update offset to last update_id + 1
+              # Return new offset
               if last_update = List.last(updates) do
                 new_offset = last_update["update_id"] + 1
-                Process.put(:telegram_offset, new_offset)
                 Logger.debug("Updated Telegram offset to #{new_offset}")
+                new_offset
+              else
+                offset
               end
             _ ->
-              :ok
+              offset
           end
         _ ->
-          :ok
+          offset
       end
     rescue
       e -> 
         Logger.error("Telegram polling error: #{inspect(e)}")
-        :ok
+        offset
     end
   end
 
