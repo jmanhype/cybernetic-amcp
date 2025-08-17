@@ -12,22 +12,28 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
   end
 
   def init(_opts) do
-    # Subscribe to Telegram updates if configured
-    if _bot_token = System.get_env("TELEGRAM_BOT_TOKEN") do
-      Logger.info("Telegram agent initialized with bot token")
-      # Start polling or webhook listener
-      Process.send_after(self(), :start_polling, 1000)
-    end
+    bot_token = System.get_env("TELEGRAM_BOT_TOKEN")
     
-    {:ok, %{
+    state = %{
       sessions: %{},
       pending_responses: %{},
-      bot_token: System.get_env("TELEGRAM_BOT_TOKEN"),
+      bot_token: bot_token,
       telegram_offset: 0,
       polling_task: nil,
       polling_failures: 0,
       last_poll_success: System.system_time(:second)
-    }}
+    }
+    
+    # Start polling immediately if bot token is configured
+    if bot_token do
+      Logger.info("Telegram agent initialized with bot token - starting polling")
+      send(self(), :poll_updates)
+      Process.send_after(self(), :check_health, 30_000)
+    else
+      Logger.info("Telegram agent initialized without bot token")
+    end
+    
+    {:ok, state}
   end
 
   # Public API
