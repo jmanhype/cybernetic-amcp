@@ -315,6 +315,33 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
         Logger.error("Failed to send Telegram message: #{inspect(reason)}")
     end
   end
+  
+  defp calculate_poll_delay(failures) do
+    # Exponential backoff with jitter
+    base_delay = 2000  # 2 seconds
+    max_delay = 30000  # 30 seconds
+    
+    delay = min(base_delay * :math.pow(2, failures), max_delay)
+    jitter = :rand.uniform(500)  # 0-500ms jitter
+    
+    trunc(delay + jitter)
+  end
+  
+  defp do_poll_updates_safe(bot_token, offset) do
+    # Safe wrapper around polling with error handling
+    try do
+      new_offset = do_poll_updates(bot_token, offset)
+      {:ok, new_offset || offset}
+    rescue
+      error ->
+        {:error, error}
+    catch
+      :exit, reason ->
+        {:error, {:exit, reason}}
+      kind, reason ->
+        {:error, {kind, reason}}
+    end
+  end
 
   defp do_poll_updates(bot_token, offset) do
     # Poll for updates with proper offset tracking
