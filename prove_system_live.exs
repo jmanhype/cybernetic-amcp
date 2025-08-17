@@ -1,10 +1,9 @@
 #!/usr/bin/env elixir
 
 # Live system demonstration - proves the entire system works in practice
+# Simplified to avoid OTP 28 compatibility issues
 Mix.install([
-  {:amqp, "~> 3.3"},
-  {:jason, "~> 1.4"},
-  {:httpoison, "~> 2.1"}
+  {:jason, "~> 1.4"}
 ])
 
 defmodule LiveSystemProof do
