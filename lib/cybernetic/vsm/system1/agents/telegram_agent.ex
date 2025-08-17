@@ -146,7 +146,17 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
   def handle_info(:start_polling, state) do
     # Start Telegram polling loop
     if state.bot_token do
-      spawn(fn -> poll_telegram_updates(state.bot_token) end)
+      send(self(), :poll_updates)
+    end
+    {:noreply, state}
+  end
+  
+  def handle_info(:poll_updates, state) do
+    if state.bot_token do
+      Task.start(fn -> 
+        do_poll_updates(state.bot_token)
+      end)
+      Process.send_after(self(), :poll_updates, 2000)
     end
     {:noreply, state}
   end
