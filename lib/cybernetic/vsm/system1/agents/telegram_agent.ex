@@ -234,25 +234,30 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     end
   end
 
-  defp poll_telegram_updates(bot_token) do
-    # Simplified polling loop - in production use ExGram
+  defp do_poll_updates(bot_token) do
+    # Poll for updates without recursion
     url = "https://api.telegram.org/bot#{bot_token}/getUpdates"
     
-    case HTTPoison.get(url) do
-      {:ok, %{status_code: 200, body: body}} ->
-        case Jason.decode(body) do
-          {:ok, %{"result" => updates}} ->
-            Enum.each(updates, &process_update/1)
-          _ ->
-            :ok
-        end
-      _ ->
-        :ok
+    try do
+      case HTTPoison.get(url, [], recv_timeout: 5000) do
+        {:ok, %{status_code: 200, body: body}} ->
+          case Jason.decode(body) do
+            {:ok, %{"result" => updates}} when updates != [] ->
+              Enum.each(updates, &process_update/1)
+              # Clear processed updates
+              if last_update = List.last(updates) do
+                clear_url = "#{url}?offset=#{last_update["update_id"] + 1}"
+                HTTPoison.get(clear_url, [], recv_timeout: 1000)
+              end
+            _ ->
+              :ok
+          end
+        _ ->
+          :ok
+      end
+    rescue
+      _ -> :ok
     end
-    
-    # Continue polling
-    Process.sleep(1000)
-    poll_telegram_updates(bot_token)
   end
 
   defp process_update(%{"message" => %{"chat" => %{"id" => chat_id}, "text" => text} = msg}) do
