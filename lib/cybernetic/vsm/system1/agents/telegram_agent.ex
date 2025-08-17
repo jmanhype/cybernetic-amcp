@@ -158,24 +158,25 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     if state.bot_token do
       # Cancel previous task if still running
       if state.polling_task && Process.alive?(state.polling_task) do
-        Process.exit(state.polling_task, :kill)
+        Logger.warning("Previous polling task still running, letting it complete")
+        # Don't kill it - let it complete and schedule the next poll
+        {:noreply, state}
+      else
+        # Start supervised polling task
+        parent = self()
+        offset = state.telegram_offset
+        bot_token = state.bot_token
+        
+        task = spawn_link(fn -> 
+          result = do_poll_updates_safe(bot_token, offset)
+          send(parent, {:poll_result, result})
+        end)
+        
+        # DO NOT schedule next poll here - wait for completion!
+        # The next poll will be scheduled when we receive {:poll_result, _}
+        
+        {:noreply, %{state | polling_task: task}}
       end
-      
-      # Start supervised polling task
-      parent = self()
-      offset = state.telegram_offset
-      bot_token = state.bot_token
-      
-      task = spawn_link(fn -> 
-        result = do_poll_updates_safe(bot_token, offset)
-        send(parent, {:poll_result, result})
-      end)
-      
-      # Schedule next poll with backoff if failures
-      delay = calculate_poll_delay(state.polling_failures)
-      Process.send_after(self(), :poll_updates, delay)
-      
-      {:noreply, %{state | polling_task: task}}
     else
       {:noreply, state}
     end
@@ -183,17 +184,29 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
   
   def handle_info({:poll_result, {:ok, new_offset}}, state) when new_offset > state.telegram_offset do
     # Successful poll with new messages
+    Logger.debug("Poll successful, new offset: #{new_offset}")
+    
+    # Schedule next poll immediately
+    Process.send_after(self(), :poll_updates, 100)  # Small delay to prevent tight loop
+    
     {:noreply, %{state | 
       telegram_offset: new_offset,
       polling_failures: 0,
+      polling_task: nil,  # Clear the task reference
       last_poll_success: System.system_time(:second)
     }}
   end
   
   def handle_info({:poll_result, {:ok, _offset}}, state) do
     # Successful poll but no new messages
+    Logger.debug("Poll successful, no new messages")
+    
+    # Schedule next poll immediately
+    Process.send_after(self(), :poll_updates, 100)  # Small delay to prevent tight loop
+    
     {:noreply, %{state | 
       polling_failures: 0,
+      polling_task: nil,  # Clear the task reference
       last_poll_success: System.system_time(:second)
     }}
   end
@@ -208,7 +221,14 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
       reason: reason
     })
     
-    {:noreply, %{state | polling_failures: failures}}
+    # Schedule next poll with backoff
+    delay = calculate_poll_delay(failures)
+    Process.send_after(self(), :poll_updates, delay)
+    
+    {:noreply, %{state | 
+      polling_failures: failures,
+      polling_task: nil  # Clear the task reference
+    }}
   end
   
   def handle_info({:EXIT, pid, reason}, state) when pid == state.polling_task do
@@ -216,7 +236,7 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     Logger.error("Telegram polling task crashed: #{inspect(reason)}")
     failures = state.polling_failures + 1
     
-    # Schedule immediate retry with backoff
+    # Schedule retry with backoff
     delay = calculate_poll_delay(failures)
     Process.send_after(self(), :poll_updates, delay)
     
