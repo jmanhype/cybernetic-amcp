@@ -153,14 +153,6 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
     end
   end
 
-  def handle_info(:start_polling, state) do
-    # Start Telegram polling loop and health checker
-    if state.bot_token do
-      send(self(), :poll_updates)
-      Process.send_after(self(), :check_health, 30_000)
-    end
-    {:noreply, state}
-  end
   
   def handle_info(:poll_updates, state) do
     if state.bot_token do
