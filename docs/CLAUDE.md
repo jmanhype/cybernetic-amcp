@@ -1,38 +1,40 @@
-# Cybernetic aMCP Framework
+# Docs Directory
 
-## Overview
-This is a distributed AI coordination framework implementing the Viable System Model (VSM) with AMQP messaging, CRDT state management, and MCP tool integration.
+## Purpose
+Comprehensive documentation for the Cybernetic aMCP Framework.
 
-## Architecture
-- **VSM Systems**: 5 hierarchical systems (S1-S5) for operational, coordination, control, intelligence, and policy management
-- **Transport**: AMQP 4.1 for message passing between systems
-- **State**: CRDT for distributed state synchronization
-- **AI Tools**: MCP integration for AI agent capabilities
+## Structure
+- `README_original.md` - Original project README
+- `README_SETUP.md` - Setup instructions
+- `DEPLOYMENT.md` - Deployment guide
+- `DEPLOYMENT_PROOF.md` - Deployment validation
+- `STAGING_DEPLOYMENT.md` - Staging environment guide
+- `OTEL_STAGING_GUIDE.md` - OpenTelemetry setup
+- `SECRETS.md` - Secrets management guide
+- `COMPLETION_REPORT.md` - Project completion status
+- `ANTHROPIC_PROVIDER_SUMMARY.md` - Anthropic integration docs
+- `ollama_s4_summary.md` - Ollama provider documentation
+- `polling_analysis.md` - System polling analysis
 
-## Key Technologies
-- Elixir 1.18.4
-- OTP 28
-- RabbitMQ 4.1.3
-- AMQP 4.1.0
-- DeltaCRDT for distributed state
+## Documentation Categories
 
-## Important Files
-- `mix.exs` - Project configuration and dependencies
-- `lib/cybernetic/application.ex` - Main application supervisor
-- `config/runtime.exs` - Runtime configuration for AMQP and VSM
+### Setup & Installation
+- Environment setup
+- Dependencies installation
+- Configuration guide
 
-## Testing
-```bash
-mix test
-mix run test_amqp.exs  # Test AMQP connectivity
-```
+### Deployment
+- Local deployment
+- Staging deployment
+- Production deployment
+- Kubernetes deployment
 
-## Known Issues
-- OTP 28 compatibility required patching `rabbit_cert_info.erl`
-- GenStage transport removed in favor of AMQP
+### Integration Guides
+- AI Provider integration (Anthropic, OpenAI, Ollama)
+- Telemetry setup (OpenTelemetry, Prometheus)
+- Message queue configuration (RabbitMQ)
 
-## Development Commands
-```bash
-iex -S mix  # Start interactive shell
-mix compile # Compile the project
-```
+### Architecture
+- VSM model implementation
+- System design decisions
+- Performance considerations
