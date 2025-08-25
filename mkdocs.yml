@@ -44,14 +44,21 @@ markdown_extensions:
 
 nav:
   - Home: README.md
+  - Getting Started:
+    - Architecture: architecture.md
+    - Features: features.md
+    - Setup Guide: README_SETUP.md
   - Documentation:
-    - Setup: README_SETUP.md
     - Deployment: DEPLOYMENT.md
     - Staging: STAGING_DEPLOYMENT.md
     - Telemetry: OTEL_STAGING_GUIDE.md
+  - AI Providers:
+    - Anthropic: ANTHROPIC_PROVIDER_SUMMARY.md
+    - Ollama: ollama_s4_summary.md
   - Reports:
     - Completion: COMPLETION_REPORT.md
     - Deployment Proof: DEPLOYMENT_PROOF.md
+    - Polling Analysis: polling_analysis.md
   - Development:
     - Claude Config: CLAUDE.md
     - Secrets: SECRETS.md
@@ -59,4 +66,4 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/ruvnet/cybernetic
+      link: https://github.com/jmanhype/cybernetic-amcp
