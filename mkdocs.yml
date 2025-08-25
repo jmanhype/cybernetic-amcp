@@ -1,0 +1,62 @@
+site_name: Cybernetic aMCP Framework
+site_description: Distributed AI orchestration system implementing the Viable System Model
+site_url: https://cybernetic.dev
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: README.md
+  - Documentation:
+    - Setup: README_SETUP.md
+    - Deployment: DEPLOYMENT.md
+    - Staging: STAGING_DEPLOYMENT.md
+    - Telemetry: OTEL_STAGING_GUIDE.md
+  - Reports:
+    - Completion: COMPLETION_REPORT.md
+    - Deployment Proof: DEPLOYMENT_PROOF.md
+  - Development:
+    - Claude Config: CLAUDE.md
+    - Secrets: SECRETS.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ruvnet/cybernetic
