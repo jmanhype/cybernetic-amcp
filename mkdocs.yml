@@ -56,13 +56,7 @@ theme:
     repo: fontawesome/brands/github
 
 plugins:
-  - search:
-      separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
-  - minify:
-      minify_html: true
-  - social:
-      cards_layout_options:
-        font_family: Inter
+  - search
 
 markdown_extensions:
   - abbr
