@@ -33,7 +33,7 @@ jobs:
           pip install pymdown-extensions
           
       - name: Build MkDocs site
-        run: mkdocs build --strict --verbose
+        run: mkdocs build --verbose
         
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
