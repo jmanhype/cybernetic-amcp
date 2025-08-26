@@ -106,50 +106,25 @@ nav:
   - Home: index.md
   - Getting Started:
     - Installation: getting-started/installation.md
-    - Configuration: getting-started/configuration.md
-    - First Query: getting-started/first-query.md
-    - Quick Examples: getting-started/examples.md
-  - Concepts:
-    - Viable System Model: concepts/vsm.md
-    - Architecture: architecture.md
-    - Circuit Breakers: concepts/circuit-breakers.md
-    - CRDT State: concepts/crdt.md
-    - Message Flow: concepts/message-flow.md
-  - Core Features:
-    - Features Overview: features.md
-    - AI Orchestration: features/ai-orchestration.md
-    - Fault Tolerance: features/fault-tolerance.md
-    - Observability: features/observability.md
-  - API Reference:
-    - Overview: api/overview.md
-    - System APIs: api/systems.md
-    - Provider APIs: api/providers.md
-    - MCP Tools: api/mcp-tools.md
-    - Telemetry Events: api/telemetry.md
+    - Setup Guide: README_SETUP.md
+  - Architecture:
+    - Overview: architecture.md
+    - Features: features.md
   - Deployment:
-    - Docker: deployment/docker.md
-    - Kubernetes: deployment/kubernetes.md
-    - Production: deployment/production.md
-    - Monitoring: deployment/monitoring.md
+    - Guide: DEPLOYMENT.md
+    - Staging: STAGING_DEPLOYMENT.md
+    - Proof: DEPLOYMENT_PROOF.md
   - AI Providers:
-    - Anthropic Claude: ANTHROPIC_PROVIDER_SUMMARY.md
-    - OpenAI GPT: providers/openai.md
-    - Together AI: providers/together.md
+    - Anthropic: ANTHROPIC_PROVIDER_SUMMARY.md
     - Ollama: ollama_s4_summary.md
-  - Examples:
-    - Basic Usage: examples/basic-usage.md
-    - Advanced Routing: examples/advanced-routing.md
-    - Policy Enforcement: examples/policy.md
-    - Telegram Bot: examples/telegram-bot.md
-  - Contributing:
-    - Guidelines: contributing.md
-    - Development Setup: contributing/development.md
-    - Testing: contributing/testing.md
-  - Resources:
-    - FAQ: resources/faq.md
-    - Troubleshooting: resources/troubleshooting.md
-    - Glossary: resources/glossary.md
-    - References: resources/references.md
+  - Monitoring:
+    - Telemetry: OTEL_STAGING_GUIDE.md
+    - Analysis: polling_analysis.md
+  - Reports:
+    - Completion: COMPLETION_REPORT.md
+  - Development:
+    - Claude Config: CLAUDE.md
+    - Secrets: SECRETS.md
 
 extra:
   version:
