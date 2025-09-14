@@ -101,7 +101,7 @@ defmodule Cybernetic.Health.Collector do
   @impl true
   def handle_info(:collect, state) do
     # Collect current metrics
-    metrics = collect_all_metrics()
+    metrics = collect_all_metrics(state)
     
     # Add to history with timestamp
     timestamp = System.system_time(:millisecond)
@@ -136,10 +136,10 @@ defmodule Cybernetic.Health.Collector do
   
   # Private Functions
   
-  defp collect_all_metrics do
+  defp collect_all_metrics(state) do
     %{
       # System metrics
-      uptime_ms: System.system_time(:millisecond) - get_start_time(),
+      uptime_ms: System.system_time(:millisecond) - state.start_time,
       memory_usage_mb: :erlang.memory(:total) / 1_048_576,
       process_count: length(Process.list()),
       
@@ -162,16 +162,6 @@ defmodule Cybernetic.Health.Collector do
     }
   end
   
-  defp get_start_time do
-    case Process.whereis(__MODULE__) do
-      nil -> System.system_time(:millisecond)
-      pid ->
-        case :sys.get_state(pid) do
-          %{start_time: time} -> time
-          _ -> System.system_time(:millisecond)
-        end
-    end
-  end
   
   defp count_amqp_connections do
     # Count AMQP connections

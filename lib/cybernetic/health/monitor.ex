@@ -81,6 +81,12 @@ defmodule Cybernetic.Health.Monitor do
   end
   
   @impl true
+  def handle_info({:telemetry_event, _metadata, _measurements}, state) do
+    # Ignore telemetry events - they're handled elsewhere
+    {:noreply, state}
+  end
+  
+  @impl true
   def handle_info(:perform_checks, state) do
     # Perform all health checks
     new_checks = %{
