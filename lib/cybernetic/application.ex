@@ -18,6 +18,7 @@ defmodule Cybernetic.Application do
           # Continue without OpenTelemetry for now
           :ok
       end
+
       children =
         [
           {Cluster.Supervisor,
