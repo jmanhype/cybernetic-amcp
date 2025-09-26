@@ -233,7 +233,13 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     end
 
     # Declare cybernetic.exchange (legacy default used by tests and connection.ex)
-    case Exchange.declare(channel, "cybernetic.exchange", :topic, durable: true, auto_delete: false) do
+    case Exchange.declare(
+           channel,
+           "cybernetic.exchange",
+           :topic,
+           durable: true,
+           auto_delete: false
+         ) do
       :ok ->
         Logger.debug("Declared legacy exchange: cybernetic.exchange (topic)")
         :ok
