@@ -232,6 +232,27 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
         error
     end
 
+    # Declare cybernetic.exchange (legacy default used by tests and connection.ex)
+    case Exchange.declare(
+           channel,
+           "cybernetic.exchange",
+           :topic,
+           durable: true,
+           auto_delete: false
+         ) do
+      :ok ->
+        Logger.debug("Declared legacy exchange: cybernetic.exchange (topic)")
+        :ok
+
+      {:error, {:resource_locked, _}} ->
+        Logger.debug("Legacy exchange already exists: cybernetic.exchange")
+        :ok
+
+      {:error, reason} = error ->
+        Logger.error("Failed to declare legacy exchange cybernetic.exchange: #{inspect(reason)}")
+        error
+    end
+
     :ok
   end
 
