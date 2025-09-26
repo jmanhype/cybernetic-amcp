@@ -3,14 +3,20 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
   alias Cybernetic.Core.CRDT.ContextGraph
 
   setup do
-    # Start a fresh instance for each test
-    case Process.whereis(ContextGraph) do
-      nil -> :ok
-      pid -> GenServer.stop(pid)
+    # Use existing instance started by Application
+    # Don't stop it since it's managed by the supervision tree
+    pid = Process.whereis(ContextGraph)
+    
+    case pid do
+      nil ->
+        # Start if not running
+        {:ok, pid} = ContextGraph.start_link()
+        {:ok, graph: pid}
+      
+      pid when is_pid(pid) ->
+        # Use existing instance
+        {:ok, graph: pid}
     end
-
-    {:ok, pid} = ContextGraph.start_link()
-    {:ok, graph: pid}
   end
 
   describe "distributed sync" do
