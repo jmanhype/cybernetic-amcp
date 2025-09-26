@@ -76,6 +76,10 @@ config :cybernetic, :s4,
   health_check_interval: 60_000,
   circuit_breaker_threshold: 5
 
+# LLM Stack Selection (req_llm_pipeline or legacy_httpoison)
+config :cybernetic, :llm_stack,
+  stack: System.get_env("LLM_STACK", "legacy_httpoison") |> String.to_atom()
+
 # Provider-specific configurations
 config :cybernetic, Cybernetic.VSM.System4.Providers.Anthropic,
   api_key: {:system, "ANTHROPIC_API_KEY"},

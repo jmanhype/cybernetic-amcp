@@ -141,6 +141,8 @@ defmodule Cybernetic.VSM.System4.Router do
     } do
       try do
         provider_opts = get_provider_config(provider, opts)
+        # Pass the provider through opts so req_llm knows which to use
+        provider_opts = Keyword.put(provider_opts, :provider, provider)
         result = module.analyze_episode(episode, provider_opts)
         
         latency = System.monotonic_time(:millisecond) - start_time
@@ -165,24 +167,40 @@ defmodule Cybernetic.VSM.System4.Router do
 
   @doc """
   Get provider module for a given provider atom.
+  
+  Checks the :llm_stack configuration to determine whether to use
+  the legacy HTTPoison-based providers or the new req_llm pipeline.
   """
-  def get_provider_module(:anthropic) do
+  def get_provider_module(provider) do
+    # Check if we should use the new req_llm pipeline
+    case Application.get_env(:cybernetic, :llm_stack, [])[:stack] do
+      :req_llm_pipeline ->
+        # Use unified req_llm provider for all providers
+        {:ok, Cybernetic.VSM.System4.Providers.ReqLLMProvider}
+      
+      _ ->
+        # Use legacy providers
+        get_legacy_provider_module(provider)
+    end
+  end
+
+  defp get_legacy_provider_module(:anthropic) do
     {:ok, Cybernetic.VSM.System4.Providers.Anthropic}
   end
 
-  def get_provider_module(:openai) do
+  defp get_legacy_provider_module(:openai) do
     {:ok, Cybernetic.VSM.System4.Providers.OpenAI}
   end
 
-  def get_provider_module(:ollama) do
+  defp get_legacy_provider_module(:ollama) do
     {:ok, Cybernetic.VSM.System4.Providers.Ollama}
   end
 
-  def get_provider_module(:together) do
+  defp get_legacy_provider_module(:together) do
     {:ok, Cybernetic.VSM.System4.Providers.Together}
   end
 
-  def get_provider_module(provider) do
+  defp get_legacy_provider_module(provider) do
     {:error, {:unknown_provider, provider}}
   end
 
