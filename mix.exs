@@ -54,7 +54,7 @@ defmodule Cybernetic.MixProject do
       # For Claude API
       {:req, "~> 0.5.0"},
       # Unified LLM provider interface
-      {:req_llm, "~> 0.1.0"},
+      {:req_llm, "~> 1.0.0-rc.3"},
       # For Telegram bot
       {:httpoison, "~> 2.2"},
 
