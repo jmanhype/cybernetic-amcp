@@ -10,19 +10,19 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Router do
 
   @doc """
   Determine routing based on policy and context.
-  
+
   Sets `:route` in context with provider and model information.
   """
   def run(ctx) do
     route = select_route(ctx)
-    
+
     Logger.info("Routing to provider: #{route.provider}, model: #{route.model}")
-    
+
     {:ok, Map.put(ctx, :route, route)}
   end
 
-  defp select_route(%{policy: %{force_provider: provider, force_model: model}}) 
-    when not is_nil(provider) and not is_nil(model) do
+  defp select_route(%{policy: %{force_provider: provider, force_model: model}})
+       when not is_nil(provider) and not is_nil(model) do
     %{
       provider: provider,
       model: format_model_name(provider, model)
@@ -60,7 +60,10 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Router do
   end
 
   defp route_by_kind(:anomaly_detection) do
-    %{provider: :together, model: format_model_name(:together, "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo")}
+    %{
+      provider: :together,
+      model: format_model_name(:together, "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo")
+    }
   end
 
   defp route_by_kind(:optimization) do

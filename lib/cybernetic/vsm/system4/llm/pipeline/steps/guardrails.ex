@@ -1,7 +1,7 @@
 defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Guardrails do
   @moduledoc """
   Apply policy guardrails and constraints before LLM invocation.
-  
+
   Checks budgets, rate limits, content policies, and other constraints.
   """
 
@@ -9,7 +9,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Guardrails do
 
   @doc """
   Check guardrails and potentially halt the pipeline.
-  
+
   Future implementation could:
   - Enforce token/cost budgets per tenant
   - Apply content moderation policies

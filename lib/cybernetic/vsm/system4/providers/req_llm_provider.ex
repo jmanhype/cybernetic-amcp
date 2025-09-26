@@ -1,13 +1,13 @@
 defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
   @moduledoc """
   Unified LLM provider using req_llm pipeline.
-  
+
   Implements the standard LLMProvider behaviour but delegates all operations
   to the composable pipeline, providing centralized retries, telemetry, etc.
   """
 
   @behaviour Cybernetic.VSM.System4.LLMProvider
-  
+
   alias Cybernetic.VSM.System4.LLM.Pipeline
   require Logger
 
@@ -16,8 +16,10 @@ defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
     %{
       modes: [:chat, :completion, :reasoning, :tool_use, :json],
       strengths: [:unified, :extensible, :reliable],
-      max_tokens: 128_000,  # Varies by provider, but req_llm handles limits
-      context_window: 1_000_000  # Max context across all providers
+      # Varies by provider, but req_llm handles limits
+      max_tokens: 128_000,
+      # Max context across all providers
+      context_window: 1_000_000
     }
   end
 
@@ -34,15 +36,15 @@ defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
         caller: opts[:caller] || self()
       }
     }
-    
+
     case Pipeline.run(ctx) do
       {:ok, result} ->
         format_analyze_response(result)
-      
+
       {:error, reason} ->
         Logger.error("ReqLLMProvider.analyze_episode failed: #{inspect(reason)}")
         {:error, reason}
-      
+
       stream when is_struct(stream, Stream) or is_function(stream, 2) ->
         # Return streaming response as-is
         stream
@@ -52,15 +54,15 @@ defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
   @impl true
   def generate(prompt, opts \\ []) do
     ctx = build_generate_context(prompt, opts)
-    
+
     case Pipeline.run(ctx) do
       {:ok, result} ->
         format_generate_response(result)
-      
+
       {:error, reason} ->
         Logger.error("ReqLLMProvider.generate failed: #{inspect(reason)}")
         {:error, reason}
-      
+
       stream when is_struct(stream, Stream) or is_function(stream, 2) ->
         stream
     end
@@ -84,7 +86,7 @@ defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
       params: %{max_tokens: 1},
       policy: %{force_provider: :anthropic, force_model: "claude-3-5-sonnet-20241022"}
     }
-    
+
     case Pipeline.run(ctx) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
@@ -104,15 +106,15 @@ defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
         caller: opts[:caller] || self()
       }
     }
-    
+
     case Pipeline.run(ctx) do
       {:ok, result} ->
         format_chat_response(result)
-      
+
       {:error, reason} ->
         Logger.error("ReqLLMProvider.chat failed: #{inspect(reason)}")
         {:error, reason}
-      
+
       stream when is_struct(stream, Stream) or is_function(stream, 2) ->
         stream
     end
@@ -152,7 +154,7 @@ defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
     # Provider can come from router or be explicitly specified
     provider = opts[:provider]
     model = opts[:model]
-    
+
     %{}
     |> maybe_add_policy(:force_provider, provider)
     |> maybe_add_policy(:force_model, model)
@@ -180,34 +182,37 @@ defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
   defp maybe_add_param(params, key, value), do: Map.put(params, key, value)
 
   defp format_analyze_response(result) do
-    {:ok, %{
-      text: result[:text] || "",
-      tokens: result[:tokens] || %{input: 0, output: 0},
-      usage: result[:usage] || %{},
-      citations: result[:citations] || [],
-      confidence: result[:confidence] || 0.8,
-      episode_metadata: result[:episode_metadata]
-    }}
+    {:ok,
+     %{
+       text: result[:text] || "",
+       tokens: result[:tokens] || %{input: 0, output: 0},
+       usage: result[:usage] || %{},
+       citations: result[:citations] || [],
+       confidence: result[:confidence] || 0.8,
+       episode_metadata: result[:episode_metadata]
+     }}
   end
 
   defp format_generate_response(result) do
-    {:ok, %{
-      text: result[:text] || "",
-      tokens: result[:tokens] || %{input: 0, output: 0},
-      usage: result[:usage] || %{},
-      tool_calls: result[:tool_calls] || [],
-      finish_reason: result[:finish_reason] || :stop
-    }}
+    {:ok,
+     %{
+       text: result[:text] || "",
+       tokens: result[:tokens] || %{input: 0, output: 0},
+       usage: result[:usage] || %{},
+       tool_calls: result[:tool_calls] || [],
+       finish_reason: result[:finish_reason] || :stop
+     }}
   end
 
   defp format_chat_response(result) do
-    {:ok, %{
-      text: result[:text] || "",
-      tokens: result[:tokens] || %{input: 0, output: 0},
-      usage: result[:usage] || %{},
-      tool_calls: result[:tool_calls] || [],
-      finish_reason: result[:finish_reason] || :stop,
-      role: "assistant"
-    }}
+    {:ok,
+     %{
+       text: result[:text] || "",
+       tokens: result[:tokens] || %{input: 0, output: 0},
+       usage: result[:usage] || %{},
+       tool_calls: result[:tool_calls] || [],
+       finish_reason: result[:finish_reason] || :stop,
+       role: "assistant"
+     }}
   end
 end

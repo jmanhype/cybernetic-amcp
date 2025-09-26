@@ -1,7 +1,7 @@
 defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.PromptTemplate do
   @moduledoc """
   Normalize messages and apply templating if needed.
-  
+
   Converts Episode structs and other formats to normalized message format.
   """
 
@@ -38,22 +38,15 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.PromptTemplate do
     # Convert Episode struct to message format
     system_prompt = build_system_prompt(episode)
     user_content = build_user_content(episode)
-    
-    messages = [
-      %{role: "system", content: system_prompt},
-      %{role: "user", content: user_content}
-    ]
-    
-    # Add context messages if present
-    case episode[:context] do
-      messages when is_list(messages) ->
-        system_message = List.first(messages)
-        rest = messages ++ [%{role: "user", content: user_content}]
-        [system_message | rest]
-      
-      _ ->
-        messages
-    end
+
+    # Start with system prompt
+    base_messages = [%{role: "system", content: system_prompt}]
+
+    # Add historical context messages if they exist
+    context_messages = episode[:context] || []
+
+    # Build final message list: system → context → current user message
+    base_messages ++ context_messages ++ [%{role: "user", content: user_content}]
   end
 
   defp build_system_prompt(episode) do
@@ -61,22 +54,23 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.PromptTemplate do
     You are analyzing an episode from the VSM System 4 Intelligence layer.
     Episode Kind: #{episode.kind}
     Priority: #{episode.priority}
-    
+
     Provide intelligent analysis and recommendations based on the data provided.
     """
   end
 
   defp build_user_content(episode) do
-    data_str = case episode.data do
-      data when is_binary(data) -> data
-      data -> inspect(data)
-    end
-    
+    data_str =
+      case episode.data do
+        data when is_binary(data) -> data
+        data -> inspect(data)
+      end
+
     """
     Analyze the following data:
-    
+
     #{data_str}
-    
+
     Context:
     - Source: #{episode.source}
     - Timestamp: #{episode.timestamp}

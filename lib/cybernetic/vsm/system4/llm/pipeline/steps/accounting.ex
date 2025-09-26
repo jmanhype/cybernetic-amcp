@@ -1,7 +1,7 @@
 defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Accounting do
   @moduledoc """
   Track usage, costs, and emit telemetry for LLM operations.
-  
+
   Maintains compatibility with existing telemetry events.
   """
 
@@ -15,12 +15,12 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Accounting do
   def run(%{result: result, route: route, t0: t0} = ctx) when not is_nil(result) do
     latency_ns = System.monotonic_time() - t0
     latency_ms = System.convert_time_unit(latency_ns, :native, :millisecond)
-    
+
     usage = extract_usage(result, ctx)
-    
+
     # Emit telemetry events matching existing patterns
     emit_telemetry(route, usage, latency_ms, ctx)
-    
+
     # Update context with final usage
     {:ok, Map.put(ctx, :usage, usage)}
   end
@@ -28,15 +28,15 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Accounting do
   def run(%{raw_response: raw, route: route, t0: t0} = ctx) when not is_nil(raw) do
     latency_ns = System.monotonic_time() - t0
     latency_ms = System.convert_time_unit(latency_ns, :native, :millisecond)
-    
+
     usage = %{
       tokens_in: get_in(raw, [:usage, :input_tokens]) || 0,
       tokens_out: get_in(raw, [:usage, :output_tokens]) || 0,
       cost_usd: get_in(raw, [:usage, :cost_usd])
     }
-    
+
     emit_telemetry(route, usage, latency_ms, ctx)
-    
+
     {:ok, Map.put(ctx, :usage, usage)}
   end
 
@@ -65,7 +65,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Accounting do
         request_id: ctx[:request_id]
       }
     )
-    
+
     # Response telemetry with usage
     :telemetry.execute(
       @telemetry_prefix ++ [:response],
@@ -82,7 +82,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Accounting do
         request_id: ctx[:request_id]
       }
     )
-    
+
     # Cost telemetry if available
     if usage.cost_usd do
       :telemetry.execute(
@@ -95,7 +95,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Accounting do
         }
       )
     end
-    
+
     # Provider-specific telemetry for compatibility
     :telemetry.execute(
       [:cybernetic, :s4, route.provider, :usage],
@@ -106,7 +106,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Accounting do
         request_id: ctx[:request_id]
       }
     )
-    
+
     Logger.info(
       "LLM request completed",
       provider: route.provider,

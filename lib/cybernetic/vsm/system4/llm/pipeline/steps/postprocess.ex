@@ -1,7 +1,7 @@
 defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Postprocess do
   @moduledoc """
   Post-process LLM responses for domain compatibility.
-  
+
   Handles tool calls, JSON validation, and response shaping.
   """
 
@@ -56,9 +56,9 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Postprocess do
 
   defp extract_text(raw) do
     get_in(raw, [:content]) ||
-    get_in(raw, [:text]) ||
-    get_in(raw, [:choices, Access.at(0), :message, :content]) ||
-    ""
+      get_in(raw, [:text]) ||
+      get_in(raw, [:choices, Access.at(0), :message, :content]) ||
+      ""
   end
 
   defp extract_tokens(raw) do
@@ -76,22 +76,25 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Postprocess do
   end
 
   defp extract_finish_reason(raw) do
-    reason = get_in(raw, [:finish_reason]) || 
-             get_in(raw, [:choices, Access.at(0), :finish_reason])
-    
+    reason =
+      get_in(raw, [:finish_reason]) ||
+        get_in(raw, [:choices, Access.at(0), :finish_reason])
+
     case reason do
       "stop" -> :stop
       "length" -> :length
       "tool_calls" -> :tool_calls
+      "content_filter" -> :content_filter
       nil -> :stop
-      other -> String.to_atom(to_string(other))
+      other when is_binary(other) -> {:unknown, other}
+      other -> other
     end
   end
 
   defp extract_tool_calls(raw) do
     get_in(raw, [:tool_calls]) ||
-    get_in(raw, [:choices, Access.at(0), :message, :tool_calls]) ||
-    []
+      get_in(raw, [:choices, Access.at(0), :message, :tool_calls]) ||
+      []
   end
 
   defp process_tool_calls(result) do
@@ -99,7 +102,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Postprocess do
       calls when is_list(calls) and length(calls) > 0 ->
         processed_calls = Enum.map(calls, &process_tool_call/1)
         Map.put(result, :tool_calls, processed_calls)
-      
+
       _ ->
         result
     end
@@ -114,6 +117,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Postprocess do
   end
 
   defp process_function_call(nil), do: %{}
+
   defp process_function_call(func) do
     %{
       name: func["name"] || func[:name],
@@ -127,6 +131,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Postprocess do
       _ -> args
     end
   end
+
   defp parse_arguments(args), do: args
 
   defp add_episode_metadata(result, %{episode: episode}) when not is_nil(episode) do
@@ -137,6 +142,7 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Postprocess do
       source: episode.source
     })
   end
+
   defp add_episode_metadata(result, _ctx), do: result
 
   defp generate_tool_id do

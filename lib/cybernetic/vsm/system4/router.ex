@@ -12,19 +12,19 @@ defmodule Cybernetic.VSM.System4.Router do
 
   @doc """
   Route an episode to the best available provider chain.
-  
+
   ## Parameters
-  
+
   - episode: Episode struct
   - opts: Routing options
-  
+
   ## Returns
-  
+
   {:ok, result, provider_info} | {:error, reason}
   """
   def route(%Episode{} = episode, opts \\ []) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     OpenTelemetry.Tracer.with_span "s4.route", %{
       attributes: %{
         episode_id: episode.id,
@@ -34,13 +34,13 @@ defmodule Cybernetic.VSM.System4.Router do
     } do
       chain = select_chain(episode, opts)
       attempts = 0
-      
+
       result = try_chain(episode, chain, opts, attempts)
-      
+
       latency = System.monotonic_time(:millisecond) - start_time
-      
+
       emit_route_telemetry(episode, chain, result, latency, attempts)
-      
+
       result
     end
   end
@@ -92,22 +92,23 @@ defmodule Cybernetic.VSM.System4.Router do
         case try_provider(episode, module, provider, opts, attempts) do
           {:ok, result} ->
             {:ok, result, %{provider: provider, attempts: attempts + 1}}
-            
-          {:error, reason} when reason in [:rate_limited, :timeout, :invalid_response, :circuit_open] ->
+
+          {:error, reason}
+          when reason in [:rate_limited, :timeout, :invalid_response, :circuit_open] ->
             Logger.warning("S4 Router: Provider #{provider} failed: #{reason}, trying next")
-            
+
             # Exponential backoff with jitter
             backoff_ms = calculate_backoff(attempts)
             Process.sleep(backoff_ms)
-            
+
             emit_fallback_telemetry(episode, provider, reason)
             try_chain(episode, rest, opts, attempts + 1)
-            
+
           {:error, reason} ->
             Logger.error("S4 Router: Provider #{provider} failed permanently: #{reason}")
             {:error, reason}
         end
-        
+
       {:error, reason} ->
         Logger.error("S4 Router: Provider #{provider} not available: #{reason}")
         try_chain(episode, rest, opts, attempts)
@@ -122,7 +123,7 @@ defmodule Cybernetic.VSM.System4.Router do
     case check_budget(provider, episode) do
       :ok ->
         do_try_provider(episode, module, provider, opts, attempts)
-        
+
       {:error, :budget_exhausted} ->
         emit_budget_deny_telemetry(provider, episode)
         {:error, :rate_limited}
@@ -131,7 +132,7 @@ defmodule Cybernetic.VSM.System4.Router do
 
   defp do_try_provider(episode, module, provider, opts, _attempts) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     OpenTelemetry.Tracer.with_span "s4.request", %{
       attributes: %{
         provider: provider,
@@ -144,17 +145,16 @@ defmodule Cybernetic.VSM.System4.Router do
         # Pass the provider through opts so req_llm knows which to use
         provider_opts = Keyword.put(provider_opts, :provider, provider)
         result = module.analyze_episode(episode, provider_opts)
-        
+
         latency = System.monotonic_time(:millisecond) - start_time
         emit_provider_telemetry(provider, :success, latency, result)
-        
+
         result
-        
       rescue
         exception ->
           latency = System.monotonic_time(:millisecond) - start_time
           emit_provider_telemetry(provider, :error, latency, {:error, exception})
-          
+
           case exception do
             %{status: 429} -> {:error, :rate_limited}
             %{status: 408} -> {:error, :timeout}
@@ -167,7 +167,7 @@ defmodule Cybernetic.VSM.System4.Router do
 
   @doc """
   Get provider module for a given provider atom.
-  
+
   Checks the :llm_stack configuration to determine whether to use
   the legacy HTTPoison-based providers or the new req_llm pipeline.
   """
@@ -177,7 +177,7 @@ defmodule Cybernetic.VSM.System4.Router do
       :req_llm_pipeline ->
         # Use unified req_llm provider for all providers
         {:ok, Cybernetic.VSM.System4.Providers.ReqLLMProvider}
-      
+
       _ ->
         # Use legacy providers
         get_legacy_provider_module(provider)
@@ -228,19 +228,22 @@ defmodule Cybernetic.VSM.System4.Router do
       {:error, :rate_limited} -> {:error, :budget_exhausted}
     end
   rescue
-    _ -> :ok  # Fallback if RateLimiter not available
+    # Fallback if RateLimiter not available
+    _ -> :ok
   end
 
   @doc """
   Calculate exponential backoff with jitter.
   """
   def calculate_backoff(attempts) do
-    base_delay = 1000  # 1 second base
-    max_delay = 30_000  # 30 seconds max
-    
+    # 1 second base
+    base_delay = 1000
+    # 30 seconds max
+    max_delay = 30_000
+
     delay = min(base_delay * :math.pow(2, attempts), max_delay)
     jitter = :rand.uniform() * 0.5 * delay
-    
+
     # Ensure final result doesn't exceed max_delay
     min(round(delay + jitter), max_delay)
   end
@@ -249,12 +252,13 @@ defmodule Cybernetic.VSM.System4.Router do
 
   defp emit_route_telemetry(episode, chain, result, latency, attempts) do
     measurements = %{latency_ms: latency, attempts: attempts}
+
     metadata = %{
       episode: %{id: episode.id, kind: episode.kind, priority: episode.priority},
       chain: chain,
       result: format_result(result)
     }
-    
+
     :telemetry.execute(@telemetry_prefix, measurements, metadata)
   end
 
@@ -272,19 +276,21 @@ defmodule Cybernetic.VSM.System4.Router do
 
   defp emit_provider_telemetry(provider, status, latency, result) do
     measurements = %{latency_ms: latency}
-    
-    measurements = case result do
-      {:ok, %{tokens: tokens}} ->
-        Map.merge(measurements, %{
-          tokens_in: Map.get(tokens, :input, 0),
-          tokens_out: Map.get(tokens, :output, 0)
-        })
-      _ ->
-        measurements
-    end
-    
+
+    measurements =
+      case result do
+        {:ok, %{tokens: tokens}} ->
+          Map.merge(measurements, %{
+            tokens_in: Map.get(tokens, :input, 0),
+            tokens_out: Map.get(tokens, :output, 0)
+          })
+
+        _ ->
+          measurements
+      end
+
     metadata = %{provider: provider, status: status}
-    
+
     :telemetry.execute([:cyb, :s4, :provider, :result], measurements, metadata)
   end
 

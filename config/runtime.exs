@@ -11,7 +11,7 @@ config :cybernetic, :amqp,
   exchange_type: :topic,
   exchanges: %{
     events: "cyb.events",
-    telemetry: "cyb.telemetry", 
+    telemetry: "cyb.telemetry",
     commands: "cyb.commands",
     mcp_tools: "cyb.mcp.tools",
     s1: "cyb.vsm.s1",
@@ -22,7 +22,7 @@ config :cybernetic, :amqp,
   },
   queues: [
     system1: "vsm.system1.operations",
-    system2: "vsm.system2.coordination", 
+    system2: "vsm.system2.coordination",
     system3: "vsm.system3.control",
     system4: "vsm.system4.intelligence",
     system5: "vsm.system5.policy"
@@ -52,8 +52,10 @@ config :cybernetic, :goldrush,
 
 # Security configuration
 config :cybernetic, :security,
-  hmac_secret: System.get_env("CYBERNETIC_HMAC_SECRET") || :crypto.strong_rand_bytes(32) |> Base.encode64(),
-  nonce_ttl: 300_000,  # 5 minutes
+  hmac_secret:
+    System.get_env("CYBERNETIC_HMAC_SECRET") || :crypto.strong_rand_bytes(32) |> Base.encode64(),
+  # 5 minutes
+  nonce_ttl: 300_000,
   bloom_size: 100_000,
   bloom_error_rate: 0.001
 
