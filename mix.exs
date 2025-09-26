@@ -53,8 +53,13 @@ defmodule Cybernetic.MixProject do
       # HTTP clients
       # For Claude API
       {:req, "~> 0.5.0"},
+      # Unified LLM provider interface
+      {:req_llm, "~> 0.1.0"},
       # For Telegram bot
       {:httpoison, "~> 2.2"},
+
+      # Database
+      {:ecto, "~> 3.10"},
 
       # Redis client
       {:redix, "~> 1.2"},
