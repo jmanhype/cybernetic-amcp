@@ -18,3 +18,17 @@ config :cybernetic, :environment, :dev
 config :logger, :console,
   level: :debug,
   format: "$time $metadata[$level] $message\n"
+
+# Phoenix Edge Gateway configuration
+config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
+  http: [port: 4000],
+  debug_errors: true,
+  code_reloader: true,
+  check_origin: false,
+  watchers: []
+
+# Configure Phoenix to use Jason for JSON
+config :phoenix, :json_library, Jason
+
+# TLS enforcement (disabled in dev)
+config :cybernetic, :enforce_tls, false

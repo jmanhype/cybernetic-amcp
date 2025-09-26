@@ -18,7 +18,6 @@ defmodule Cybernetic.Application do
           # Continue without OpenTelemetry for now
           :ok
       end
-
       children =
         [
           {Cluster.Supervisor,
@@ -26,64 +25,48 @@ defmodule Cybernetic.Application do
              Application.get_env(:libcluster, :topologies, []),
              [name: Cybernetic.ClusterSupervisor]
            ]},
-
+          # Phoenix Edge Gateway Endpoint
+          Cybernetic.Edge.Gateway.Endpoint,
           # Core Security
           Cybernetic.Core.Security.NonceBloom,
-
           # CRDT Graph
           Cybernetic.Core.CRDT.Graph,
-
           # AMQP Transport
           Cybernetic.Transport.AMQP.Connection,
           {Cybernetic.Core.Transport.AMQP.Topology, []},
           Cybernetic.Core.Transport.AMQP.Publisher,
-
           # Performance Optimizations
           {Cybernetic.Core.Transport.AMQP.PublisherPool, []},
           {Cybernetic.Core.CRDT.Cache, []},
           {Cybernetic.Telemetry.BatchedCollector, []},
-
-          # MCP Registry  
+          # MCP Registry
           Cybernetic.Core.MCP.Hermes.Registry,
-
           # Circuit Breaker Registry
           {Registry,
            keys: :unique, name: Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry},
-
           # Goldrush Integration
           {Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic, []},
           Cybernetic.Core.Goldrush.Bridge,
           Cybernetic.Core.Goldrush.Pipeline,
-
           # Central Aggregator (must be before S4 Bridge)
           {Cybernetic.Core.Aggregator.CentralAggregator, []},
-
           # S5 SOP Engine (must be before S4 Bridge so it can receive messages)
           {Cybernetic.VSM.System5.SOPEngine, []},
-
-          # S5 Policy Intelligence Engine  
+          # S5 Policy Intelligence Engine
           {Cybernetic.VSM.System5.PolicyIntelligence, []},
-
           # S4 Intelligence Layer
           {Cybernetic.VSM.System4.LLMBridge, provider: Cybernetic.VSM.System4.Providers.Null},
-
           # S4 Multi-Provider Intelligence Service
           {Cybernetic.VSM.System4.Service, []},
-
           # S4 Memory for conversation context
           {Cybernetic.VSM.System4.Memory, []},
-
           # S3 Rate Limiter for budget management
           {Cybernetic.VSM.System3.RateLimiter, []},
-
           # Security AuthManager for MCP tools
           {Cybernetic.Security.AuthManager, []},
-
           # Edge WASM Validator is stateless - use Cybernetic.Edge.WASM.Validator.load/2 where needed
-
           # VSM Supervisor (includes S1-S5)
           Cybernetic.VSM.Supervisor,
-
           # Telegram Agent (S1)
           Cybernetic.VSM.System1.Agents.TelegramAgent
         ] ++ health_children() ++ telemetry_children()
