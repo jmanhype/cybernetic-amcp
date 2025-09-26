@@ -24,6 +24,7 @@ defmodule Cybernetic.MixProject do
       # Core dependencies
       {:amqp, "~> 4.1"},
       {:jason, ">= 0.0.0"},
+      {:json, "~> 1.4"},
       {:telemetry, ">= 0.0.0"},
       {:libcluster, ">= 0.0.0"},
       {:delta_crdt, ">= 0.0.0"},
