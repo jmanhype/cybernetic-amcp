@@ -7,8 +7,10 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   require Logger
 
   @default_bucket_size 100
-  @default_refill_rate 10  # tokens per second
-  @cleanup_interval 60_000 # 1 minute
+  # tokens per second
+  @default_refill_rate 10
+  # 1 minute
+  @cleanup_interval 60_000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -17,15 +19,16 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   def init(opts) do
     bucket_size = Keyword.get(opts, :bucket_size, @default_bucket_size)
     refill_rate = Keyword.get(opts, :refill_rate, @default_refill_rate)
-    
+
     # Schedule periodic cleanup
     Process.send_after(self(), :cleanup, @cleanup_interval)
-    
-    {:ok, %{
-      buckets: %{},
-      bucket_size: bucket_size,
-      refill_rate: refill_rate
-    }}
+
+    {:ok,
+     %{
+       buckets: %{},
+       bucket_size: bucket_size,
+       refill_rate: refill_rate
+     }}
   end
 
   @doc """
@@ -36,19 +39,20 @@ defmodule Cybernetic.Core.Security.RateLimiter do
     start_time = System.monotonic_time(:nanosecond)
     result = GenServer.call(__MODULE__, {:check, key, tokens})
     elapsed_ns = System.monotonic_time(:nanosecond) - start_time
-    
+
     # Emit golden telemetry
-    {allow, tokens_remaining} = case result do
-      {:ok, remaining} -> {true, remaining}
-      {:error, :rate_limited} -> {false, 0}
-    end
-    
+    {allow, tokens_remaining} =
+      case result do
+        {:ok, remaining} -> {true, remaining}
+        {:error, :rate_limited} -> {false, 0}
+      end
+
     :telemetry.execute(
       [:cyb, :ratelimiter, :decision],
       %{ns: elapsed_ns, tokens: tokens_remaining},
       %{allow: allow, key: to_string(key)}
     )
-    
+
     result
   end
 
@@ -60,19 +64,20 @@ defmodule Cybernetic.Core.Security.RateLimiter do
     start_time = System.monotonic_time(:nanosecond)
     result = GenServer.call(__MODULE__, {:consume, key, tokens})
     elapsed_ns = System.monotonic_time(:nanosecond) - start_time
-    
+
     # Emit golden telemetry
-    {allow, tokens_remaining} = case result do
-      {:ok, remaining} -> {true, remaining}
-      {:error, :rate_limited} -> {false, 0}
-    end
-    
+    {allow, tokens_remaining} =
+      case result do
+        {:ok, remaining} -> {true, remaining}
+        {:error, :rate_limited} -> {false, 0}
+      end
+
     :telemetry.execute(
       [:cyb, :ratelimiter, :decision],
       %{ns: elapsed_ns, tokens: tokens_remaining},
       %{allow: allow, key: to_string(key)}
     )
-    
+
     result
   end
 
@@ -95,7 +100,7 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   def handle_call({:check, key, tokens}, _from, state) do
     bucket = get_or_create_bucket(key, state)
     refilled = refill_bucket(bucket, state)
-    
+
     if refilled.tokens >= tokens do
       {:reply, {:ok, refilled.tokens}, state}
     else
@@ -106,28 +111,28 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   def handle_call({:consume, key, tokens}, _from, state) do
     bucket = get_or_create_bucket(key, state)
     refilled = refill_bucket(bucket, state)
-    
+
     if refilled.tokens >= tokens do
       new_bucket = %{refilled | tokens: refilled.tokens - tokens}
       new_state = put_in(state.buckets[key], new_bucket)
-      
+
       :telemetry.execute(
         [:cybernetic, :s3, :rate_limiter, :allow],
         %{cost: tokens, tokens_remaining: new_bucket.tokens},
         %{key: key}
       )
-      
+
       {:reply, {:ok, new_bucket.tokens}, new_state}
     else
       # Update last_refill even on failure
       new_state = put_in(state.buckets[key], refilled)
-      
+
       :telemetry.execute(
         [:cybernetic, :s3, :rate_limiter, :deny],
         %{cost: tokens, tokens_available: refilled.tokens},
         %{key: key}
       )
-      
+
       {:reply, {:error, :rate_limited}, new_state}
     end
   end
@@ -143,6 +148,7 @@ defmodule Cybernetic.Core.Security.RateLimiter do
       tokens: state.bucket_size,
       last_refill: System.monotonic_time(:millisecond)
     }
+
     {:noreply, put_in(state.buckets[key], bucket)}
   end
 
@@ -150,20 +156,22 @@ defmodule Cybernetic.Core.Security.RateLimiter do
     # Remove inactive buckets (no activity for 5 minutes)
     now = System.monotonic_time(:millisecond)
     five_minutes = 5 * 60 * 1000
-    
-    active_buckets = Enum.filter(state.buckets, fn {_key, bucket} ->
-      now - bucket.last_refill < five_minutes
-    end)
-    |> Enum.into(%{})
-    
+
+    active_buckets =
+      Enum.filter(state.buckets, fn {_key, bucket} ->
+        now - bucket.last_refill < five_minutes
+      end)
+      |> Enum.into(%{})
+
     removed = map_size(state.buckets) - map_size(active_buckets)
+
     if removed > 0 do
       Logger.debug("Rate limiter cleaned up #{removed} inactive buckets")
     end
-    
+
     # Schedule next cleanup
     Process.send_after(self(), :cleanup, @cleanup_interval)
-    
+
     {:noreply, %{state | buckets: active_buckets}}
   end
 
@@ -179,11 +187,11 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   defp refill_bucket(bucket, state) do
     now = System.monotonic_time(:millisecond)
     elapsed = now - bucket.last_refill
-    
+
     # Calculate tokens to add based on elapsed time
     tokens_to_add = div(elapsed * state.refill_rate, 1000)
     new_tokens = min(bucket.tokens + tokens_to_add, state.bucket_size)
-    
+
     %{bucket | tokens: new_tokens, last_refill: now}
   end
 end

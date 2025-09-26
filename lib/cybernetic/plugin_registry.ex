@@ -16,7 +16,9 @@ defmodule Cybernetic.Plugin.Registry do
     case Code.ensure_loaded(mod) do
       {:module, _} ->
         {:reply, :ok, Map.put(state, mod, %{opts: opts})}
-      _ -> {:reply, {:error, :not_loaded}, state}
+
+      _ ->
+        {:reply, {:error, :not_loaded}, state}
     end
   end
 

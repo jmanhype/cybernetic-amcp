@@ -13,15 +13,16 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
   def init(_opts) do
     # Attach telemetry handlers
     attach_telemetry_handlers()
-    
+
     # Setup Goldrush patterns after init completes
     Process.send_after(self(), :setup_patterns, 100)
-    
-    {:ok, %{
-      patterns: %{},
-      handlers: %{},
-      stats: %{events: 0, patterns_matched: 0}
-    }}
+
+    {:ok,
+     %{
+       patterns: %{},
+       handlers: %{},
+       stats: %{events: 0, patterns_matched: 0}
+     }}
   end
 
   defp attach_telemetry_handlers do
@@ -31,14 +32,14 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
       [:cybernetic, :vsm, :signal],
       [:cybernetic, :mcp, :tool, :invocation]
     ]
-    
+
     :telemetry.attach_many(
       "cybernetic-goldrush-bridge",
       events,
       &__MODULE__.handle_telemetry_event/4,
       %{}
     )
-    
+
     Logger.info("Goldrush bridge attached to #{length(events)} telemetry events")
   end
 
@@ -54,14 +55,15 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
   def handle_cast({:telemetry_event, event_name, measurements, metadata}, state) do
     # Convert to Goldrush event format
     event = build_goldrush_event(event_name, measurements, metadata)
-    
+
     # Process through patterns
     matched = process_event(event, state.patterns)
-    
-    new_state = state
-    |> update_in([:stats, :events], &(&1 + 1))
-    |> update_in([:stats, :patterns_matched], &(&1 + matched))
-    
+
+    new_state =
+      state
+      |> update_in([:stats, :events], &(&1 + 1))
+      |> update_in([:stats, :patterns_matched], &(&1 + matched))
+
     {:noreply, new_state}
   end
 
@@ -89,12 +91,12 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
     case pattern do
       %{event: event_pattern} ->
         event_pattern == event.event
-      
+
       %{match_all: conditions} ->
         Enum.all?(conditions, fn condition ->
           check_condition(event, condition)
         end)
-      
+
       _ ->
         false
     end
@@ -142,7 +144,7 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
         end
       }
     }
-    
+
     Logger.info("Registered #{map_size(patterns)} Goldrush patterns")
     patterns
   end
@@ -165,13 +167,13 @@ defmodule Cybernetic.Core.Goldrush.Bridge do
       source: event,
       timestamp: System.system_time(:millisecond)
     }
-    
+
     # Send to Goldrush Telemetry Algedonic plugin
     GenServer.cast(
       Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic,
       {:algedonic_signal, signal}
     )
-    
+
     Logger.debug("Emitted #{type} signal for #{category}")
   end
 

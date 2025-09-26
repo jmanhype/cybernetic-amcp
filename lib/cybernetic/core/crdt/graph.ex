@@ -17,12 +17,13 @@ defmodule Cybernetic.Core.CRDT.Graph do
   def init(_opts) do
     # Create ETS table for graph storage
     :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
-    
-    {:ok, %{
-      nodes: %{},
-      edges: %{},
-      version: 0
-    }}
+
+    {:ok,
+     %{
+       nodes: %{},
+       edges: %{},
+       version: 0
+     }}
   end
 
   # Node operations
@@ -30,12 +31,14 @@ defmodule Cybernetic.Core.CRDT.Graph do
   @doc "Add a node to the graph"
   def add_node(node_id, metadata \\ %{}) do
     timestamp = System.system_time(:millisecond)
+
     node = %{
       id: node_id,
       metadata: metadata,
       timestamp: timestamp,
       version: 1
     }
+
     :ets.insert(@table, {{:node, node_id}, node})
     {:ok, node}
   end
@@ -60,6 +63,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   def add_edge(from_id, to_id, metadata \\ %{}) do
     timestamp = System.system_time(:millisecond)
     edge_id = {from_id, to_id}
+
     edge = %{
       from: from_id,
       to: to_id,
@@ -67,12 +71,13 @@ defmodule Cybernetic.Core.CRDT.Graph do
       timestamp: timestamp,
       version: 1
     }
+
     :ets.insert(@table, {{:edge, edge_id}, edge})
-    
+
     # Update adjacency lists
     update_adjacency(from_id, to_id, :outgoing)
     update_adjacency(to_id, from_id, :incoming)
-    
+
     {:ok, edge}
   end
 
@@ -87,6 +92,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   @doc "Get all edges from a node"
   def get_outgoing_edges(node_id) do
     pattern = {{:edge, {node_id, :"$1"}}, :"$2"}
+
     :ets.match(@table, pattern)
     |> Enum.map(fn [_to_id, edge] -> edge end)
   end
@@ -94,6 +100,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   @doc "Get all edges to a node"
   def get_incoming_edges(node_id) do
     pattern = {{:edge, {:"$1", node_id}}, :"$2"}
+
     :ets.match(@table, pattern)
     |> Enum.map(fn [_from_id, edge] -> edge end)
   end
@@ -147,13 +154,13 @@ defmodule Cybernetic.Core.CRDT.Graph do
     # Export current ETS state
     nodes = :ets.match_object(@table, {{:node, :_}, :_})
     edges = :ets.match_object(@table, {{:edge, :_}, :_})
-    
+
     export = %{
       nodes: nodes,
       edges: edges,
       version: state.version
     }
-    
+
     {:reply, export, state}
   end
 
@@ -161,12 +168,13 @@ defmodule Cybernetic.Core.CRDT.Graph do
 
   defp update_adjacency(from_id, to_id, direction) do
     key = {:adjacency, from_id, direction}
-    
-    neighbors = case :ets.lookup(@table, key) do
-      [{_, existing}] -> existing
-      [] -> MapSet.new()
-    end
-    
+
+    neighbors =
+      case :ets.lookup(@table, key) do
+        [{_, existing}] -> existing
+        [] -> MapSet.new()
+      end
+
     updated = MapSet.put(neighbors, to_id)
     :ets.insert(@table, {key, updated})
   end
@@ -179,11 +187,12 @@ defmodule Cybernetic.Core.CRDT.Graph do
           if node.timestamp > local_node.timestamp do
             :ets.insert(@table, {{:node, id}, node})
           end
+
         [] ->
           :ets.insert(@table, {{:node, id}, node})
       end
     end)
-    
+
     # Merge edges similarly
     Enum.each(remote.edges, fn {{:edge, edge_id}, edge} ->
       case :ets.lookup(@table, {:edge, edge_id}) do
@@ -191,11 +200,12 @@ defmodule Cybernetic.Core.CRDT.Graph do
           if edge.timestamp > local_edge.timestamp do
             :ets.insert(@table, {{:edge, edge_id}, edge})
           end
+
         [] ->
           :ets.insert(@table, {{:edge, edge_id}, edge})
       end
     end)
-    
+
     %{local | version: max(local.version, remote.version) + 1}
   end
 end

@@ -14,28 +14,30 @@ defmodule Cybernetic.Edge.Gateway.Endpoint do
 
   # TLS 1.3 enforcement for production
   if Application.compile_env(:cybernetic, :enforce_tls) do
-    plug Plug.SSL,
+    plug(Plug.SSL,
       rewrite_on: [:x_forwarded_proto],
       hsts: true,
       versions: [:"tlsv1.3"]
+    )
   end
 
   # Code reloading for development
   if code_reloading? do
-    plug Phoenix.CodeReloader
+    plug(Phoenix.CodeReloader)
   end
 
-  plug Plug.RequestId
-  plug Plug.Telemetry, event_prefix: [:cybernetic, :edge, :endpoint]
+  plug(Plug.RequestId)
+  plug(Plug.Telemetry, event_prefix: [:cybernetic, :edge, :endpoint])
 
-  plug Plug.Parsers,
+  plug(Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
+  )
 
-  plug Plug.MethodOverride
-  plug Plug.Head
-  plug Plug.Session, @session_options
+  plug(Plug.MethodOverride)
+  plug(Plug.Head)
+  plug(Plug.Session, @session_options)
 
   # TODO: Add CORS plug when corsica dependency is added
   # plug Corsica,
@@ -44,5 +46,5 @@ defmodule Cybernetic.Edge.Gateway.Endpoint do
   #   allow_credentials: true,
   #   max_age: 86400
 
-  plug Cybernetic.Edge.Gateway.Router
+  plug(Cybernetic.Edge.Gateway.Router)
 end

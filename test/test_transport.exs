@@ -34,11 +34,25 @@ result1 = Publisher.publish("cyb.events", "vsm.system1.test", %{"data" => "test"
 IO.puts("System1 message result: #{inspect(result1)}")
 
 # Test 2: Coordination message
-result2 = Publisher.publish("cyb.commands", "vsm.system2.coordinate", %{"action" => "start", "target_systems" => [:system1, :system3]}, [])
+result2 =
+  Publisher.publish(
+    "cyb.commands",
+    "vsm.system2.coordinate",
+    %{"action" => "start", "target_systems" => [:system1, :system3]},
+    []
+  )
+
 IO.puts("System2 coordination result: #{inspect(result2)}")
 
 # Test 3: Broadcast message
-result3 = Publisher.publish("cyb.telemetry", "vsm.broadcast.status", %{"timestamp" => :os.system_time(:millisecond)}, [])
+result3 =
+  Publisher.publish(
+    "cyb.telemetry",
+    "vsm.broadcast.status",
+    %{"timestamp" => :os.system_time(:millisecond)},
+    []
+  )
+
 IO.puts("Broadcast result: #{inspect(result3)}")
 
 # Wait for message processing

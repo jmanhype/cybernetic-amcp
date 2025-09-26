@@ -12,7 +12,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         operation: "test_op",
         data: "test_data"
       }
-      
+
       result = MessageHandler.handle_message("operation", payload, %{})
       assert result == :ok
     end
@@ -22,8 +22,10 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         status: "active",
         timestamp: DateTime.utc_now()
       }
-      
-      result = MessageHandler.handle_message("status_update", payload, %{source_node: "test_node"})
+
+      result =
+        MessageHandler.handle_message("status_update", payload, %{source_node: "test_node"})
+
       assert result == :ok
     end
 
@@ -32,7 +34,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         "type" => "cpu",
         "amount" => 2
       }
-      
+
       result = MessageHandler.handle_message("resource_request", payload, %{})
       assert result == :ok
     end
@@ -42,7 +44,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         "action" => "start",
         "task_id" => "task_123"
       }
-      
+
       result = MessageHandler.handle_message("coordination", payload, %{})
       assert result == :ok
     end
@@ -52,7 +54,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         "action" => "stop",
         "task_id" => "task_123"
       }
-      
+
       result = MessageHandler.handle_message("coordination", payload, %{})
       assert result == :ok
     end
@@ -62,7 +64,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         "action" => "update",
         "task_id" => "task_123"
       }
-      
+
       result = MessageHandler.handle_message("coordination", payload, %{})
       assert result == :ok
     end
@@ -72,8 +74,12 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         metric: "cpu_usage",
         value: 45.2
       }
-      
-      result = MessageHandler.handle_message("telemetry", payload, %{timestamp: :os.system_time(:millisecond)})
+
+      result =
+        MessageHandler.handle_message("telemetry", payload, %{
+          timestamp: :os.system_time(:millisecond)
+        })
+
       assert result == :ok
     end
 
@@ -81,14 +87,14 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
       payload = %{
         some: "data"
       }
-      
+
       result = MessageHandler.handle_message("default", payload, %{})
       assert result == :ok
     end
 
     test "returns error for unknown operations" do
       payload = %{test: "data"}
-      
+
       result = MessageHandler.handle_message("unknown_op", payload, %{})
       assert result == {:error, :unknown_operation}
     end
@@ -106,7 +112,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         "type" => "cpu",
         "amount" => 4
       }
-      
+
       result = MessageHandler.handle_message("resource_request", payload, %{})
       assert result == :ok
     end
@@ -116,7 +122,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         "type" => "memory",
         "amount" => 1024
       }
-      
+
       result = MessageHandler.handle_message("resource_request", payload, %{})
       assert result == :ok
     end
@@ -126,7 +132,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         "type" => "network",
         "amount" => 100
       }
-      
+
       result = MessageHandler.handle_message("resource_request", payload, %{})
       assert result == :ok
     end
@@ -136,7 +142,7 @@ defmodule Cybernetic.VSM.System1.MessageHandlerTest do
         "type" => "gpu",
         "amount" => 1
       }
-      
+
       result = MessageHandler.handle_message("resource_request", payload, %{})
       assert result == {:error, :unsupported_resource_type}
     end

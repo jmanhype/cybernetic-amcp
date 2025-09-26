@@ -1,7 +1,7 @@
 defmodule Cybernetic.VSM.System4.Episode do
   @moduledoc """
   Episode data structure for S4 Intelligence analysis.
-  
+
   Episodes represent discrete units of work that require AI analysis,
   categorized by kind to enable intelligent provider routing.
   """
@@ -18,20 +18,27 @@ defmodule Cybernetic.VSM.System4.Episode do
     :source_system
   ]
 
-  @type kind :: :policy_review | :root_cause | :code_gen | :anomaly_detection | 
-                :compliance_check | :optimization | :prediction | :classification
+  @type kind ::
+          :policy_review
+          | :root_cause
+          | :code_gen
+          | :anomaly_detection
+          | :compliance_check
+          | :optimization
+          | :prediction
+          | :classification
 
   @type t :: %__MODULE__{
-    id: String.t(),
-    kind: kind(),
-    title: String.t(),
-    context: map(),
-    data: any(),
-    metadata: map(),
-    priority: :low | :normal | :high | :critical,
-    created_at: DateTime.t(),
-    source_system: atom()
-  }
+          id: String.t(),
+          kind: kind(),
+          title: String.t(),
+          context: map(),
+          data: any(),
+          metadata: map(),
+          priority: :low | :normal | :high | :critical,
+          created_at: DateTime.t(),
+          source_system: atom()
+        }
 
   @doc """
   Create a new episode with generated ID and timestamp.
@@ -64,19 +71,19 @@ defmodule Cybernetic.VSM.System4.Episode do
   def to_prompt(%__MODULE__{} = episode) do
     """
     Episode Analysis Request
-    
+
     ID: #{episode.id}
     Kind: #{episode.kind}
     Title: #{episode.title}
     Priority: #{episode.priority}
     Source: #{episode.source_system}
-    
+
     Context:
     #{format_context(episode.context)}
-    
+
     Data:
     #{format_data(episode.data)}
-    
+
     Metadata:
     #{format_metadata(episode.metadata)}
     """

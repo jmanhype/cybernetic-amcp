@@ -2,14 +2,14 @@ defmodule Cybernetic.Core.Goldrush.Pipeline do
   @moduledoc "Telemetry → Goldrush plugins → algedonic out"
   use GenServer
   require Logger
-  
-  @in_evt  [:cybernetic, :work, :finished]
+
+  @in_evt [:cybernetic, :work, :finished]
   @out_evt [:cybernetic, :algedonic]
-  
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
-  
+
   def init(_opts) do
     # Attach once; the handler forwards samples into plugin chain
     :telemetry.attach_many(
@@ -18,35 +18,35 @@ defmodule Cybernetic.Core.Goldrush.Pipeline do
       &__MODULE__.handle_telemetry/4,
       nil
     )
-    
+
     {:ok, %{plugins: load_plugins()}}
   end
-  
+
   def handle_telemetry(event, meas, meta, _cfg) do
     # Forward to the GenServer for processing
     GenServer.cast(__MODULE__, {:telemetry_event, event, meas, meta})
   end
-  
+
   def handle_cast({:telemetry_event, event, meas, meta}, state) do
     # Simple envelope → plugin pipeline
     msg = %{event: event, meas: meas, meta: meta}
-    
+
     case run_plugins(msg, state.plugins) do
       {:ok, %{severity: sev} = out} when sev in [:pain, :pleasure] ->
         :telemetry.execute(@out_evt, %{severity: sev}, Map.drop(out, [:severity]))
-        
-      _ -> 
+
+      _ ->
         :ok
     end
-    
+
     {:noreply, state}
   end
-  
+
   defp load_plugins do
     # Discover from your plugin registry or code list for smoke test
     [Cybernetic.Core.Goldrush.Plugins.LatencyToAlgedonic]
   end
-  
+
   defp run_plugins(msg, plugins) do
     Enum.reduce_while(plugins, {:ok, msg}, fn mod, {:ok, m} ->
       case apply(mod, :process, [m]) do

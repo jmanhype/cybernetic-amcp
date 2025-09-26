@@ -6,19 +6,24 @@ defmodule Cybernetic.Transport.Behaviour do
 
   @doc """
   Publish a message to the specified exchange and routing key.
-  
+
   ## Parameters
   - exchange: The exchange name (e.g., "cyb.commands")
   - routing_key: The routing key (e.g., "s2.coordinate")
   - message: The message payload (map)
   - opts: Additional options (list of keyword pairs)
-  
+
   ## Returns
   - :ok on success
   - {:error, reason} on failure
   """
-  @callback publish(exchange :: String.t(), routing_key :: String.t(), message :: map(), opts :: keyword()) :: 
-    :ok | {:error, term()}
+  @callback publish(
+              exchange :: String.t(),
+              routing_key :: String.t(),
+              message :: map(),
+              opts :: keyword()
+            ) ::
+              :ok | {:error, term()}
 
   @doc """
   Get the current configured transport module.

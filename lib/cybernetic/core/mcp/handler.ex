@@ -4,7 +4,7 @@ defmodule Cybernetic.Core.MCP.Handler do
   Routes MCP protocol messages to appropriate handlers.
   """
   require Logger
-  
+
   alias Cybernetic.Core.MCP.Hermes.Registry
 
   @doc """
@@ -31,7 +31,7 @@ defmodule Cybernetic.Core.MCP.Handler do
 
   defp handle_tool_request(%{"tool" => tool_name, "params" => params, "id" => request_id} = msg) do
     context = Map.get(msg, "context", %{})
-    
+
     case Registry.invoke_tool(tool_name, params, context) do
       {:ok, result} ->
         response = %{
@@ -41,8 +41,9 @@ defmodule Cybernetic.Core.MCP.Handler do
           "result" => result,
           "status" => "success"
         }
+
         {:ok, response}
-        
+
       {:error, reason} ->
         response = %{
           "type" => "tool_response",
@@ -51,6 +52,7 @@ defmodule Cybernetic.Core.MCP.Handler do
           "error" => to_string(reason),
           "status" => "error"
         }
+
         {:ok, response}
     end
   end
@@ -62,7 +64,7 @@ defmodule Cybernetic.Core.MCP.Handler do
       %{response_time: System.monotonic_time(:millisecond)},
       %{request_id: request_id, result: result}
     )
-    
+
     {:ok, :processed}
   end
 
@@ -74,8 +76,9 @@ defmodule Cybernetic.Core.MCP.Handler do
           "type" => "discovery_response",
           "tools" => Enum.map(tools, &tool_to_json/1)
         }
+
         {:ok, response}
-        
+
       {:error, reason} ->
         {:error, reason}
     end

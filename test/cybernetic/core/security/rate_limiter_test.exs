@@ -8,6 +8,7 @@ defmodule Cybernetic.Core.Security.RateLimiterTest do
       nil -> :ok
       pid -> GenServer.stop(pid, :normal, 100)
     end
+
     Process.sleep(10)
     {:ok, pid} = RateLimiter.start_link(bucket_size: 10, refill_rate: 5)
     {:ok, limiter: pid}
@@ -28,10 +29,10 @@ defmodule Cybernetic.Core.Security.RateLimiterTest do
     test "refills tokens over time" do
       key = "refill_test"
       assert {:ok, 0} = RateLimiter.consume(key, 10)
-      
+
       # Wait for refill (5 tokens per second, wait 400ms = 2 tokens)
       Process.sleep(400)
-      
+
       assert {:ok, _remaining} = RateLimiter.consume(key, 2)
     end
 
@@ -45,7 +46,7 @@ defmodule Cybernetic.Core.Security.RateLimiterTest do
     test "get_bucket returns current state" do
       key = "bucket_test"
       assert {:ok, 5} = RateLimiter.consume(key, 5)
-      
+
       bucket = RateLimiter.get_bucket(key)
       assert bucket.tokens == 5
       assert is_integer(bucket.last_refill)
@@ -54,40 +55,43 @@ defmodule Cybernetic.Core.Security.RateLimiterTest do
     test "reset restores full capacity" do
       key = "reset_test"
       assert {:ok, 0} = RateLimiter.consume(key, 10)
-      
+
       RateLimiter.reset(key)
-      Process.sleep(10) # Let cast complete
-      
+      # Let cast complete
+      Process.sleep(10)
+
       assert {:ok, 10} = RateLimiter.check(key)
     end
 
     test "different keys have independent buckets" do
       assert {:ok, 5} = RateLimiter.consume("key1", 5)
       assert {:ok, 3} = RateLimiter.consume("key2", 7)
-      
+
       bucket1 = RateLimiter.get_bucket("key1")
       bucket2 = RateLimiter.get_bucket("key2")
-      
+
       assert bucket1.tokens == 5
       assert bucket2.tokens == 3
     end
 
     test "handles concurrent requests correctly" do
       key = "concurrent_test"
-      
-      tasks = for i <- 1..20 do
-        Task.async(fn ->
-          RateLimiter.consume(key, 1)
-        end)
-      end
-      
+
+      tasks =
+        for i <- 1..20 do
+          Task.async(fn ->
+            RateLimiter.consume(key, 1)
+          end)
+        end
+
       results = Task.await_many(tasks)
-      
-      successful = Enum.count(results, fn
-        {:ok, _} -> true
-        _ -> false
-      end)
-      
+
+      successful =
+        Enum.count(results, fn
+          {:ok, _} -> true
+          _ -> false
+        end)
+
       # Should allow exactly 10 requests (bucket size)
       assert successful == 10
     end

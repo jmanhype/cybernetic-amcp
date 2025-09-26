@@ -8,7 +8,8 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
   require Logger
 
   @default_batch_size 100
-  @default_flush_interval 5_000  # 5 seconds
+  # 5 seconds
+  @default_flush_interval 5_000
   @default_max_memory_mb 50
 
   defstruct [
@@ -30,7 +31,7 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
     batch_size = Keyword.get(opts, :batch_size, @default_batch_size)
     flush_interval = Keyword.get(opts, :flush_interval, @default_flush_interval)
     max_memory_mb = Keyword.get(opts, :max_memory_mb, @default_max_memory_mb)
-    
+
     state = %__MODULE__{
       batch_size: batch_size,
       flush_interval: flush_interval,
@@ -40,11 +41,14 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
       handlers: %{},
       stats: init_stats()
     }
-    
+
     # Attach to telemetry events
     attach_telemetry_handlers()
-    
-    Logger.info("Batched telemetry collector started: batch_size=#{batch_size}, flush_interval=#{flush_interval}ms")
+
+    Logger.info(
+      "Batched telemetry collector started: batch_size=#{batch_size}, flush_interval=#{flush_interval}ms"
+    )
+
     {:ok, state}
   end
 
@@ -85,20 +89,23 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
       metadata: metadata,
       timestamp: System.system_time(:microsecond)
     }
-    
+
     new_batch = [event | state.current_batch]
     new_stats = update_stats(state.stats, :events_received, 1)
-    
+
     # Check if we should flush
     should_flush = should_flush_batch?(new_batch, state)
-    
+
     if should_flush do
       flush_batch(new_batch, state)
-      new_state = %{state | 
-        current_batch: [], 
-        stats: update_stats(new_stats, :batches_flushed, 1),
-        flush_timer: schedule_flush(state.flush_interval)
+
+      new_state = %{
+        state
+        | current_batch: [],
+          stats: update_stats(new_stats, :batches_flushed, 1),
+          flush_timer: schedule_flush(state.flush_interval)
       }
+
       {:noreply, new_state}
     else
       new_state = %{state | current_batch: new_batch, stats: new_stats}
@@ -111,6 +118,7 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
     if Map.has_key?(state.handlers, name) do
       Logger.warning("Overwriting existing batched telemetry handler: #{inspect(name)}")
     end
+
     new_handlers = Map.put(state.handlers, name, handler_fun)
     {:noreply, %{state | handlers: new_handlers}}
   end
@@ -124,11 +132,14 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
     if length(state.current_batch) > 0 do
       flush_batch(state.current_batch, state)
       new_stats = update_stats(state.stats, :forced_flushes, 1)
-      new_state = %{state | 
-        current_batch: [], 
-        stats: new_stats,
-        flush_timer: schedule_flush(state.flush_interval)
+
+      new_state = %{
+        state
+        | current_batch: [],
+          stats: new_stats,
+          flush_timer: schedule_flush(state.flush_interval)
       }
+
       {:noreply, new_state}
     else
       {:noreply, state}
@@ -141,7 +152,7 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
       memory_usage_bytes: estimate_memory_usage(state.current_batch),
       handlers_count: map_size(state.handlers)
     }
-    
+
     full_stats = Map.merge(state.stats, current_stats)
     {:reply, full_stats, state}
   end
@@ -150,11 +161,14 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
     if length(state.current_batch) > 0 do
       flush_batch(state.current_batch, state)
       new_stats = update_stats(state.stats, :timer_flushes, 1)
-      new_state = %{state | 
-        current_batch: [], 
-        stats: new_stats,
-        flush_timer: schedule_flush(state.flush_interval)
+
+      new_state = %{
+        state
+        | current_batch: [],
+          stats: new_stats,
+          flush_timer: schedule_flush(state.flush_interval)
       }
+
       {:noreply, new_state}
     else
       new_state = %{state | flush_timer: schedule_flush(state.flush_interval)}
@@ -185,20 +199,20 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
       [:cybernetic, :wasm, :validator],
       [:cybernetic, :system3, :health]
     ]
-    
+
     # Use a stable handler ID to prevent duplicates
     handler_id = :batched_collector_main
-    
+
     # Detach any existing handler with this ID first
     :telemetry.detach(handler_id)
-    
+
     :telemetry.attach_many(
       handler_id,
       events,
       &handle_telemetry_event/4,
       nil
     )
-    
+
     Logger.debug("Attached batched collector to #{length(events)} telemetry events")
   end
 
@@ -210,10 +224,10 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
     cond do
       length(batch) >= state.batch_size ->
         true
-      
+
       estimate_memory_usage(batch) > state.max_memory_bytes ->
         true
-      
+
       true ->
         false
     end
@@ -221,10 +235,10 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
 
   defp flush_batch(batch, state) do
     start_time = System.monotonic_time(:microsecond)
-    
+
     # Sort batch by timestamp for consistent processing
     sorted_batch = Enum.sort_by(batch, & &1.timestamp)
-    
+
     # Process with each handler
     Enum.each(state.handlers, fn {handler_name, handler_fun} ->
       try do
@@ -234,26 +248,30 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
           Logger.error("Telemetry handler #{handler_name} failed: #{inspect(error)}")
       end
     end)
-    
+
     # Default processing - emit aggregated metrics
     process_batch_aggregations(sorted_batch)
-    
+
     flush_duration = System.monotonic_time(:microsecond) - start_time
-    
+
     # Emit flush metrics
-    :telemetry.execute([:cyb, :telemetry, :batch_flush], %{
-      count: length(batch),
-      duration_us: flush_duration,
-      throughput: length(batch) / (flush_duration / 1_000_000)
-    }, %{batch_size: length(batch)})
-    
+    :telemetry.execute(
+      [:cyb, :telemetry, :batch_flush],
+      %{
+        count: length(batch),
+        duration_us: flush_duration,
+        throughput: length(batch) / (flush_duration / 1_000_000)
+      },
+      %{batch_size: length(batch)}
+    )
+
     Logger.debug("Flushed telemetry batch: #{length(batch)} events in #{flush_duration}μs")
   end
 
   defp process_batch_aggregations(batch) do
     # Group events by name for aggregation
     grouped = Enum.group_by(batch, & &1.name)
-    
+
     Enum.each(grouped, fn {event_name, events} ->
       aggregated_metrics = aggregate_events(event_name, events)
       # Emit aggregated metrics to external systems (Prometheus, etc.)
@@ -269,27 +287,27 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
           avg_duration: avg_measurement(events, :duration),
           success_rate: success_rate(events, :granted)
         }
-      
+
       [:cyb, :ratelimiter, :decision] ->
         %{
           total_decisions: length(events),
           allow_rate: success_rate(events, :allow),
           avg_tokens: avg_measurement(events, :tokens)
         }
-      
+
       [:cyb, :amqp, :publish] ->
         %{
           total_publishes: length(events),
           total_bytes: sum_measurement(events, :bytes),
           avg_latency: avg_measurement(events, :latency_us)
         }
-      
+
       [:cyb, :crdt_cache, :hit] ->
         %{hit_count: length(events)}
-      
+
       [:cyb, :crdt_cache, :miss] ->
         %{miss_count: length(events)}
-      
+
       _ ->
         # Generic aggregation for unknown events
         %{
@@ -302,7 +320,7 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
   defp emit_aggregated_metrics(event_name, metrics) do
     # Send to external monitoring systems
     # This could be Prometheus, StatsD, etc.
-    
+
     # For now, just emit as telemetry for other collectors
     :telemetry.execute([:cyb, :telemetry, :aggregated], metrics, %{
       source_event: event_name,
@@ -311,10 +329,11 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
   end
 
   defp avg_measurement(events, key) when is_atom(key) do
-    values = Enum.map(events, fn event -> 
-      Map.get(event.measurements, key, 0)
-    end)
-    
+    values =
+      Enum.map(events, fn event ->
+        Map.get(event.measurements, key, 0)
+      end)
+
     if length(values) > 0 do
       Enum.sum(values) / length(values)
     else
@@ -324,7 +343,7 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
 
   defp avg_measurement(events, fun) when is_function(fun) do
     values = Enum.map(events, fun)
-    
+
     if length(values) > 0 do
       Enum.sum(values) / length(values)
     else
@@ -339,10 +358,11 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
   end
 
   defp success_rate(events, metadata_key) do
-    successes = Enum.count(events, fn event ->
-      Map.get(event.metadata, metadata_key, false)
-    end)
-    
+    successes =
+      Enum.count(events, fn event ->
+        Map.get(event.metadata, metadata_key, false)
+      end)
+
     if length(events) > 0 do
       successes / length(events)
     else

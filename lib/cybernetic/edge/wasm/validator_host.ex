@@ -9,7 +9,8 @@ defmodule Cybernetic.Edge.WASM.ValidatorHost do
   @type wasm_path :: binary()
   @type func :: binary()
 
-  def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: opts[:name] || __MODULE__)
+  def start_link(opts),
+    do: GenServer.start_link(__MODULE__, opts, name: opts[:name] || __MODULE__)
 
   @impl true
   def init(opts) do
@@ -69,7 +70,8 @@ defmodule Cybernetic.Edge.WASM.ValidatorHost do
       {:ok, _bin} ->
         Logger.warning("WASM runtime not available - add :wasmex dependency")
         {:error, :no_wasm_runtime}
-      error -> 
+
+      error ->
         error
     end
   end

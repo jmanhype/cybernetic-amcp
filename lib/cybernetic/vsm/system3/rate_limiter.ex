@@ -1,14 +1,14 @@
 defmodule Cybernetic.VSM.System3.RateLimiter do
   @moduledoc """
   S3 Rate Limiter for controlling resource consumption across the VSM framework.
-  
+
   Provides budget management and rate limiting capabilities to prevent
   system overload and manage costs across different services.
   """
-  
+
   use GenServer
   require Logger
-  
+
   @telemetry [:cybernetic, :s3, :rate_limiter]
 
   defstruct [
@@ -31,15 +31,15 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
 
   @doc """
   Request tokens from a budget.
-  
+
   ## Parameters
-  
+
   - budget_key: Budget identifier (e.g., :s4_llm, :s5_policy)
   - resource_type: Type of resource being consumed
   - priority: Request priority
-  
+
   ## Returns
-  
+
   :ok | {:error, :rate_limited}
   """
   def request_tokens(budget_key, resource_type, priority \\ :normal) do
@@ -72,27 +72,27 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   @impl GenServer
   def init(opts) do
     config = load_config(opts)
-    
+
     state = %__MODULE__{
       budgets: initialize_budgets(config),
       windows: %{},
       config: config
     }
-    
+
     Logger.info("S3 RateLimiter initialized with budgets: #{inspect(Map.keys(state.budgets))}")
-    
+
     # Schedule periodic cleanup
     schedule_cleanup()
-    
+
     {:ok, state}
   end
 
   @impl GenServer
   def handle_call({:request_tokens, budget_key, resource_type, priority}, _from, state) do
     {result, new_state} = do_request_tokens(budget_key, resource_type, priority, state)
-    
+
     emit_telemetry(budget_key, resource_type, priority, result)
-    
+
     {:reply, result, new_state}
   end
 
@@ -104,26 +104,29 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
 
   @impl GenServer
   def handle_call(:all_budgets, _from, state) do
-    all_status = Enum.map(state.budgets, fn {key, _} ->
-      {key, get_budget_status(key, state)}
-    end) |> Enum.into(%{})
-    
+    all_status =
+      Enum.map(state.budgets, fn {key, _} ->
+        {key, get_budget_status(key, state)}
+      end)
+      |> Enum.into(%{})
+
     {:reply, all_status, state}
   end
 
   @impl GenServer
   def handle_call({:reset_budget, budget_key}, _from, state) do
-    new_budgets = case Map.get(state.budgets, budget_key) do
-      nil ->
-        state.budgets
-        
-      budget ->
-        reset_budget = %{budget | consumed: 0, last_reset: current_time()}
-        Map.put(state.budgets, budget_key, reset_budget)
-    end
-    
+    new_budgets =
+      case Map.get(state.budgets, budget_key) do
+        nil ->
+          state.budgets
+
+        budget ->
+          reset_budget = %{budget | consumed: 0, last_reset: current_time()}
+          Map.put(state.budgets, budget_key, reset_budget)
+      end
+
     new_state = %{state | budgets: new_budgets}
-    
+
     Logger.info("Reset budget #{budget_key}")
     {:reply, :ok, new_state}
   end
@@ -147,7 +150,7 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
       nil ->
         # No budget configured, allow by default
         {:ok, state}
-        
+
       budget ->
         case check_budget_limits(budget, resource_type, priority) do
           :ok ->
@@ -155,7 +158,7 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
             new_budgets = Map.put(state.budgets, budget_key, new_budget)
             new_state = %{state | budgets: new_budgets}
             {:ok, new_state}
-            
+
           {:error, reason} ->
             {{:error, reason}, state}
         end
@@ -165,24 +168,26 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   defp check_budget_limits(budget, _resource_type, priority) do
     current_time = current_time()
     window_start = current_time - budget.window_ms
-    
+
     # Reset budget if window has passed
-    budget = if budget.last_reset < window_start do
-      %{budget | consumed: 0, last_reset: current_time}
-    else
-      budget
-    end
-    
+    budget =
+      if budget.last_reset < window_start do
+        %{budget | consumed: 0, last_reset: current_time}
+      else
+        budget
+      end
+
     # Calculate priority multiplier
-    multiplier = case priority do
-      :critical -> 1
-      :high -> 1
-      :normal -> 2
-      :low -> 4
-    end
-    
+    multiplier =
+      case priority do
+        :critical -> 1
+        :high -> 1
+        :normal -> 2
+        :low -> 4
+      end
+
     tokens_needed = multiplier
-    
+
     if budget.consumed + tokens_needed <= budget.limit do
       :ok
     else
@@ -191,31 +196,29 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   end
 
   defp consume_tokens(budget, _resource_type, priority) do
-    multiplier = case priority do
-      :critical -> 1
-      :high -> 1
-      :normal -> 2
-      :low -> 4
-    end
-    
-    %{budget | 
-      consumed: budget.consumed + multiplier,
-      last_request: current_time()
-    }
+    multiplier =
+      case priority do
+        :critical -> 1
+        :high -> 1
+        :normal -> 2
+        :low -> 4
+      end
+
+    %{budget | consumed: budget.consumed + multiplier, last_request: current_time()}
   end
 
   defp get_budget_status(budget_key, state) do
     case Map.get(state.budgets, budget_key) do
       nil ->
         %{status: :not_configured}
-        
+
       budget ->
         current_time = current_time()
         window_start = current_time - budget.window_ms
-        
+
         # Reset consumed if window has passed
         consumed = if budget.last_reset < window_start, do: 0, else: budget.consumed
-        
+
         %{
           status: :active,
           limit: budget.limit,
@@ -231,27 +234,34 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
 
   defp load_config(opts) do
     default_config = %{
-      cleanup_interval: 60_000,  # 1 minute
-      default_window: 300_000,   # 5 minutes
+      # 1 minute
+      cleanup_interval: 60_000,
+      # 5 minutes
+      default_window: 300_000,
       default_budgets: %{
-        s4_llm: %{limit: 100, window_ms: 300_000},      # 100 requests per 5 minutes
-        s5_policy: %{limit: 50, window_ms: 600_000},    # 50 requests per 10 minutes
-        mcp_tools: %{limit: 200, window_ms: 60_000}     # 200 requests per minute
+        # 100 requests per 5 minutes
+        s4_llm: %{limit: 100, window_ms: 300_000},
+        # 50 requests per 10 minutes
+        s5_policy: %{limit: 50, window_ms: 600_000},
+        # 200 requests per minute
+        mcp_tools: %{limit: 200, window_ms: 60_000}
       }
     }
-    
-    app_config = Application.get_env(:cybernetic, :s3_rate_limiter, [])
-    |> Enum.into(%{})
-    
-    opts_config = Keyword.take(opts, [:cleanup_interval, :default_window, :default_budgets])
-    |> Enum.into(%{})
-    
+
+    app_config =
+      Application.get_env(:cybernetic, :s3_rate_limiter, [])
+      |> Enum.into(%{})
+
+    opts_config =
+      Keyword.take(opts, [:cleanup_interval, :default_window, :default_budgets])
+      |> Enum.into(%{})
+
     Map.merge(default_config, Map.merge(app_config, opts_config))
   end
 
   defp initialize_budgets(config) do
     current_time = current_time()
-    
+
     config.default_budgets
     |> Enum.map(fn {key, budget_config} ->
       budget = %{
@@ -261,6 +271,7 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
         last_reset: current_time,
         last_request: nil
       }
+
       {key, budget}
     end)
     |> Enum.into(%{})
@@ -281,17 +292,18 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
 
   defp emit_telemetry(budget_key, resource_type, priority, result) do
     measurements = %{count: 1}
-    
+
     metadata = %{
       budget_key: budget_key,
       resource_type: resource_type,
       priority: priority,
-      result: case result do
-        :ok -> :allowed
-        {:error, reason} -> reason
-      end
+      result:
+        case result do
+          :ok -> :allowed
+          {:error, reason} -> reason
+        end
     }
-    
+
     :telemetry.execute(@telemetry, measurements, metadata)
   end
 end

@@ -1,4 +1,3 @@
-
 defmodule Cybernetic.MCP.MAGGAdapter do
   @moduledoc """
   Adapter for MAGG style servers/tools (placeholder).

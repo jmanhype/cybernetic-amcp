@@ -8,6 +8,7 @@ IO.puts("================================")
 
 # Test 1: Check if module is loaded
 IO.puts("\n1. Module Check:")
+
 try do
   IO.puts("   ✅ HermesClient module loaded: #{inspect(HermesClient)}")
 rescue
@@ -16,10 +17,11 @@ end
 
 # Test 2: Check Plugin behavior
 IO.puts("\n2. Plugin Behavior:")
+
 try do
   {:ok, state} = HermesClient.init([])
   IO.puts("   ✅ init/1 works: #{inspect(state)}")
-  
+
   metadata = HermesClient.metadata()
   IO.puts("   ✅ metadata/0 works: #{inspect(metadata)}")
 rescue
@@ -28,11 +30,12 @@ end
 
 # Test 3: Test real MCP functions (will fail without server)
 IO.puts("\n3. MCP Functions (expected to fail without server):")
+
 try do
   result = HermesClient.ping()
   IO.puts("   🎯 ping() succeeded: #{inspect(result)}")
 rescue
-  error -> 
+  error ->
     IO.puts("   ⚠️  ping() failed as expected (no server): #{inspect(error)}")
     IO.puts("       This proves we're using REAL Hermes functions!")
 end
@@ -41,13 +44,14 @@ try do
   result = HermesClient.list_tools()
   IO.puts("   🎯 list_tools() succeeded: #{inspect(result)}")
 rescue
-  error -> 
+  error ->
     IO.puts("   ⚠️  list_tools() failed as expected (no server): #{inspect(error)}")
     IO.puts("       This proves we're using REAL Hermes functions!")
 end
 
 # Test 4: Test process/2 with no server
 IO.puts("\n4. Process Function (handles no-server gracefully):")
+
 try do
   input = %{tool: "test_tool", params: %{message: "hello"}}
   state = %{test: true}
@@ -59,6 +63,7 @@ end
 
 # Test 5: Test health_check
 IO.puts("\n5. Health Check:")
+
 try do
   result = HermesClient.health_check()
   IO.puts("   ✅ health_check() result: #{inspect(result)}")

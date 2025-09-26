@@ -4,42 +4,43 @@ defmodule Cybernetic.Transport.AMQP.Connection do
   """
   use GenServer
   require Logger
-  
+
   @reconnect_interval 5_000
-  
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
-  
+
   def init(_opts) do
     config = Application.get_env(:cybernetic, :amqp, [])
     Process.send_after(self(), :connect, 0)
-    
-    {:ok, %{
-      config: config,
-      connection: nil,
-      channel: nil,
-      status: :disconnected,
-      queues: config[:queues] || []
-    }}
+
+    {:ok,
+     %{
+       config: config,
+       connection: nil,
+       channel: nil,
+       status: :disconnected,
+       queues: config[:queues] || []
+     }}
   end
-  
+
   def get_channel do
     GenServer.call(__MODULE__, :get_channel)
   end
-  
+
   def reconnect do
     GenServer.cast(__MODULE__, :reconnect)
   end
-  
+
   def handle_call(:get_channel, _from, %{channel: channel, status: :connected} = state) do
     {:reply, {:ok, channel}, state}
   end
-  
+
   def handle_call(:get_channel, _from, state) do
     {:reply, {:error, :not_connected}, state}
   end
-  
+
   def handle_cast(:reconnect, state) do
     # Force reconnection by closing current connection if exists
     if state.connection do
@@ -49,49 +50,49 @@ defmodule Cybernetic.Transport.AMQP.Connection do
         _, _ -> :ok
       end
     end
-    
+
     # Trigger immediate reconnection
     Process.send_after(self(), :connect, 100)
     {:noreply, %{state | connection: nil, channel: nil, status: :reconnecting}}
   end
-  
+
   def handle_info(:connect, state) do
     case establish_connection(state.config) do
       {:ok, conn, chan} ->
         Logger.info("AMQP connected successfully")
         setup_exchanges_and_queues(chan, state.config)
         {:noreply, %{state | connection: conn, channel: chan, status: :connected}}
-      
+
       {:error, reason} ->
         Logger.error("AMQP connection failed: #{inspect(reason)}")
         Process.send_after(self(), :connect, @reconnect_interval)
         {:noreply, %{state | status: :disconnected}}
     end
   end
-  
+
   def handle_info({:DOWN, _, :process, _pid, reason}, state) do
     Logger.warning("AMQP connection lost: #{inspect(reason)}")
     Process.send_after(self(), :connect, @reconnect_interval)
     {:noreply, %{state | connection: nil, channel: nil, status: :disconnected}}
   end
-  
+
   defp establish_connection(config) do
     url = config[:url] || "amqp://guest:guest@localhost:5672"
-    
+
     with {:ok, conn} <- AMQP.Connection.open(url),
          {:ok, chan} <- AMQP.Channel.open(conn) do
       Process.monitor(conn.pid)
       {:ok, conn, chan}
     end
   end
-  
+
   defp setup_exchanges_and_queues(channel, config) do
     exchange = config[:exchange] || "cybernetic.exchange"
     exchange_type = config[:exchange_type] || :topic
-    
+
     # Declare exchange
     AMQP.Exchange.declare(channel, exchange, exchange_type, durable: true)
-    
+
     # Setup VSM system queues
     Enum.each(config[:queues] || [], fn {system, queue_name} ->
       AMQP.Queue.declare(channel, queue_name, durable: true)
@@ -100,12 +101,12 @@ defmodule Cybernetic.Transport.AMQP.Connection do
       Logger.debug("Bound queue #{queue_name} with routing key #{routing_key}")
     end)
   end
-  
+
   def terminate(_reason, %{connection: conn}) when not is_nil(conn) do
     AMQP.Connection.close(conn)
   catch
     _, _ -> :ok
   end
-  
+
   def terminate(_reason, _state), do: :ok
 end

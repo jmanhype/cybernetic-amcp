@@ -16,7 +16,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
         operation: "test_task",
         timestamp: DateTime.utc_now()
       }
-      
+
       result = S1Handler.handle_message("operation", message, %{})
       assert result == :ok
     end
@@ -28,7 +28,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
         systems: ["s1", "s3"],
         timestamp: DateTime.utc_now()
       }
-      
+
       result = S2Handler.handle_message("coordination", message, %{})
       assert result == :ok
     end
@@ -40,7 +40,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
         data: %{patterns: ["normal", "stable"]},
         timestamp: DateTime.utc_now()
       }
-      
+
       result = S4Handler.handle_message("intelligence", message, %{})
       assert result == :ok
     end
@@ -53,7 +53,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
         nil -> Publisher.start_link()
         _pid -> :ok
       end
-      
+
       # Give it time to connect
       Process.sleep(100)
       :ok
@@ -63,7 +63,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
     test "publishes messages to exchanges" do
       # This test is skipped by default as it requires RabbitMQ
       # Remove @tag :skip when RabbitMQ is available
-      
+
       result = Publisher.publish("cyb.events", "test.event", %{test: "data"})
       assert result == :ok
     end
@@ -86,6 +86,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
         type: "vsm.s4.intelligence",
         analysis: "invalid_type"
       }
+
       result = S4Handler.handle_message("intelligence", message, %{})
       assert result == {:error, :invalid_analysis_type}
     end
@@ -99,7 +100,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
         payload: %{data: [1, 2, 3]},
         timestamp: DateTime.utc_now()
       }
-      
+
       assert message.type =~ ~r/^vsm\.s1\./
       assert is_binary(message.operation)
       assert is_map(message.payload)
@@ -115,7 +116,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
         action: "allocate_resources",
         timestamp: DateTime.utc_now()
       }
-      
+
       assert message.type =~ ~r/^vsm\.s2\./
       assert is_list(message.target_systems)
       assert is_binary(message.coordination_id)
@@ -130,7 +131,7 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
         recommendations: ["scale_up", "monitor"],
         timestamp: DateTime.utc_now()
       }
-      
+
       assert message.type =~ ~r/^vsm\.s4\./
       assert is_float(message.confidence)
       assert is_list(message.patterns)

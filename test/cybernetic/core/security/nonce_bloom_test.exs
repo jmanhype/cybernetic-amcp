@@ -4,20 +4,26 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
 
   # Helper to generate valid signatures for tests
   defp generate_test_signature(payload, nonce, timestamp) do
-    secret = Application.get_env(:cybernetic, :security)[:hmac_secret] ||
-             System.get_env("CYBERNETIC_HMAC_SECRET") ||
-             "default-insecure-key-change-in-production"
-    
-    data = [
-      nonce,
-      timestamp,
-      node(),
-      "",  # exchange
-      "",  # routing_key  
-      "application/json",  # content_type
-      Jason.encode!(payload)
-    ] |> Enum.join("|")
-    
+    secret =
+      Application.get_env(:cybernetic, :security)[:hmac_secret] ||
+        System.get_env("CYBERNETIC_HMAC_SECRET") ||
+        "default-insecure-key-change-in-production"
+
+    data =
+      [
+        nonce,
+        timestamp,
+        node(),
+        # exchange
+        "",
+        # routing_key  
+        "",
+        # content_type
+        "application/json",
+        Jason.encode!(payload)
+      ]
+      |> Enum.join("|")
+
     :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode16(case: :lower)
   end
 
@@ -25,11 +31,13 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     # NonceBloom is started by the application, no need to start it again
     # Just ensure it's running
     case Process.whereis(NonceBloom) do
-      nil -> 
+      nil ->
         {:ok, _pid} = NonceBloom.start_link()
-      _pid -> 
+
+      _pid ->
         :ok
     end
+
     :ok
   end
 
@@ -37,7 +45,7 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     test "generates unique nonces" do
       nonce1 = NonceBloom.generate_nonce()
       nonce2 = NonceBloom.generate_nonce()
-      
+
       assert nonce1 != nonce2
       assert is_binary(nonce1)
       assert String.length(nonce1) == 21
@@ -61,7 +69,7 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     test "adds security headers to message" do
       original = %{"data" => "test"}
       enriched = NonceBloom.enrich_message(original)
-      
+
       assert enriched["_nonce"]
       assert enriched["_timestamp"]
       assert enriched["_site"]
@@ -72,7 +80,7 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     test "generates valid HMAC signature" do
       original = %{"data" => "test"}
       enriched = NonceBloom.enrich_message(original)
-      
+
       # Signature should be hex-encoded
       assert String.match?(enriched["_signature"], ~r/^[a-f0-9]{64}$/)
     end
@@ -80,7 +88,7 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     test "uses custom site when provided" do
       original = %{"data" => "test"}
       enriched = NonceBloom.enrich_message(original, site: "custom@node")
-      
+
       assert enriched["_site"] == "custom@node"
     end
   end
@@ -91,15 +99,16 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
       nonce = NonceBloom.generate_nonce()
       timestamp = System.system_time(:millisecond)
       payload = %{"data" => "test", "type" => "vsm.test"}
-      
+
       # We need to manually build the enriched message without tracking the nonce
-      enriched = Map.merge(payload, %{
-        "_nonce" => nonce,
-        "_timestamp" => timestamp,
-        "_site" => node(),
-        "_signature" => generate_test_signature(payload, nonce, timestamp)
-      })
-      
+      enriched =
+        Map.merge(payload, %{
+          "_nonce" => nonce,
+          "_timestamp" => timestamp,
+          "_site" => node(),
+          "_signature" => generate_test_signature(payload, nonce, timestamp)
+        })
+
       assert {:ok, validated} = NonceBloom.validate_message(enriched)
       assert validated["data"] == "test"
       assert validated["type"] == "vsm.test"
@@ -117,6 +126,7 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
 
     test "rejects message with invalid timestamp (future)" do
       future_time = System.system_time(:millisecond) + 60_000
+
       message = %{
         "_nonce" => NonceBloom.generate_nonce(),
         "_timestamp" => future_time,
@@ -124,14 +134,16 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
         "_signature" => "invalid",
         "data" => "test"
       }
-      
+
       # With clock skew tolerance, this returns a different error
       result = NonceBloom.validate_message(message)
       assert match?({:error, _}, result)
     end
 
     test "rejects message with expired timestamp" do
-      old_time = System.system_time(:millisecond) - 400_000  # > 5 minutes old
+      # > 5 minutes old
+      old_time = System.system_time(:millisecond) - 400_000
+
       message = %{
         "_nonce" => NonceBloom.generate_nonce(),
         "_timestamp" => old_time,
@@ -139,7 +151,7 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
         "_signature" => "invalid",
         "data" => "test"
       }
-      
+
       assert {:error, :clock_skew_past} = NonceBloom.validate_message(message)
     end
 
@@ -148,17 +160,18 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
       nonce = NonceBloom.generate_nonce()
       timestamp = System.system_time(:millisecond)
       payload = %{"data" => "test"}
-      
-      enriched = Map.merge(payload, %{
-        "_nonce" => nonce,
-        "_timestamp" => timestamp,
-        "_site" => node(),
-        "_signature" => generate_test_signature(payload, nonce, timestamp)
-      })
-      
+
+      enriched =
+        Map.merge(payload, %{
+          "_nonce" => nonce,
+          "_timestamp" => timestamp,
+          "_site" => node(),
+          "_signature" => generate_test_signature(payload, nonce, timestamp)
+        })
+
       # First validation should succeed
       assert {:ok, _} = NonceBloom.validate_message(enriched)
-      
+
       # Second validation with same nonce should fail
       assert {:error, :replay} = NonceBloom.validate_message(enriched)
     end
@@ -168,17 +181,18 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
       nonce = NonceBloom.generate_nonce()
       timestamp = System.system_time(:millisecond)
       payload = %{"data" => "test"}
-      
-      enriched = Map.merge(payload, %{
-        "_nonce" => nonce,
-        "_timestamp" => timestamp,
-        "_site" => node(),
-        "_signature" => generate_test_signature(payload, nonce, timestamp)
-      })
-      
+
+      enriched =
+        Map.merge(payload, %{
+          "_nonce" => nonce,
+          "_timestamp" => timestamp,
+          "_site" => node(),
+          "_signature" => generate_test_signature(payload, nonce, timestamp)
+        })
+
       # Tamper with the signature
       tampered = Map.put(enriched, "_signature", "bad" <> enriched["_signature"])
-      
+
       assert {:error, :invalid_signature} = NonceBloom.validate_message(tampered)
     end
 
@@ -187,17 +201,18 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
       nonce = NonceBloom.generate_nonce()
       timestamp = System.system_time(:millisecond)
       payload = %{"data" => "test"}
-      
-      enriched = Map.merge(payload, %{
-        "_nonce" => nonce,
-        "_timestamp" => timestamp,
-        "_site" => node(),
-        "_signature" => generate_test_signature(payload, nonce, timestamp)
-      })
-      
+
+      enriched =
+        Map.merge(payload, %{
+          "_nonce" => nonce,
+          "_timestamp" => timestamp,
+          "_site" => node(),
+          "_signature" => generate_test_signature(payload, nonce, timestamp)
+        })
+
       # Tamper with the payload
       tampered = Map.put(enriched, "data", "tampered")
-      
+
       assert {:error, :invalid_signature} = NonceBloom.validate_message(tampered)
     end
   end
@@ -206,16 +221,17 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     test "signature changes with different payloads" do
       msg1 = NonceBloom.enrich_message(%{"data" => "test1"})
       msg2 = NonceBloom.enrich_message(%{"data" => "test2"})
-      
+
       assert msg1["_signature"] != msg2["_signature"]
     end
 
     test "signature changes with different nonces" do
       payload = %{"data" => "same"}
       msg1 = NonceBloom.enrich_message(payload)
-      Process.sleep(1)  # Ensure different timestamp
+      # Ensure different timestamp
+      Process.sleep(1)
       msg2 = NonceBloom.enrich_message(payload)
-      
+
       assert msg1["_signature"] != msg2["_signature"]
       assert msg1["_nonce"] != msg2["_nonce"]
     end
@@ -223,14 +239,14 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
     test "signature is deterministic for same inputs" do
       # Verify that enriched messages are unique due to nonces
       payload = %{"data" => "test"}
-      
+
       enriched1 = NonceBloom.enrich_message(payload)
       enriched2 = NonceBloom.enrich_message(payload)
-      
+
       # Different nonces mean different signatures even for same payload
       assert enriched1["_nonce"] != enriched2["_nonce"]
       assert enriched1["_signature"] != enriched2["_signature"]
-      
+
       # But the payload is preserved
       assert enriched1["data"] == enriched2["data"]
       assert enriched1["data"] == "test"
@@ -244,11 +260,11 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
       # For now, we verify the process doesn't crash
       nonce = NonceBloom.generate_nonce()
       assert {:ok, :new} = NonceBloom.check_nonce(nonce)
-      
+
       # Send cleanup message directly (in real code, this happens on timer)
       send(Process.whereis(NonceBloom), :cleanup)
       Process.sleep(10)
-      
+
       # Process should still be alive
       assert Process.alive?(Process.whereis(NonceBloom))
     end
@@ -256,9 +272,11 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
 
   # Test helper to generate valid signatures
   defp generate_test_signature(payload, nonce, timestamp) do
-    secret = Application.get_env(:cybernetic, :security)[:hmac_secret] ||
-            System.get_env("CYBERNETIC_HMAC_SECRET") ||
-            "default-insecure-key-change-in-production"
+    secret =
+      Application.get_env(:cybernetic, :security)[:hmac_secret] ||
+        System.get_env("CYBERNETIC_HMAC_SECRET") ||
+        "default-insecure-key-change-in-production"
+
     data = Jason.encode!({payload, nonce, timestamp})
     :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode16(case: :lower)
   end

@@ -5,7 +5,7 @@ defmodule Cybernetic.MCP.Core do
   """
   use GenServer
   require Logger
-  
+
   alias Cybernetic.Core.MCP.Hermes.Registry
 
   def start_link(opts \\ []) do
@@ -15,12 +15,13 @@ defmodule Cybernetic.MCP.Core do
   def init(opts) do
     # Schedule tool discovery after startup
     Process.send_after(self(), :discover_tools, 100)
-    
-    {:ok, %{
-      sessions: %{},
-      tools: %{},
-      config: opts
-    }}
+
+    {:ok,
+     %{
+       sessions: %{},
+       tools: %{},
+       config: opts
+     }}
   end
 
   @doc """
@@ -57,34 +58,38 @@ defmodule Cybernetic.MCP.Core do
   end
 
   # GenServer callbacks - handle_call grouped together
-  
+
   def handle_call({:call_tool, tool_name, params}, _from, state) do
     Logger.debug("MCP: Calling tool #{tool_name} with params: #{inspect(params)}")
-    
+
     # TODO: Replace with actual Hermes MCP call
     # result = HermesMCP.call(tool_name, params)
-    
+
     # Mock response for now
-    result = {:ok, %{
-      tool: tool_name,
-      params: params,
-      result: "Mock result for #{tool_name}",
-      timestamp: DateTime.utc_now()
-    }}
-    
+    result =
+      {:ok,
+       %{
+         tool: tool_name,
+         params: params,
+         result: "Mock result for #{tool_name}",
+         timestamp: DateTime.utc_now()
+       }}
+
     {:reply, result, state}
   end
 
   def handle_call({:send_prompt, prompt, context}, _from, state) do
     Logger.debug("MCP: Sending prompt: #{prompt}")
-    
+
     # TODO: Implement actual prompt sending via Hermes
-    result = {:ok, %{
-      prompt: prompt,
-      context: context,
-      response: "Mock response to: #{prompt}"
-    }}
-    
+    result =
+      {:ok,
+       %{
+         prompt: prompt,
+         context: context,
+         response: "Mock response to: #{prompt}"
+       }}
+
     {:reply, result, state}
   end
 
@@ -97,7 +102,7 @@ defmodule Cybernetic.MCP.Core do
   """
   def handle_info(:discover_tools, state) do
     Logger.info("MCP: Starting tool discovery")
-    
+
     # TODO: Replace with actual Hermes MCP discovery when configured
     # For now, register some mock tools
     mock_tools = [
@@ -105,20 +110,23 @@ defmodule Cybernetic.MCP.Core do
       %{name: "calculate", description: "Perform calculations"},
       %{name: "analyze", description: "Analyze data"}
     ]
-    
+
     Enum.each(mock_tools, fn tool ->
       # Register with proper parameters
       Registry.register_tool(
-        tool.name, 
-        tool.description, 
-        %{}, # parameters
-        {__MODULE__, :mock_handler}, # handler
-        [] # opts
+        tool.name,
+        tool.description,
+        # parameters
+        %{},
+        # handler
+        {__MODULE__, :mock_handler},
+        # opts
+        []
       )
     end)
-    
+
     tools_map = Map.new(mock_tools, &{&1.name, &1})
-    
+
     Logger.info("MCP: Discovered #{map_size(tools_map)} tools")
     {:noreply, %{state | tools: tools_map}}
   end

@@ -26,6 +26,7 @@ defmodule Cybernetic.Transport.Backpressure do
         demand: 0,
         max_buffer: Keyword.get(opts, :max_buffer, 10_000)
       }
+
       {:producer, state}
     end
 
@@ -63,6 +64,7 @@ defmodule Cybernetic.Transport.Backpressure do
       {events, new_queue} = take_from_queue(queue, demand)
       {events, %{state | queue: new_queue, demand: demand - length(events)}}
     end
+
     defp dispatch_events(state), do: {[], state}
 
     defp take_from_queue(queue, demand) do
@@ -70,10 +72,12 @@ defmodule Cybernetic.Transport.Backpressure do
     end
 
     defp take_from_queue(queue, 0, acc), do: {Enum.reverse(acc), queue}
+
     defp take_from_queue(queue, demand, acc) do
       case :queue.out(queue) do
         {{:value, item}, new_queue} ->
           take_from_queue(new_queue, demand - 1, [item | acc])
+
         {:empty, queue} ->
           {Enum.reverse(acc), queue}
       end
@@ -83,7 +87,7 @@ defmodule Cybernetic.Transport.Backpressure do
   # Consumer implementation
   defmodule Consumer do
     use GenStage
-    
+
     @default_max_demand 100
     @default_min_demand 50
 
@@ -95,14 +99,14 @@ defmodule Cybernetic.Transport.Backpressure do
       handler = Keyword.fetch!(opts, :handler)
       max_demand = Keyword.get(opts, :max_demand, @default_max_demand)
       min_demand = Keyword.get(opts, :min_demand, @default_min_demand)
-      
+
       state = %{
         handler: handler,
         max_demand: max_demand,
         min_demand: min_demand,
         processed: 0
       }
-      
+
       {:consumer, state}
     end
 
@@ -121,7 +125,7 @@ defmodule Cybernetic.Transport.Backpressure do
             Logger.error("Consumer handler error: #{inspect(error)}")
         end
       end)
-      
+
       {:noreply, [], %{state | processed: processed + length(events)}}
     end
 
@@ -133,7 +137,7 @@ defmodule Cybernetic.Transport.Backpressure do
   # ProducerConsumer for transformations
   defmodule Transformer do
     use GenStage
-    
+
     @default_max_demand 100
     @default_min_demand 50
 
@@ -145,28 +149,29 @@ defmodule Cybernetic.Transport.Backpressure do
       transform = Keyword.fetch!(opts, :transform)
       max_demand = Keyword.get(opts, :max_demand, @default_max_demand)
       min_demand = Keyword.get(opts, :min_demand, @default_min_demand)
-      
+
       state = %{
         transform: transform,
         max_demand: max_demand,
         min_demand: min_demand
       }
-      
+
       {:producer_consumer, state}
     end
 
     def handle_events(events, _from, %{transform: transform} = state) do
-      transformed = Enum.map(events, fn event ->
-        try do
-          transform.(event)
-        rescue
-          error ->
-            Logger.error("Transformer error: #{inspect(error)}")
-            nil
-        end
-      end)
-      |> Enum.filter(&(&1 != nil))
-      
+      transformed =
+        Enum.map(events, fn event ->
+          try do
+            transform.(event)
+          rescue
+            error ->
+              Logger.error("Transformer error: #{inspect(error)}")
+              nil
+          end
+        end)
+        |> Enum.filter(&(&1 != nil))
+
       {:noreply, transformed, state}
     end
   end
@@ -174,7 +179,7 @@ defmodule Cybernetic.Transport.Backpressure do
   # Pipeline builder
   @doc """
   Build a GenStage pipeline with backpressure.
-  
+
   Example:
     {:ok, pipeline} = Backpressure.build_pipeline(
       producer: [max_buffer: 1000],
@@ -189,17 +194,17 @@ defmodule Cybernetic.Transport.Backpressure do
     with {:ok, producer} <- start_producer(opts[:producer] || []),
          {:ok, transformers} <- start_transformers(opts[:transformers] || []),
          {:ok, consumer} <- start_consumer(opts[:consumer]) do
-      
       # Wire the pipeline
       stages = [producer | transformers] ++ [consumer]
       wire_stages(stages)
-      
-      {:ok, %{
-        producer: producer,
-        transformers: transformers,
-        consumer: consumer,
-        pipeline: stages
-      }}
+
+      {:ok,
+       %{
+         producer: producer,
+         transformers: transformers,
+         consumer: consumer,
+         pipeline: stages
+       }}
     end
   end
 
@@ -208,10 +213,12 @@ defmodule Cybernetic.Transport.Backpressure do
   end
 
   defp start_transformers(transformer_opts) do
-    transformers = Enum.map(transformer_opts, fn opts ->
-      {:ok, pid} = Transformer.start_link(opts)
-      pid
-    end)
+    transformers =
+      Enum.map(transformer_opts, fn opts ->
+        {:ok, pid} = Transformer.start_link(opts)
+        pid
+      end)
+
     {:ok, transformers}
   end
 
@@ -220,6 +227,7 @@ defmodule Cybernetic.Transport.Backpressure do
   end
 
   defp wire_stages([_single]), do: :ok
+
   defp wire_stages([from, to | rest]) do
     GenStage.sync_subscribe(to, to: from)
     wire_stages([to | rest])

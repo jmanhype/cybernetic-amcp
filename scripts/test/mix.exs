@@ -32,7 +32,8 @@ defmodule Cybernetic.MixProject do
       {:gen_stage, "~> 1.2"},
       
       # MCP integration
-      {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main"},
+      # TODO: Re-enable hermes_mcp once JSON.Encoder protocol issue is resolved
+      # {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main"},
       
       # Goldrush branches for reactive stream processing
       {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "master"},
@@ -48,6 +49,7 @@ defmodule Cybernetic.MixProject do
       
       # HTTP clients
       {:req, "~> 0.5.0"},        # For Claude API
+      {:req_llm, "~> 1.0-rc"},   # Unified LLM provider interface
       {:httpoison, "~> 2.2"},    # For Telegram bot
       
       # Redis client

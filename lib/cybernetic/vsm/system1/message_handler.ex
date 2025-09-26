@@ -10,17 +10,33 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   """
   def handle_message(operation, payload, meta) do
     Logger.debug("System1 received #{operation}: #{inspect(payload)}")
-    
+
     case operation do
-      "operation" -> handle_operation(payload, meta)
-      "status_update" -> handle_status_update(payload, meta)
-      "resource_request" -> handle_resource_request(payload, meta)
-      "coordination" -> handle_coordination(payload, meta)
-      "telemetry" -> handle_telemetry(payload, meta)
-      "error" -> handle_error(payload, meta)
-      "success" -> handle_success(payload, meta)
-      "default" -> handle_default(payload, meta)
-      _ -> 
+      "operation" ->
+        handle_operation(payload, meta)
+
+      "status_update" ->
+        handle_status_update(payload, meta)
+
+      "resource_request" ->
+        handle_resource_request(payload, meta)
+
+      "coordination" ->
+        handle_coordination(payload, meta)
+
+      "telemetry" ->
+        handle_telemetry(payload, meta)
+
+      "error" ->
+        handle_error(payload, meta)
+
+      "success" ->
+        handle_success(payload, meta)
+
+      "default" ->
+        handle_default(payload, meta)
+
+      _ ->
         Logger.warning("Unknown operation for System1: #{operation}")
         {:error, :unknown_operation}
     end
@@ -33,30 +49,32 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   defp handle_operation(payload, meta) do
     # Handle operational tasks and workflows
     Logger.info("System1: Processing operation - #{inspect(payload)}")
-    
+
     # Process the operation locally - just verify the supervisor is running
-    operation_result = case Process.whereis(Cybernetic.VSM.System1.Operational) do
-      nil -> 
-        Logger.warning("System1 operational supervisor not found")
-        {:error, :supervisor_not_found}
-      _pid -> 
-        # Operation processed successfully - no circular call needed
-        :ok
-    end
-    
+    operation_result =
+      case Process.whereis(Cybernetic.VSM.System1.Operational) do
+        nil ->
+          Logger.warning("System1 operational supervisor not found")
+          {:error, :supervisor_not_found}
+
+        _pid ->
+          # Operation processed successfully - no circular call needed
+          :ok
+      end
+
     # Forward to S2 for coordination if operation is significant
     forward_to_coordination(payload, meta)
-    
+
     # Emit telemetry for the operation
     :telemetry.execute([:vsm, :s1, :operation], %{count: 1}, payload)
-    
+
     operation_result
   end
 
   defp handle_status_update(payload, meta) do
     # Handle status updates from other systems
     Logger.debug("System1: Status update from #{Map.get(meta, :source_node, "unknown")}")
-    
+
     # Update local state or forward to monitoring
     broadcast_status_internally(payload, meta)
     :ok
@@ -65,12 +83,13 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   defp handle_resource_request(payload, meta) do
     # Handle resource allocation requests
     Logger.info("System1: Resource request - #{inspect(payload)}")
-    
+
     # Process resource request and respond
     case allocate_resources(payload) do
       {:ok, allocation} ->
         respond_to_requester(allocation, meta)
         :ok
+
       {:error, reason} ->
         Logger.error("System1: Resource allocation failed - #{reason}")
         {:error, reason}
@@ -80,13 +99,19 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   defp handle_coordination(payload, meta) do
     # Handle coordination messages from System 2
     Logger.debug("System1: Coordination message - #{inspect(payload)}")
-    
+
     # Process coordination instructions
     case Map.get(payload, "action") do
-      "start" -> start_coordination_task(payload, meta)
-      "stop" -> stop_coordination_task(payload, meta)
-      "update" -> update_coordination_task(payload, meta)
-      _ -> 
+      "start" ->
+        start_coordination_task(payload, meta)
+
+      "stop" ->
+        stop_coordination_task(payload, meta)
+
+      "update" ->
+        update_coordination_task(payload, meta)
+
+      _ ->
         Logger.warning("Unknown coordination action")
         {:error, :unknown_coordination_action}
     end
@@ -95,39 +120,51 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   defp handle_telemetry(payload, meta) do
     # Handle telemetry data
     Logger.debug("System1: Telemetry data received")
-    
+
     # Forward to telemetry collectors
-    :telemetry.execute([:cybernetic, :vsm, :system1, :message_received], %{
-      payload_size: byte_size(:erlang.term_to_binary(payload)),
-      processing_time: :os.system_time(:millisecond) - Map.get(meta, :timestamp, 0)
-    }, meta)
-    
+    :telemetry.execute(
+      [:cybernetic, :vsm, :system1, :message_received],
+      %{
+        payload_size: byte_size(:erlang.term_to_binary(payload)),
+        processing_time: :os.system_time(:millisecond) - Map.get(meta, :timestamp, 0)
+      },
+      meta
+    )
+
     :ok
   end
 
   defp handle_error(payload, meta) do
     # Handle error events and trigger algedonic pain signals
     Logger.warning("System1: Error event - #{inspect(payload)}")
-    
+
     # Record error for algedonic analysis
     record_algedonic_event(:pain, payload, meta)
-    
+
     # Emit telemetry for error
-    :telemetry.execute([:vsm, :s1, :error], %{count: 1, severity: Map.get(payload, "severity", "unknown")}, payload)
-    
+    :telemetry.execute(
+      [:vsm, :s1, :error],
+      %{count: 1, severity: Map.get(payload, "severity", "unknown")},
+      payload
+    )
+
     :ok
   end
 
   defp handle_success(payload, meta) do
     # Handle success events and trigger algedonic pleasure signals
     Logger.debug("System1: Success event - #{inspect(payload)}")
-    
+
     # Record success for algedonic analysis
     record_algedonic_event(:pleasure, payload, meta)
-    
+
     # Emit telemetry for success
-    :telemetry.execute([:vsm, :s1, :success], %{count: 1, latency: Map.get(payload, "latency", 0)}, payload)
-    
+    :telemetry.execute(
+      [:vsm, :s1, :success],
+      %{count: 1, latency: Map.get(payload, "latency", 0)},
+      payload
+    )
+
     :ok
   end
 
@@ -159,20 +196,23 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   defp respond_to_requester(allocation, meta) do
     # Send response back through transport
     case Map.get(meta, :source_node) do
-      nil -> Logger.warning("System1: No source node for response")
+      nil ->
+        Logger.warning("System1: No source node for response")
+
       source_node ->
         response = %{
           "status" => "allocated",
           "allocation" => allocation,
           "timestamp" => :os.system_time(:millisecond)
         }
-        
+
         # Use AMQP Publisher to send response
         Cybernetic.Core.Transport.AMQP.Publisher.publish(
-          "cyb.events", 
-          "s1.resource_response", 
+          "cyb.events",
+          "s1.resource_response",
           response,
-          [source: :system1, target_node: source_node]
+          source: :system1,
+          target_node: source_node
         )
     end
   end
@@ -196,24 +236,26 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     # Create coordination message for S2
     coordination_msg = %{
       "type" => "vsm.s2.coordinate",
-      "source_system" => "s1", 
+      "source_system" => "s1",
       "operation" => Map.get(payload, "operation", Map.get(payload, :operation, "unknown")),
       "coordination_id" => generate_coordination_id(),
       "original_payload" => payload,
       "timestamp" => DateTime.utc_now()
     }
-    
+
     # Send via configured transport to S2
     case Cybernetic.Transport.Behaviour.publish(
-      "cyb.commands",
-      "s2.coordinate", 
-      coordination_msg,
-      [source: :system1, meta: meta]
-    ) do
-      :ok -> 
+           "cyb.commands",
+           "s2.coordinate",
+           coordination_msg,
+           source: :system1,
+           meta: meta
+         ) do
+      :ok ->
         Logger.debug("System1: Forwarded operation to S2 for coordination")
         :ok
-      error -> 
+
+      error ->
         Logger.warning("System1: Failed to forward to S2: #{inspect(error)}")
         error
     end
@@ -236,12 +278,13 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
         source: Map.get(payload, "source", "unknown"),
         operation: Map.get(payload, "operation", "unknown")
       }
-      
+
       # Store in process dictionary for simple state tracking
       events = Process.get({:algedonic_events, type}, [])
-      recent_events = [algedonic_data | events] |> Enum.take(100)  # Keep last 100 events
+      # Keep last 100 events
+      recent_events = [algedonic_data | events] |> Enum.take(100)
       Process.put({:algedonic_events, type}, recent_events)
-      
+
       # Check if we should emit an algedonic signal
       check_algedonic_thresholds(type, recent_events)
     end
@@ -251,25 +294,31 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
     case type do
       :pain ->
         # Check error rate in last time window
-        recent_errors = Enum.filter(events, fn event ->
-          DateTime.diff(DateTime.utc_now(), event.timestamp, :millisecond) < 10_000  # Last 10 seconds
-        end)
-        
-        if length(recent_errors) >= 5 do  # 5 or more errors in 10 seconds triggers pain
+        recent_errors =
+          Enum.filter(events, fn event ->
+            # Last 10 seconds
+            DateTime.diff(DateTime.utc_now(), event.timestamp, :millisecond) < 10_000
+          end)
+
+        # 5 or more errors in 10 seconds triggers pain
+        if length(recent_errors) >= 5 do
           emit_algedonic_signal(:pain, %{
             severity: :moderate,
             error_count: length(recent_errors),
             time_window: 10_000
           })
         end
-        
+
       :pleasure ->
         # Check success rate
-        recent_successes = Enum.filter(events, fn event ->
-          DateTime.diff(DateTime.utc_now(), event.timestamp, :millisecond) < 30_000  # Last 30 seconds
-        end)
-        
-        if length(recent_successes) >= 15 do  # 15 or more successes triggers pleasure
+        recent_successes =
+          Enum.filter(events, fn event ->
+            # Last 30 seconds
+            DateTime.diff(DateTime.utc_now(), event.timestamp, :millisecond) < 30_000
+          end)
+
+        # 15 or more successes triggers pleasure
+        if length(recent_successes) >= 15 do
           emit_algedonic_signal(:pleasure, %{
             intensity: :moderate,
             success_count: length(recent_successes),
@@ -287,17 +336,18 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
       "data" => data,
       "timestamp" => DateTime.utc_now()
     }
-    
+
     # Send to S4 for processing
     case Cybernetic.Transport.Behaviour.publish(
-      "cyb.commands",
-      "s4.algedonic",
-      signal,
-      [source: :system1]
-    ) do
+           "cyb.commands",
+           "s4.algedonic",
+           signal,
+           source: :system1
+         ) do
       :ok ->
         Logger.info("System1: Emitted #{type} algedonic signal")
         :ok
+
       error ->
         Logger.warning("System1: Failed to emit algedonic signal: #{inspect(error)}")
         error

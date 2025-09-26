@@ -1,13 +1,13 @@
 defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   @moduledoc """
   Central Aggregator - The Fact Bus for the Cybernetic system.
-  
+
   Collects events from telemetry & Goldrush, maintains a rolling window,
   generates facts, detects episodes, and feeds S4 intelligence.
-  
+
   Facts: Immutable, timestamped observations
   Episodes: Coherent sequences of facts forming a narrative
-  
+
   Emits:
   - [:cybernetic, :aggregator, :facts] - Raw facts every 5s
   - [:cybernetic, :aggregator, :episode] - Detected episodes
@@ -25,13 +25,14 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   def init(_opts) do
     # Ensure table exists or create it
     case :ets.whereis(@table) do
-      :undefined -> 
+      :undefined ->
         :ets.new(@table, [:set, :public, :named_table, read_concurrency: true])
-      _ -> 
+
+      _ ->
         # Table already exists, clear it
         :ets.delete_all_objects(@table)
     end
-    
+
     attach_sources()
     Process.send_after(self(), :emit, @emit_every_ms)
     {:ok, %{last_emit: now_ms()}}
@@ -40,18 +41,26 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   defp attach_sources do
     # Detach any existing handlers first
     :telemetry.detach({__MODULE__, :goldrush})
-    
+
     # Goldrush matches → [:cybernetic, :goldrush, :match]
-    result = :telemetry.attach_many(
-      {__MODULE__, :goldrush},
-      [[:cybernetic, :goldrush, :match], [:cybernetic, :work, :finished], [:cybernetic, :work, :failed]],
-      &__MODULE__.handle_source/4,
-      %{}
-    )
-    
+    result =
+      :telemetry.attach_many(
+        {__MODULE__, :goldrush},
+        [
+          [:cybernetic, :goldrush, :match],
+          [:cybernetic, :work, :finished],
+          [:cybernetic, :work, :failed]
+        ],
+        &__MODULE__.handle_source/4,
+        %{}
+      )
+
     case result do
-      :ok -> Logger.info("CentralAggregator telemetry handlers attached")
-      {:error, reason} -> Logger.warning("Failed to attach CentralAggregator handlers: #{inspect(reason)}")
+      :ok ->
+        Logger.info("CentralAggregator telemetry handlers attached")
+
+      {:error, reason} ->
+        Logger.warning("Failed to attach CentralAggregator handlers: #{inspect(reason)}")
     end
   end
 
@@ -66,8 +75,9 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
     }
 
     case :ets.whereis(@table) do
-      :undefined -> 
+      :undefined ->
         Logger.warning("CentralAggregator: ETS table #{@table} not found during handle_source")
+
       _ ->
         :ets.insert(@table, {entry.at, entry})
     end
@@ -92,9 +102,10 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
   defp prune do
     case :ets.whereis(@table) do
-      :undefined -> 
+      :undefined ->
         Logger.warning("CentralAggregator: ETS table #{@table} not found during prune")
         :ok
+
       _ ->
         cutoff = now_ms() - @window_ms
         # Simple approach: delete all entries older than cutoff
@@ -106,9 +117,10 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
   defp summarize do
     case :ets.whereis(@table) do
-      :undefined -> 
+      :undefined ->
         Logger.warning("CentralAggregator: ETS table #{@table} not found during summarize")
         []
+
       _ ->
         :ets.tab2list(@table)
         |> Enum.map(fn {_k, v} -> v end)

@@ -24,9 +24,13 @@ defmodule Cybernetic.VSM.System4.LLMBridge do
   @impl true
   def handle_cast({:episode, ep}, state) do
     :telemetry.execute(@telemetry ++ [:request], %{count: 1}, %{episode: meta(ep)})
+
     case state.provider.analyze_episode(ep, []) do
       {:ok, result} ->
-        :telemetry.execute(@telemetry ++ [:response], %{count: 1}, %{size: byte_size(result.summary)})
+        :telemetry.execute(@telemetry ++ [:response], %{count: 1}, %{
+          size: byte_size(result.summary)
+        })
+
         notify_sop_engine(result, ep)
         {:noreply, state}
 
@@ -48,12 +52,13 @@ defmodule Cybernetic.VSM.System4.LLMBridge do
 
   def default_subscribe(pid) do
     # Replace with your real aggregator subscription; minimal safe default:
-    :ok = :telemetry.attach_many(
-      {:s4_bridge, make_ref()},
-      [[:cybernetic, :aggregator, :episode]],
-      &__MODULE__.handle_episode_event/4,
-      pid
-    )
+    :ok =
+      :telemetry.attach_many(
+        {:s4_bridge, make_ref()},
+        [[:cybernetic, :aggregator, :episode]],
+        &__MODULE__.handle_episode_event/4,
+        pid
+      )
   end
 
   defp meta(ep) do

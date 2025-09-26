@@ -1,4 +1,3 @@
-
 defmodule Cybernetic.MixProject do
   use Mix.Project
 
@@ -25,50 +24,63 @@ defmodule Cybernetic.MixProject do
       # Core dependencies
       {:amqp, "~> 4.1"},
       {:jason, ">= 0.0.0"},
+      {:json, "~> 1.4"},
       {:telemetry, ">= 0.0.0"},
       {:libcluster, ">= 0.0.0"},
       {:delta_crdt, ">= 0.0.0"},
       {:rustler, ">= 0.0.0"},
       {:gen_stage, "~> 1.2"},
-      
+
       # MCP integration
       {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main"},
-      
+
       # Goldrush branches for reactive stream processing
       {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "master"},
-      {:goldrush_elixir, git: "https://github.com/DeadZen/goldrush", branch: "develop-elixir", app: false},
-      
+      {:goldrush_elixir,
+       git: "https://github.com/DeadZen/goldrush", branch: "develop-elixir", app: false},
+
       # Telegram bot integration
-      {:ex_gram, "~> 0.52"},  # More modern Telegram bot library
-      
+      # More modern Telegram bot library
+      {:ex_gram, "~> 0.52"},
+
       # Security and utilities
-      {:bloomex, "~> 1.0"},  # Bloom filter for replay protection
-      {:nanoid, "~> 2.0"},    # Nonce generation
-      {:elixir_uuid, "~> 1.2"},  # UUID generation
-      
+      # Bloom filter for replay protection
+      {:bloomex, "~> 1.0"},
+      # Nonce generation
+      {:nanoid, "~> 2.0"},
+      # UUID generation
+      {:elixir_uuid, "~> 1.2"},
+
       # HTTP clients
-      {:req, "~> 0.5.0"},        # For Claude API
-      {:httpoison, "~> 2.2"},    # For Telegram bot
-      
+      # For Claude API
+      {:req, "~> 0.5.0"},
+      # Unified LLM provider interface
+      {:req_llm, "~> 1.0.0-rc.3"},
+      # For Telegram bot
+      {:httpoison, "~> 2.2"},
+
+      # Database
+      {:ecto, "~> 3.10"},
+
       # Redis client
       {:redix, "~> 1.2"},
-      
+
       # Environment variable loading
       {:dotenv, "~> 3.1", only: [:dev, :test]},
-      
+
       # WASM runtime - conflicts with rustler 0.36, using Port implementation instead
       # {:wasmex, "~> 0.9.2"},  # Requires rustler ~> 0.35
       # {:extism, "~> 1.0"},     # Requires rustler ~> 0.29
-      
+
       # Testing
       {:stream_data, "~> 1.0", only: [:test, :dev]},
-      
+
       # Web UI (Phoenix)
       {:phoenix, "~> 1.7"},
       {:phoenix_live_view, "~> 0.20"},
       {:phoenix_live_dashboard, "~> 0.8"},
       {:plug_cowboy, "~> 2.5"},
-      
+
       # OpenTelemetry
       {:opentelemetry, "~> 1.4"},
       {:opentelemetry_api, "~> 1.3"},
@@ -76,7 +88,7 @@ defmodule Cybernetic.MixProject do
       {:opentelemetry_telemetry, "~> 1.1"},
       {:opentelemetry_ecto, "~> 1.2"},
       {:opentelemetry_phoenix, "~> 1.2"},
-      
+
       # Prometheus metrics exporter
       {:telemetry_metrics_prometheus_core, "~> 1.1"}
     ]
@@ -90,7 +102,9 @@ defmodule Cybernetic.MixProject do
         "run --no-halt"
       ],
       "cyb.test": ["test", "run test/system_validation.exs"],
-      "cyb.test.core": ["test test/cybernetic/core/security/* test/cybernetic/core/mcp/* test/cybernetic/core/crdt*"],
+      "cyb.test.core": [
+        "test test/cybernetic/core/security/* test/cybernetic/core/mcp/* test/cybernetic/core/crdt*"
+      ],
       "cyb.test.io": ["test test/cybernetic/transport/*"],
       "cyb.test.gr": ["test test/cybernetic/core/goldrush/*"],
       "cyb.test.all": ["cyb.test.core", "cyb.test.io", "cyb.test.gr"],

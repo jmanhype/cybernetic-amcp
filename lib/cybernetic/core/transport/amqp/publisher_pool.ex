@@ -11,7 +11,8 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
   @pool_size 5
   @batch_size 10
   @batch_timeout 50
-  @max_pending_size 1000  # Prevent memory exhaustion
+  # Prevent memory exhaustion
+  @max_pending_size 1000
 
   defstruct [:channels, :pending_batch, :batch_timer, :round_robin_index]
 
@@ -27,13 +28,14 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
       batch_timer: nil,
       round_robin_index: 0
     }
+
     {:ok, state, {:continue, :setup_pool}}
   end
 
   def handle_continue(:setup_pool, state) do
     channels = setup_channel_pool()
     new_state = %{state | channels: channels}
-    
+
     # If no channels were created, schedule retry
     if length(channels) == 0 do
       Logger.warning("No AMQP channels available, scheduling retry in 5 seconds")
@@ -41,7 +43,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
     else
       Logger.info("AMQP publisher pool initialized with #{length(channels)} channels")
     end
-    
+
     {:noreply, new_state}
   end
 
@@ -71,7 +73,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
       {:ok, channel, new_state} ->
         result = publish_batch_to_channel(channel, messages)
         {:reply, result, new_state}
-      
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
@@ -82,7 +84,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
       {:ok, channel, new_state} ->
         result = publish_single_to_channel(channel, exchange, routing_key, payload, opts)
         {:reply, result, new_state}
-      
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
@@ -91,7 +93,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
   def handle_cast({:publish_async, exchange, routing_key, payload, opts}, state) do
     message = {exchange, routing_key, payload, opts}
     new_batch = [message | state.pending_batch]
-    
+
     cond do
       length(new_batch) >= @batch_size ->
         # Flush immediately when batch is full
@@ -100,7 +102,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
             publish_batch_to_channel(channel, Enum.reverse(new_batch))
             new_state = %{updated_state | pending_batch: []}
             {:noreply, cancel_batch_timer(new_state)}
-          
+
           {:error, _} ->
             # Channel unavailable - check if we should drop this batch
             # Since we're already at batch_size, and can't flush, accumulate but limit total size
@@ -114,12 +116,12 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
               {:noreply, %{state | pending_batch: new_batch}}
             end
         end
-      
+
       state.batch_timer == nil ->
         # Start batch timer for first message
         timer = Process.send_after(self(), :flush_batch, @batch_timeout)
         {:noreply, %{state | pending_batch: new_batch, batch_timer: timer}}
-      
+
       true ->
         # Add to existing batch, but check memory limit
         if length(new_batch) > @max_pending_size do
@@ -137,13 +139,13 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
     case state.pending_batch do
       [] ->
         {:noreply, %{state | batch_timer: nil}}
-      
+
       batch ->
         case get_available_channel(state) do
           {:ok, channel, new_state} ->
             publish_batch_to_channel(channel, Enum.reverse(batch))
             {:noreply, %{new_state | pending_batch: [], batch_timer: nil}}
-          
+
           {:error, _} ->
             # Retry later if no channel available
             # Cancel old timer before creating new one
@@ -167,7 +169,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
           setup_exchanges(channel)
           Confirm.select(channel)
           {:ok, channel}
-        
+
         {:error, reason} ->
           Logger.warning("Failed to create pooled channel: #{inspect(reason)}")
           {:error, reason}
@@ -190,38 +192,44 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
 
   defp publish_batch_to_channel(channel, messages) do
     start_time = System.monotonic_time(:microsecond)
-    
-    results = Enum.map(messages, fn {exchange, routing_key, payload, opts} ->
-      publish_single_to_channel(channel, exchange, routing_key, payload, opts)
-    end)
-    
+
+    results =
+      Enum.map(messages, fn {exchange, routing_key, payload, opts} ->
+        publish_single_to_channel(channel, exchange, routing_key, payload, opts)
+      end)
+
     duration = System.monotonic_time(:microsecond) - start_time
-    
+
     # Emit batch telemetry
-    throughput = if duration > 0 do
-      length(messages) / (duration / 1_000_000)
-    else
-      0.0
-    end
-    
-    :telemetry.execute([:cyb, :amqp, :batch_publish], %{
-      count: length(messages),
-      duration_us: duration,
-      throughput: throughput
-    }, %{batch_size: length(messages)})
-    
+    throughput =
+      if duration > 0 do
+        length(messages) / (duration / 1_000_000)
+      else
+        0.0
+      end
+
+    :telemetry.execute(
+      [:cyb, :amqp, :batch_publish],
+      %{
+        count: length(messages),
+        duration_us: duration,
+        throughput: throughput
+      },
+      %{batch_size: length(messages)}
+    )
+
     {successes, errors} = Enum.split_with(results, &match?(:ok, &1))
-    
+
     if length(errors) > 0 do
       Logger.warning("Batch publish had #{length(errors)} errors out of #{length(messages)}")
     end
-    
+
     {:ok, %{successes: length(successes), errors: length(errors)}}
   end
 
   defp publish_single_to_channel(channel, exchange, routing_key, payload, opts) do
     headers = build_headers(opts)
-    
+
     message = %{
       payload: Jason.encode!(payload),
       headers: headers,
@@ -241,13 +249,18 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
         mandatory: false,
         timestamp: message.timestamp
       )
-      
+
       # Emit telemetry
-      :telemetry.execute([:cyb, :amqp, :publish], %{
-        bytes: byte_size(message.payload),
-        latency_us: 0  # Could add actual latency measurement
-      }, %{exchange: exchange, routing_key: routing_key})
-      
+      :telemetry.execute(
+        [:cyb, :amqp, :publish],
+        %{
+          bytes: byte_size(message.payload),
+          # Could add actual latency measurement
+          latency_us: 0
+        },
+        %{exchange: exchange, routing_key: routing_key}
+      )
+
       :ok
     rescue
       error ->
@@ -263,23 +276,26 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
       {"x-nonce", NonceBloom.generate_nonce()},
       {"x-version", "1.0"}
     ]
-    
+
     # Add correlation ID if provided
-    correlation_headers = case Keyword.get(opts, :correlation_id) do
-      nil -> []
-      correlation_id -> [{"x-correlation-id", correlation_id}]
-    end
-    
-    # Add trace context for OpenTelemetry
-    trace_headers = try do
-      case :otel_propagator_text_map.inject([]) do
-        [] -> []
-        trace_ctx -> [{"x-trace-context", Jason.encode!(trace_ctx)}]
+    correlation_headers =
+      case Keyword.get(opts, :correlation_id) do
+        nil -> []
+        correlation_id -> [{"x-correlation-id", correlation_id}]
       end
-    rescue
-      _ -> []  # Graceful fallback if OpenTelemetry not available
-    end
-    
+
+    # Add trace context for OpenTelemetry
+    trace_headers =
+      try do
+        case :otel_propagator_text_map.inject([]) do
+          [] -> []
+          trace_ctx -> [{"x-trace-context", Jason.encode!(trace_ctx)}]
+        end
+      rescue
+        # Graceful fallback if OpenTelemetry not available
+        _ -> []
+      end
+
     base_headers ++ correlation_headers ++ trace_headers
   end
 
@@ -296,7 +312,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
       {"cyb.mcp.tools", :topic},
       {"vsm.dlx", :fanout}
     ]
-    
+
     Enum.each(exchanges, fn {name, type} ->
       try do
         AMQP.Exchange.declare(channel, name, type, durable: true)
@@ -308,6 +324,7 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
   end
 
   defp cancel_batch_timer(%{batch_timer: nil} = state), do: state
+
   defp cancel_batch_timer(%{batch_timer: timer} = state) do
     Process.cancel_timer(timer)
     %{state | batch_timer: nil}

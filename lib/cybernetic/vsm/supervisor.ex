@@ -1,4 +1,3 @@
-
 defmodule Cybernetic.VSM.Supervisor do
   @moduledoc """
   Root VSM supervisor: S5→S1.
@@ -20,6 +19,7 @@ defmodule Cybernetic.VSM.Supervisor do
       # S1 Operations
       {Cybernetic.VSM.System1.Operational, restart: :permanent}
     ]
+
     Supervisor.init(children, strategy: :rest_for_one, max_restarts: 10, max_seconds: 60)
   end
 end
