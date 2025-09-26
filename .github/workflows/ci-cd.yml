@@ -11,8 +11,8 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  ELIXIR_VERSION: 1.18.4
-  OTP_VERSION: 28
+  ELIXIR_VERSION: 1.17.3
+  OTP_VERSION: 27
 
 jobs:
   test:
