@@ -69,7 +69,7 @@ defmodule Cybernetic.VSM.System4.Providers.ReqLLMProvider do
   end
 
   @impl true
-  def embed(text, opts \\ []) do
+  def embed(_text, _opts \\ []) do
     # Embedding support would need separate pipeline or req_llm extension
     # For now, return error as req_llm may not support all embedding models
     Logger.warning("ReqLLMProvider.embed not yet implemented")
