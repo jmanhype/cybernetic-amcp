@@ -20,33 +20,33 @@ defmodule Cybernetic.VSM.System4.LLM.PipelineGoldenTest do
     %Episode{
       id: "test_1",
       kind: :policy_review,
-      priority: :medium,
-      source: :test,
-      timestamp: DateTime.utc_now(),
+      priority: :normal,
+      source_system: :test,
+      created_at: DateTime.utc_now(),
       data: "Review the security policy for database access controls"
     },
     %Episode{
       id: "test_2",
       kind: :code_gen,
       priority: :high,
-      source: :test,
-      timestamp: DateTime.utc_now(),
+      source_system: :test,
+      created_at: DateTime.utc_now(),
       data: "Generate a function to validate email addresses"
     },
     %Episode{
       id: "test_3",
       kind: :root_cause,
       priority: :critical,
-      source: :test,
-      timestamp: DateTime.utc_now(),
+      source_system: :test,
+      created_at: DateTime.utc_now(),
       data: "System experiencing high latency during peak hours"
     },
     %Episode{
       id: "test_4",
       kind: :anomaly_detection,
       priority: :low,
-      source: :test,
-      timestamp: DateTime.utc_now(),
+      source_system: :test,
+      created_at: DateTime.utc_now(),
       data: "Traffic patterns: [100, 102, 98, 250, 101, 99]"
     }
   ]
@@ -57,9 +57,9 @@ defmodule Cybernetic.VSM.System4.LLM.PipelineGoldenTest do
       episode = %Episode{
         id: "structure_test",
         kind: :classification,
-        priority: :medium,
-        source: :test,
-        timestamp: DateTime.utc_now(),
+        priority: :normal,
+        source_system: :test,
+        created_at: DateTime.utc_now(),
         data: "Classify this text: 'The product arrived damaged'"
       }
 
