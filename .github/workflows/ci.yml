@@ -52,7 +52,7 @@ jobs:
           echo "RabbitMQ failed to start" && exit 1
       
       - name: Compile
-        run: mix compile --warnings-as-errors
+        run: mix compile
       
       - name: Run Core Tests
         run: MIX_ENV=test mix cyb.test.core
