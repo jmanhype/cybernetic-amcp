@@ -3,7 +3,8 @@ defmodule Cybernetic.VSM.System4.LLMBridgeTest do
 
   defmodule Dummy do
     @behaviour Cybernetic.VSM.System4.LLMProvider
-    def analyze_episode(ep, _), do: {:ok, %{summary: "ok #{ep["id"]}", recommendations: [], sop_suggestions: []}}
+    def analyze_episode(ep, _),
+      do: {:ok, %{summary: "ok #{ep["id"]}", recommendations: [], sop_suggestions: []}}
   end
 
   test "consumes episode and calls provider" do

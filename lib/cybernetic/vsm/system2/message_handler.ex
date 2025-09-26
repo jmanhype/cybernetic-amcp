@@ -7,16 +7,30 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
 
   def handle_message(operation, payload, meta) do
     Logger.debug("System2 received #{operation}: #{inspect(payload)}")
-    
+
     case operation do
-      "coordination" -> handle_coordination(payload, meta)
-      "coordinate" -> handle_coordinate(payload, meta)
-      "coordination_complete" -> handle_coordination_complete(payload, meta)
-      "sync" -> handle_sync(payload, meta)
-      "status_request" -> handle_status_request(payload, meta)
-      "priority_update" -> handle_priority_update(payload, meta)
-      "default" -> handle_default(payload, meta)
-      _ -> 
+      "coordination" ->
+        handle_coordination(payload, meta)
+
+      "coordinate" ->
+        handle_coordinate(payload, meta)
+
+      "coordination_complete" ->
+        handle_coordination_complete(payload, meta)
+
+      "sync" ->
+        handle_sync(payload, meta)
+
+      "status_request" ->
+        handle_status_request(payload, meta)
+
+      "priority_update" ->
+        handle_priority_update(payload, meta)
+
+      "default" ->
+        handle_default(payload, meta)
+
+      _ ->
         Logger.warning("Unknown operation for System2: #{operation}")
         {:error, :unknown_operation}
     end
@@ -33,35 +47,39 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
     else
       action = Map.get(payload, "action") || Map.get(payload, :action)
       Logger.info("System2: Coordination with action=#{action}")
-      
+
       # Process based on action type
       case action do
         "coordinate" -> coordinate_systems(Map.get(payload, :systems, []), payload, meta)
         _ -> :ok
       end
-      
+
       :ok
     end
   end
 
   defp handle_coordinate(payload, meta) do
     Logger.info("System2: Coordinating systems - #{inspect(payload)}")
-    
+
     # Process coordination and forward intelligence to S4
     coordination_result = coordinate_operation(payload, meta)
-    
+
     # Create intelligence signal for S4
     forward_to_intelligence(payload, meta, coordination_result)
-    
+
     # Emit telemetry
     :telemetry.execute([:vsm, :s2, :coordination], %{count: 1}, payload)
-    
+
     # Send coordination messages to specified systems if any
     case Map.get(payload, "target_systems") do
-      nil -> :ok  # No specific target systems needed for S1→S2→S4 flow
+      # No specific target systems needed for S1→S2→S4 flow
+      nil ->
+        :ok
+
       systems when is_list(systems) ->
         coordinate_systems(systems, payload, meta)
         :ok
+
       system ->
         coordinate_systems([system], payload, meta)
         :ok
@@ -70,28 +88,29 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
 
   defp handle_sync(payload, meta) do
     Logger.debug("System2: Sync request - #{inspect(payload)}")
-    
+
     # Broadcast sync to all systems
     Cybernetic.Transport.Behaviour.publish(
       "cyb.events",
-      "s2.sync_response", 
+      "s2.sync_response",
       %{"timestamp" => :os.system_time(:millisecond), "data" => payload},
-      [source: :system2, meta: meta]
+      source: :system2,
+      meta: meta
     )
-    
+
     :ok
   end
 
   defp handle_status_request(_payload, meta) do
     Logger.debug("System2: Status request")
-    
+
     # Collect status from all systems
     status = %{
       "system2" => "active",
       "coordination_active" => true,
       "timestamp" => :os.system_time(:millisecond)
     }
-    
+
     respond_with_status(status, meta)
     :ok
   end
@@ -103,11 +122,11 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
 
   defp handle_coordination_complete(payload, meta) do
     Logger.info("System2: Coordination complete - #{inspect(payload)}")
-    
+
     # Create intelligence signal for S4 based on the coordination result
     intelligence_payload = %{
       "type" => "vsm.s4.intelligence",
-      "source_system" => "s2", 
+      "source_system" => "s2",
       "coordination_id" => Map.get(payload, "coordination_id"),
       "original_operation" => Map.get(payload, "original_operation"),
       "resources_allocated" => Map.get(payload, "resources_allocated", []),
@@ -115,10 +134,10 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
       "analysis_request" => "coordination_analysis",
       "timestamp" => DateTime.utc_now()
     }
-    
+
     # Send intelligence to S4
     forward_to_intelligence(intelligence_payload, meta, payload)
-    
+
     :ok
   end
 
@@ -129,26 +148,30 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
 
   defp coordinate_systems(systems, payload, meta) do
     _action = Map.get(payload, "action", "coordinate")
-    
+
     Enum.each(systems, fn system ->
       Cybernetic.Transport.Behaviour.publish(
         "cyb.commands",
         "#{system}.coordination",
         Map.put(payload, "coordinator", "system2"),
-        [source: :system2, meta: meta]
+        source: :system2,
+        meta: meta
       )
     end)
   end
 
   defp respond_with_status(status, meta) do
     case Map.get(meta, :source_node) do
-      nil -> Logger.debug("System2: No source node for status response")
+      nil ->
+        Logger.debug("System2: No source node for status response")
+
       _source_node ->
         Cybernetic.Transport.Behaviour.publish(
           "cyb.events",
           "s2.status_response",
           status,
-          [source: :system2, meta: meta]
+          source: :system2,
+          meta: meta
         )
     end
   end
@@ -156,7 +179,7 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
   defp coordinate_operation(payload, _meta) do
     # Simulate coordination logic
     coordination_id = Map.get(payload, "coordination_id", generate_coordination_id())
-    
+
     result = %{
       "coordination_id" => coordination_id,
       "status" => "coordinated",
@@ -164,17 +187,18 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
       "priority" => "normal",
       "timestamp" => DateTime.utc_now()
     }
-    
+
     Logger.debug("System2: Coordination complete - #{coordination_id}")
     result
   end
 
   defp forward_to_intelligence(payload, meta, coordination_result) do
     # Extract coordination_id from the payload first, then from coordination_result
-    coordination_id = Map.get(payload, "coordination_id") || 
-                     Map.get(payload, :coordination_id) ||
-                     Map.get(coordination_result, "coordination_id")
-    
+    coordination_id =
+      Map.get(payload, "coordination_id") ||
+        Map.get(payload, :coordination_id) ||
+        Map.get(coordination_result, "coordination_id")
+
     # Create intelligence message for S4
     intelligence_msg = %{
       "type" => "vsm.s4.intelligence",
@@ -185,17 +209,19 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
       "analysis_request" => "pattern_detection",
       "timestamp" => DateTime.utc_now()
     }
-    
+
     # Send via AMQP to S4
     case Cybernetic.Transport.Behaviour.publish(
-      "cyb.commands",
-      "s4.intelligence",
-      intelligence_msg,
-      [source: :system2, meta: meta]
-    ) do
+           "cyb.commands",
+           "s4.intelligence",
+           intelligence_msg,
+           source: :system2,
+           meta: meta
+         ) do
       :ok ->
         Logger.debug("System2: Forwarded intelligence to S4")
         :ok
+
       error ->
         Logger.warning("System2: Failed to forward to S4: #{inspect(error)}")
         error

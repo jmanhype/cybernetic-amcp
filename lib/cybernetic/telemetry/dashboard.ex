@@ -5,17 +5,19 @@ defmodule Cybernetic.Telemetry.Dashboard do
   """
   use GenServer
   require Logger
-  
-  @metrics_retention_ms 3_600_000  # 1 hour
-  @aggregation_interval_ms 5_000   # 5 seconds
-  
+
+  # 1 hour
+  @metrics_retention_ms 3_600_000
+  # 5 seconds
+  @aggregation_interval_ms 5_000
+
   defstruct [
     :metrics_store,
     :grafana_config,
     :prometheus_metrics,
     :dashboard_state
   ]
-  
+
   # Telemetry event names
   @vsm_events [
     [:cybernetic, :s1, :message_processed],
@@ -24,55 +26,56 @@ defmodule Cybernetic.Telemetry.Dashboard do
     [:cybernetic, :s4, :intelligence_query],
     [:cybernetic, :s5, :policy_update]
   ]
-  
+
   @provider_events [
     [:cybernetic, :provider, :request],
     [:cybernetic, :provider, :response],
     [:cybernetic, :provider, :error],
     [:cybernetic, :provider, :fallback]
   ]
-  
+
   @transport_events [
     [:cybernetic, :amqp, :publish],
     [:cybernetic, :amqp, :consume],
     [:cybernetic, :amqp, :error]
   ]
-  
+
   # Public API
-  
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
-  
+
   def get_dashboard_config do
     GenServer.call(__MODULE__, :get_dashboard_config)
   end
-  
+
   def get_metrics_summary(time_range_ms \\ 60_000) do
     GenServer.call(__MODULE__, {:get_metrics_summary, time_range_ms})
   end
-  
+
   def export_grafana_dashboard do
     GenServer.call(__MODULE__, :export_grafana_dashboard)
   end
-  
+
   def export_prometheus_config do
     GenServer.call(__MODULE__, :export_prometheus_config)
   end
-  
+
   # Server Callbacks
-  
+
   @impl true
   def init(_opts) do
     # Initialize ETS table for metrics
-    metrics_store = :ets.new(:telemetry_metrics, [
-      :set,
-      :public,
-      :named_table,
-      read_concurrency: true,
-      write_concurrency: true
-    ])
-    
+    metrics_store =
+      :ets.new(:telemetry_metrics, [
+        :set,
+        :public,
+        :named_table,
+        read_concurrency: true,
+        write_concurrency: true
+      ])
+
     state = %__MODULE__{
       metrics_store: metrics_store,
       grafana_config: build_grafana_config(),
@@ -83,17 +86,17 @@ defmodule Cybernetic.Telemetry.Dashboard do
         error_count: 0
       }
     }
-    
+
     # Attach telemetry handlers
     attach_telemetry_handlers()
-    
+
     # Schedule periodic aggregation
     Process.send_after(self(), :aggregate_metrics, @aggregation_interval_ms)
-    
+
     Logger.info("Telemetry Dashboard initialized")
     {:ok, state}
   end
-  
+
   @impl true
   def handle_call(:get_dashboard_config, _from, state) do
     config = %{
@@ -101,73 +104,75 @@ defmodule Cybernetic.Telemetry.Dashboard do
       prometheus: state.prometheus_metrics,
       current_state: state.dashboard_state
     }
+
     {:reply, config, state}
   end
-  
+
   @impl true
   def handle_call({:get_metrics_summary, time_range_ms}, _from, state) do
     now = System.system_time(:millisecond)
     cutoff = now - time_range_ms
-    
+
     # Gather metrics from ETS
-    metrics = :ets.select(state.metrics_store, [
-      {{{:_, :"$1", :_}, :"$2"}, [{:>, :"$1", cutoff}], [:"$2"]}
-    ])
-    
+    metrics =
+      :ets.select(state.metrics_store, [
+        {{{:_, :"$1", :_}, :"$2"}, [{:>, :"$1", cutoff}], [:"$2"]}
+      ])
+
     summary = aggregate_metrics_data(metrics)
     {:reply, summary, state}
   end
-  
+
   @impl true
   def handle_call(:export_grafana_dashboard, _from, state) do
     dashboard = generate_grafana_dashboard(state)
     {:reply, {:ok, dashboard}, state}
   end
-  
+
   @impl true
   def handle_call(:export_prometheus_config, _from, state) do
     config = generate_prometheus_config(state)
     {:reply, {:ok, config}, state}
   end
-  
+
   @impl true
   def handle_info(:aggregate_metrics, state) do
     # Clean old metrics
     now = System.system_time(:millisecond)
     cutoff = now - @metrics_retention_ms
-    
+
     :ets.select_delete(state.metrics_store, [
       {{{:_, :"$1", :_}, :_}, [{:<, :"$1", cutoff}], [true]}
     ])
-    
+
     # Schedule next aggregation
     Process.send_after(self(), :aggregate_metrics, @aggregation_interval_ms)
-    
+
     {:noreply, state}
   end
-  
+
   @impl true
   def handle_info({:telemetry_event, event_name, measurements, metadata}, state) do
     # Store telemetry event
     timestamp = System.system_time(:millisecond)
     key = {event_name, timestamp, :rand.uniform()}
-    
+
     value = %{
       measurements: measurements,
       metadata: metadata,
       timestamp: timestamp
     }
-    
+
     :ets.insert(state.metrics_store, {key, value})
-    
+
     # Update dashboard state
     new_dashboard_state = update_dashboard_state(state.dashboard_state, event_name, measurements)
-    
+
     {:noreply, %{state | dashboard_state: new_dashboard_state}}
   end
-  
+
   # Private Functions
-  
+
   defp attach_telemetry_handlers do
     # Attach VSM system handlers
     Enum.each(@vsm_events, fn event ->
@@ -178,7 +183,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
         nil
       )
     end)
-    
+
     # Attach provider handlers
     Enum.each(@provider_events, fn event ->
       :telemetry.attach(
@@ -188,7 +193,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
         nil
       )
     end)
-    
+
     # Attach transport handlers
     Enum.each(@transport_events, fn event ->
       :telemetry.attach(
@@ -199,18 +204,18 @@ defmodule Cybernetic.Telemetry.Dashboard do
       )
     end)
   end
-  
+
   def handle_telemetry_event(event_name, measurements, metadata, _config) do
     send(__MODULE__, {:telemetry_event, event_name, measurements, metadata})
   end
-  
+
   defp update_dashboard_state(state, event_name, measurements) do
     state
     |> Map.update!(:total_events, &(&1 + 1))
     |> update_error_count(event_name)
     |> update_specific_metrics(event_name, measurements)
   end
-  
+
   defp update_error_count(state, event_name) do
     if Enum.member?(event_name, [:error, :failure]) do
       Map.update!(state, :error_count, &(&1 + 1))
@@ -218,7 +223,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       state
     end
   end
-  
+
   defp update_specific_metrics(state, _event_name, measurements) do
     # Update with specific measurements
     Map.merge(state, measurements, fn _k, v1, v2 ->
@@ -228,14 +233,15 @@ defmodule Cybernetic.Telemetry.Dashboard do
       end
     end)
   end
-  
+
   defp aggregate_metrics_data(metrics) do
     metrics
     |> Enum.reduce(%{}, fn metric, acc ->
       measurements = metric[:measurements] || %{}
+
       Enum.reduce(measurements, acc, fn {key, value}, inner_acc ->
         if is_number(value) do
-          Map.update(inner_acc, key, [value], &([value | &1]))
+          Map.update(inner_acc, key, [value], &[value | &1])
         else
           inner_acc
         end
@@ -246,24 +252,27 @@ defmodule Cybernetic.Telemetry.Dashboard do
     end)
     |> Map.new()
   end
-  
+
   defp calculate_statistics(values) do
     count = length(values)
     sum = Enum.sum(values)
     avg = if count > 0, do: sum / count, else: 0
-    
+
     sorted = Enum.sort(values)
-    median = if count > 0 do
-      mid = div(count, 2)
-      if rem(count, 2) == 0 do
-        (Enum.at(sorted, mid - 1) + Enum.at(sorted, mid)) / 2
+
+    median =
+      if count > 0 do
+        mid = div(count, 2)
+
+        if rem(count, 2) == 0 do
+          (Enum.at(sorted, mid - 1) + Enum.at(sorted, mid)) / 2
+        else
+          Enum.at(sorted, mid)
+        end
       else
-        Enum.at(sorted, mid)
+        0
       end
-    else
-      0
-    end
-    
+
     %{
       count: count,
       sum: sum,
@@ -275,9 +284,10 @@ defmodule Cybernetic.Telemetry.Dashboard do
       p99: calculate_percentile(sorted, 0.99)
     }
   end
-  
+
   defp calculate_percentile(sorted_values, percentile) do
     count = length(sorted_values)
+
     if count > 0 do
       index = round(percentile * (count - 1))
       Enum.at(sorted_values, index)
@@ -285,7 +295,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       0
     end
   end
-  
+
   defp build_grafana_config do
     %{
       version: "9.0.0",
@@ -311,7 +321,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       ]
     }
   end
-  
+
   defp configure_prometheus_metrics do
     [
       # VSM metrics
@@ -328,7 +338,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
         labels: [:system],
         buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5]
       },
-      
+
       # Provider metrics
       %{
         name: "cybernetic_provider_requests_total",
@@ -349,7 +359,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
         help: "Tokens consumed by provider",
         labels: [:provider, :type]
       },
-      
+
       # Transport metrics
       %{
         name: "cybernetic_amqp_messages_total",
@@ -363,7 +373,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
         help: "Current AMQP queue size",
         labels: [:queue]
       },
-      
+
       # System metrics
       %{
         name: "cybernetic_memory_usage_bytes",
@@ -384,7 +394,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       }
     ]
   end
-  
+
   defp generate_grafana_dashboard(_state) do
     %{
       dashboard: %{
@@ -407,7 +417,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       overwrite: true
     }
   end
-  
+
   defp vsm_overview_panel do
     %{
       title: "VSM System Overview",
@@ -421,7 +431,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       ]
     }
   end
-  
+
   defp s4_intelligence_panel do
     %{
       title: "S4 Intelligence Queries",
@@ -439,7 +449,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       ]
     }
   end
-  
+
   defp provider_performance_panel do
     %{
       title: "Provider Performance",
@@ -454,7 +464,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       ]
     }
   end
-  
+
   defp amqp_transport_panel do
     %{
       title: "AMQP Message Flow",
@@ -472,7 +482,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       ]
     }
   end
-  
+
   defp system_health_panel do
     %{
       title: "System Health",
@@ -494,7 +504,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       ]
     }
   end
-  
+
   defp generate_prometheus_config(_state) do
     %{
       global: %{
@@ -522,7 +532,7 @@ defmodule Cybernetic.Telemetry.Dashboard do
       recording_rules: configure_prometheus_metrics() |> Enum.map(&build_recording_rule/1)
     }
   end
-  
+
   defp build_recording_rule(metric) do
     %{
       record: "#{metric.name}_5m",

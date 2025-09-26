@@ -1,22 +1,24 @@
 defmodule Cybernetic.Telemetry.OTEL do
   @moduledoc """
   OpenTelemetry configuration and helper functions for distributed tracing.
-  
+
   Provides:
   - Resource attributes (service.name, version, env)
   - B3/W3C propagation
   - Span helpers with context propagation
   - AMQP header injection/extraction
   """
-  
+
   require OpenTelemetry.Tracer, as: Tracer
   require OpenTelemetry.Span, as: Span
   require Record
-  
+
   # Import the span record definition
-  Record.defrecordp :span_ctx,
+  Record.defrecordp(
+    :span_ctx,
     Record.extract(:span_ctx, from_lib: "opentelemetry_api/include/opentelemetry.hrl")
-  
+  )
+
   @doc """
   Initialize OpenTelemetry with resource attributes and exporters.
   Called from application.ex
@@ -32,7 +34,7 @@ defmodule Cybernetic.Telemetry.OTEL do
       "telemetry.sdk.name" => "opentelemetry",
       "telemetry.sdk.version" => Application.spec(:opentelemetry, :vsn) |> to_string()
     }
-    
+
     # Set resource (use newer API if available)
     try do
       if function_exported?(:opentelemetry, :set_resource, 1) do
@@ -44,7 +46,7 @@ defmodule Cybernetic.Telemetry.OTEL do
     rescue
       _ -> :ok
     end
-    
+
     # Configure text map propagator for B3 and W3C (with fallback)
     try do
       if function_exported?(:otel_propagator_text_map, :set, 1) do
@@ -59,91 +61,99 @@ defmodule Cybernetic.Telemetry.OTEL do
     rescue
       _ -> :ok
     end
-    
+
     :ok
   end
-  
+
   @doc """
   Extract trace context from AMQP headers
   """
   def extract_context(headers) when is_list(headers) do
-    headers_map = headers
-    |> Enum.map(fn 
-      {k, _type, v} -> {to_string(k), to_string(v)}
-      {k, v} -> {to_string(k), to_string(v)}
-    end)
-    |> Map.new()
-    
+    headers_map =
+      headers
+      |> Enum.map(fn
+        {k, _type, v} -> {to_string(k), to_string(v)}
+        {k, v} -> {to_string(k), to_string(v)}
+      end)
+      |> Map.new()
+
     :otel_propagator_text_map.extract(headers_map)
   end
-  
+
   @doc """
   Inject trace context into AMQP headers
   """
   def inject_context(headers \\ []) do
     ctx_map = %{}
     updated_map = :otel_propagator_text_map.inject(ctx_map)
-    
+
     # Convert back to AMQP header format
-    amqp_headers = Enum.map(updated_map, fn {k, v} ->
-      {String.to_atom(k), :longstr, to_string(v)}
-    end)
-    
+    amqp_headers =
+      Enum.map(updated_map, fn {k, v} ->
+        {String.to_atom(k), :longstr, to_string(v)}
+      end)
+
     headers ++ amqp_headers
   end
-  
+
   @doc """
   Start a new span with attributes - supports both function and do block syntax
   """
   def with_span(name, attributes \\ %{}, fun_or_opts \\ [])
-  
+
   # Handle do block syntax: with_span(name, attrs, do: ...)
   def with_span(name, attributes, opts) when is_list(opts) and opts != [] do
     case Keyword.get(opts, :do) do
-      nil -> 
+      nil ->
         # No do block, treat as empty function
         with_span(name, attributes, fn -> :ok end)
+
       block ->
         # Execute the do block
         with_span(name, attributes, fn -> block end)
     end
   end
-  
+
   # Handle function syntax: with_span(name, attrs, fn -> ... end)
   def with_span(name, attributes, fun) when is_function(fun) do
     Tracer.with_span name, %{attributes: attributes, kind: :internal} do
       result = fun.()
-      
+
       # Add result as span attribute
       case result do
-        {:ok, _} -> Span.set_attribute(Tracer.current_span_ctx(), :result, "success")
-        {:error, reason} -> 
+        {:ok, _} ->
+          Span.set_attribute(Tracer.current_span_ctx(), :result, "success")
+
+        {:error, reason} ->
           Span.set_attribute(Tracer.current_span_ctx(), :result, "error")
           Span.set_attribute(Tracer.current_span_ctx(), :error_reason, inspect(reason))
-        _ -> Span.set_attribute(Tracer.current_span_ctx(), :result, "unknown")
+
+        _ ->
+          Span.set_attribute(Tracer.current_span_ctx(), :result, "unknown")
       end
-      
+
       result
     end
   end
-  
+
   @doc """
   Add event to current span
   """
   def add_event(name, attributes \\ %{}) do
     Span.add_event(Tracer.current_span_ctx(), name, attributes)
   end
-  
+
   @doc """
   Set attributes on current span
   """
   def set_attributes(attributes) do
     span_ctx = Tracer.current_span_ctx()
+
     Enum.each(attributes, fn {k, v} ->
       Span.set_attribute(span_ctx, k, v)
     end)
   end
-  
+
   @doc """
   Record an exception on the current span
   """
@@ -152,24 +162,25 @@ defmodule Cybernetic.Telemetry.OTEL do
     Span.record_exception(span_ctx, exception, stacktrace)
     Span.set_status(span_ctx, :error)
   end
-  
+
   @doc """
   Get current trace and span IDs as hex strings
   """
   def current_ids do
     ctx = Tracer.current_span_ctx()
-    
+
     case ctx do
       span_ctx(trace_id: trace_id, span_id: span_id) when trace_id != 0 and span_id != 0 ->
         %{
           trace_id: trace_id |> Integer.to_string(16) |> String.pad_leading(32, "0"),
           span_id: span_id |> Integer.to_string(16) |> String.pad_leading(16, "0")
         }
+
       _ ->
         %{trace_id: nil, span_id: nil}
     end
   end
-  
+
   @doc """
   Create a child span linked to current context
   """

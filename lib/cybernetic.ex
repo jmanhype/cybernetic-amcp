@@ -1,4 +1,3 @@
-
 defmodule Cybernetic do
   @moduledoc """
   Cybernetic — a distributed, self-regulating AI coordination framework powered by aMCP.

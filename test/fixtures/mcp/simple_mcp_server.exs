@@ -7,15 +7,15 @@ Mix.install([
 
 defmodule TestMCP.EchoTool do
   @moduledoc "Simple echo tool for testing"
-  
+
   use Hermes.Server.Component, type: :tool
-  
+
   alias Hermes.Server.Response
-  
+
   schema do
-    field :text, :string, required: true, description: "Text to echo back"
+    field(:text, :string, required: true, description: "Text to echo back")
   end
-  
+
   def execute(%{text: text}, frame) do
     result = "Echo: #{text}"
     {:reply, Response.text(Response.tool(), result), frame}
@@ -27,9 +27,9 @@ defmodule TestMCP.Server do
     name: "test-mcp-server",
     version: "1.0.0",
     capabilities: [:tools]
-  
-  component TestMCP.EchoTool
-  
+
+  component(TestMCP.EchoTool)
+
   def init(_client_info, frame) do
     IO.puts("🔧 TestMCP Server initialized!")
     {:ok, frame}

@@ -3,6 +3,7 @@ defmodule Cybernetic.Core.MCP.Server do
   Hermes MCP Server implementation with VSM tools.
   Integrates with existing registry.
   """
+
   # Note: Uncomment when Hermes.Server is available
   # use Hermes.Server,
   #   name: "Cybernetic aMCP Server",
@@ -22,7 +23,7 @@ defmodule Cybernetic.Core.MCP.Server do
     case Registry.invoke_tool(name, args) do
       {:ok, result} ->
         {:ok, result, frame}
-      
+
       {:error, reason} ->
         {:error, reason, frame}
     end
@@ -94,32 +95,36 @@ defmodule Cybernetic.Core.MCP.Server do
 
   defp handle_crdt_merge(%{state1: state1, state2: state2}, _context) do
     # Call CRDT graph merge
-    merged = Map.merge(state1, state2, fn _k, v1, v2 ->
-      # Simple merge strategy - prefer newer
-      if v1[:timestamp] > v2[:timestamp], do: v1, else: v2
-    end)
+    merged =
+      Map.merge(state1, state2, fn _k, v1, v2 ->
+        # Simple merge strategy - prefer newer
+        if v1[:timestamp] > v2[:timestamp], do: v1, else: v2
+      end)
+
     {:ok, merged}
   end
 
   defp handle_telemetry_probe(%{selector: selector}, _context) do
     # Collect telemetry metrics
-    measurements = :telemetry.execute(
-      [:cybernetic, :probe],
-      %{timestamp: System.system_time(:millisecond)},
-      %{selector: selector}
-    )
+    measurements =
+      :telemetry.execute(
+        [:cybernetic, :probe],
+        %{timestamp: System.system_time(:millisecond)},
+        %{selector: selector}
+      )
+
     {:ok, %{selector: selector, measurements: measurements}}
   end
 
   defp handle_send_telegram(%{chat_id: chat_id, text: text} = params, _context) do
     options = params[:options] || %{}
-    
+
     # Route through S1 Telegram agent
     GenServer.cast(
       Cybernetic.VSM.System1.Agents.TelegramAgent,
       {:send_message, chat_id, text, options}
     )
-    
+
     {:ok, %{status: "queued", chat_id: chat_id}}
   end
 
@@ -128,8 +133,10 @@ defmodule Cybernetic.Core.MCP.Server do
     case query do
       "status" ->
         {:ok, %{status: "operational", agents: 5, queue_depth: 0}}
+
       "agents" ->
         {:ok, %{agents: ["telegram", "amqp", "web", "cli", "api"]}}
+
       _ ->
         {:error, "Unknown S1 query: #{query}"}
     end
@@ -139,6 +146,7 @@ defmodule Cybernetic.Core.MCP.Server do
     case query do
       "coordination" ->
         {:ok, %{active_coordinators: 2, load_balanced: true}}
+
       _ ->
         {:ok, %{status: "coordinating"}}
     end
@@ -148,6 +156,7 @@ defmodule Cybernetic.Core.MCP.Server do
     case query do
       "policies" ->
         {:ok, %{active_policies: 10, enforcement: "strict"}}
+
       _ ->
         {:ok, %{status: "monitoring"}}
     end
@@ -157,6 +166,7 @@ defmodule Cybernetic.Core.MCP.Server do
     case query do
       "intelligence" ->
         {:ok, %{models_loaded: 3, inference_ready: true}}
+
       _ ->
         {:ok, %{status: "analyzing"}}
     end
@@ -166,6 +176,7 @@ defmodule Cybernetic.Core.MCP.Server do
     case query do
       "identity" ->
         {:ok, %{name: "Cybernetic", version: "1.0.0", purpose: "coordination"}}
+
       _ ->
         {:ok, %{status: "governing"}}
     end

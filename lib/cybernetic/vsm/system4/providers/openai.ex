@@ -1,16 +1,16 @@
 defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   @moduledoc """
   OpenAI provider for S4 Intelligence system.
-  
+
   Implements the LLM provider behavior for episode analysis using GPT models
   with specialized strengths in code generation and structured outputs.
   """
-  
+
   @behaviour Cybernetic.VSM.System4.LLMProvider
-  
+
   require Logger
   require OpenTelemetry.Tracer
-  
+
   @default_model "gpt-4o"
   @default_max_tokens 4096
   @default_temperature 0.1
@@ -29,7 +29,7 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   @impl Cybernetic.VSM.System4.LLMProvider
   def analyze_episode(episode, opts \\ []) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     OpenTelemetry.Tracer.with_span "openai.analyze_episode", %{
       attributes: %{
         model: get_model(opts),
@@ -38,29 +38,29 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
       }
     } do
       result = do_analyze_episode(episode, opts)
-      
+
       latency = System.monotonic_time(:millisecond) - start_time
       add_usage_metrics(result, latency)
-      
+
       result
     end
   end
 
   @impl Cybernetic.VSM.System4.LLMProvider
   def generate(prompt_or_messages, opts \\ [])
-  
+
   def generate(prompt, opts) when is_binary(prompt) do
     generate([%{"role" => "user", "content" => prompt}], opts)
   end
 
   def generate(messages, opts) when is_list(messages) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     case make_openai_request(build_generate_payload(messages, opts)) do
       {:ok, response} ->
         latency = System.monotonic_time(:millisecond) - start_time
         parse_generate_response(response, latency)
-        
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -69,17 +69,17 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   @impl Cybernetic.VSM.System4.LLMProvider
   def embed(text, opts \\ []) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     payload = %{
       "model" => Keyword.get(opts, :model, "text-embedding-3-small"),
       "input" => text
     }
-    
+
     case make_openai_request(payload, "/v1/embeddings") do
       {:ok, response} ->
         latency = System.monotonic_time(:millisecond) - start_time
         parse_embed_response(response, latency)
-        
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -88,14 +88,16 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   @impl Cybernetic.VSM.System4.LLMProvider
   def health_check do
     case get_api_key() do
-      nil -> {:error, :missing_api_key}
-      _key -> 
+      nil ->
+        {:error, :missing_api_key}
+
+      _key ->
         # Simple ping test
         case make_openai_request(%{
-          "model" => @default_model,
-          "messages" => [%{"role" => "user", "content" => "test"}],
-          "max_tokens" => 1
-        }) do
+               "model" => @default_model,
+               "messages" => [%{"role" => "user", "content" => "test"}],
+               "max_tokens" => 1
+             }) do
           {:ok, _} -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -106,28 +108,33 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
 
   defp do_analyze_episode(episode, opts) do
     model = get_model(opts)
-    
+
     :telemetry.execute(@telemetry ++ [:request], %{count: 1}, %{
       model: model,
       episode_kind: episode.kind
     })
-    
+
     payload = build_analysis_payload(episode, opts)
-    
+
     case make_openai_request(payload) do
       {:ok, response} ->
-        :telemetry.execute(@telemetry ++ [:response], %{
-          count: 1,
-          tokens: get_in(response, ["usage", "completion_tokens"]) || 0
-        }, %{model: model})
-        
+        :telemetry.execute(
+          @telemetry ++ [:response],
+          %{
+            count: 1,
+            tokens: get_in(response, ["usage", "completion_tokens"]) || 0
+          },
+          %{model: model}
+        )
+
         parse_analysis_response(response)
-        
+
       {:error, reason} = error ->
         :telemetry.execute(@telemetry ++ [:error], %{count: 1}, %{
           reason: inspect(reason),
           model: model
         })
+
         error
     end
   end
@@ -136,13 +143,13 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
     system_prompt = """
     You are the S4 Intelligence system in a Viable System Model (VSM) framework.
     Your role is to analyze operational episodes and provide strategic recommendations.
-    
+
     Focus on:
     1. Technical root cause analysis
     2. Code-based solutions and SOPs
     3. Automation opportunities
     4. Performance optimization recommendations
-    
+
     Respond in JSON format with the following structure:
     {
       "summary": "Brief technical analysis summary",
@@ -171,29 +178,29 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
       "learning_points": ["technical insight 1", "technical insight 2"]
     }
     """
-    
+
     user_prompt = """
     Episode to analyze:
-    
+
     ID: #{episode.id}
     Kind: #{episode.kind}
     Title: #{episode.title}
     Priority: #{episode.priority}
     Source: #{episode.source_system}
     Created: #{episode.created_at}
-    
+
     Context:
     #{Jason.encode!(episode.context, pretty: true)}
-    
+
     Data:
     #{format_episode_data(episode.data)}
-    
+
     Metadata:
     #{Jason.encode!(episode.metadata, pretty: true)}
-    
+
     Please analyze this episode focusing on technical solutions and automation.
     """
-    
+
     %{
       "model" => get_model(opts),
       "messages" => [
@@ -217,17 +224,18 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
 
   defp make_openai_request(payload, endpoint \\ "/v1/chat/completions") do
     url = "#{get_base_url()}#{endpoint}"
+
     headers = [
       {"Content-Type", "application/json"},
       {"Authorization", "Bearer #{get_api_key()}"}
     ]
-    
+
     options = [
       timeout: 30_000,
       recv_timeout: 30_000,
       hackney: [pool: :openai_pool]
     ]
-    
+
     with {:ok, json} <- Jason.encode(payload),
          {:ok, response} <- make_request_with_retry(url, json, headers, options, 3) do
       {:ok, response}
@@ -245,25 +253,25 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
           {:ok, response} -> {:ok, response}
           {:error, reason} -> {:error, {:json_decode_error, reason}}
         end
-        
+
       {:ok, %{status: 429} = response} ->
         Logger.warning("Rate limited by OpenAI API, retrying in #{get_retry_delay(response)} ms")
         :timer.sleep(get_retry_delay(response))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
-        
+
       {:ok, %{status: status, body: _body}} when status >= 500 ->
         Logger.warning("Server error #{status}, retrying... (#{retries_left} retries left)")
         :timer.sleep(exponential_backoff(4 - retries_left))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
-        
+
       {:ok, %{status: status, body: body}} ->
         Logger.error("OpenAI API error: #{status} - #{body}")
         {:error, {:http_error, status, parse_error_body(body)}}
-        
+
       {:error, %HTTPoison.Error{reason: :timeout}} ->
         Logger.warning("Request timeout, retrying... (#{retries_left} retries left)")
         make_request_with_retry(url, json, headers, options, retries_left - 1)
-        
+
       {:error, %HTTPoison.Error{reason: reason}} ->
         Logger.error("HTTP request failed: #{inspect(reason)}")
         {:error, {:network_error, reason}}
@@ -280,7 +288,7 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
         case Jason.decode(content) do
           {:ok, parsed} ->
             usage = extract_usage_info(response)
-            
+
             result = %{
               text: content,
               tokens: %{
@@ -298,30 +306,31 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
               risk_level: parsed["risk_level"] || "medium",
               learning_points: parsed["learning_points"] || []
             }
-            
+
             {:ok, result}
-            
+
           {:error, _} ->
             usage = extract_usage_info(response)
-            
-            {:ok, %{
-              text: content,
-              tokens: %{
-                input: get_in(response, ["usage", "prompt_tokens"]) || 0,
-                output: get_in(response, ["usage", "completion_tokens"]) || 0
-              },
-              usage: usage,
-              citations: [],
-              confidence: 0.6,
-              summary: content,
-              root_causes: [],
-              sop_suggestions: [],
-              recommendations: [],
-              risk_level: "medium",
-              learning_points: []
-            }}
+
+            {:ok,
+             %{
+               text: content,
+               tokens: %{
+                 input: get_in(response, ["usage", "prompt_tokens"]) || 0,
+                 output: get_in(response, ["usage", "completion_tokens"]) || 0
+               },
+               usage: usage,
+               citations: [],
+               confidence: 0.6,
+               summary: content,
+               root_causes: [],
+               sop_suggestions: [],
+               recommendations: [],
+               risk_level: "medium",
+               learning_points: []
+             }}
         end
-        
+
       _ ->
         {:error, {:unexpected_response_format, response}}
     end
@@ -331,7 +340,7 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
     case response do
       %{"choices" => [%{"message" => %{"content" => content}} | _]} ->
         usage = extract_usage_info(response, latency)
-        
+
         result = %{
           text: content,
           tokens: %{
@@ -340,11 +349,12 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
           },
           usage: usage,
           tool_calls: [],
-          finish_reason: map_finish_reason(get_in(response, ["choices", Access.at(0), "finish_reason"]))
+          finish_reason:
+            map_finish_reason(get_in(response, ["choices", Access.at(0), "finish_reason"]))
         }
-        
+
         {:ok, result}
-        
+
       _ ->
         {:error, {:unexpected_response_format, response}}
     end
@@ -354,15 +364,15 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
     case response do
       %{"data" => [%{"embedding" => embeddings} | _]} ->
         usage = extract_embed_usage_info(response, latency)
-        
+
         result = %{
           embeddings: embeddings,
           dimensions: length(embeddings),
           usage: usage
         }
-        
+
         {:ok, result}
-        
+
       _ ->
         {:error, {:unexpected_response_format, response}}
     end
@@ -371,11 +381,11 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   defp extract_usage_info(response, latency \\ 0) do
     prompt_tokens = get_in(response, ["usage", "prompt_tokens"]) || 0
     completion_tokens = get_in(response, ["usage", "completion_tokens"]) || 0
-    
+
     # Approximate cost calculation for GPT-4o (as of 2024)
     # $2.50/1M input tokens, $10/1M output tokens
-    cost_usd = (prompt_tokens * 2.5 / 1_000_000) + (completion_tokens * 10.0 / 1_000_000)
-    
+    cost_usd = prompt_tokens * 2.5 / 1_000_000 + completion_tokens * 10.0 / 1_000_000
+
     %{
       cost_usd: cost_usd,
       latency_ms: latency
@@ -384,10 +394,10 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
 
   defp extract_embed_usage_info(response, latency) do
     total_tokens = get_in(response, ["usage", "total_tokens"]) || 0
-    
+
     # Embedding cost for text-embedding-3-small: $0.02/1M tokens
     cost_usd = total_tokens * 0.02 / 1_000_000
-    
+
     %{
       cost_usd: cost_usd,
       latency_ms: latency
@@ -406,10 +416,13 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   defp add_usage_metrics({:ok, result}, latency) do
     case result do
       %{tokens: %{input: _input, output: _output}} ->
-        result = Map.update!(result, :usage, fn usage ->
-          Map.merge(usage, %{latency_ms: latency})
-        end)
+        result =
+          Map.update!(result, :usage, fn usage ->
+            Map.merge(usage, %{latency_ms: latency})
+          end)
+
         {:ok, result}
+
       _ ->
         {:ok, result}
     end
@@ -419,8 +432,11 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
 
   defp get_retry_delay(response) do
     case get_header(response.headers, "retry-after") do
-      nil -> 1000 # Default 1 second
-      retry_after -> 
+      # Default 1 second
+      nil ->
+        1000
+
+      retry_after ->
         case Integer.parse(retry_after) do
           {seconds, ""} -> seconds * 1000
           _ -> 1000
@@ -438,8 +454,10 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   end
 
   defp exponential_backoff(attempt) do
-    base_delay = 1000 # 1 second
-    max_delay = 30_000 # 30 seconds
+    # 1 second
+    base_delay = 1000
+    # 30 seconds
+    max_delay = 30_000
     delay = base_delay * :math.pow(2, attempt)
     min(delay, max_delay) |> round()
   end

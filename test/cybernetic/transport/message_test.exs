@@ -6,12 +6,12 @@ defmodule Cybernetic.Transport.MessageTest do
     test "preserves messages with flat security headers" do
       message = %{
         "_nonce" => "test-nonce",
-        "_timestamp" => 123456789,
+        "_timestamp" => 123_456_789,
         "_site" => "node@host",
         "_signature" => "abc123",
         "payload" => %{"data" => "test"}
       }
-      
+
       assert Message.normalize(message) == message
     end
 
@@ -20,17 +20,17 @@ defmodule Cybernetic.Transport.MessageTest do
         "headers" => %{
           "security" => %{
             "_nonce" => "nested-nonce",
-            "_timestamp" => 987654321,
+            "_timestamp" => 987_654_321,
             "_site" => "node2@host",
             "_signature" => "xyz789"
           }
         },
         "payload" => %{"data" => "test"}
       }
-      
+
       normalized = Message.normalize(message)
       assert normalized["_nonce"] == "nested-nonce"
-      assert normalized["_timestamp"] == 987654321
+      assert normalized["_timestamp"] == 987_654_321
       assert normalized["_site"] == "node2@host"
       assert normalized["_signature"] == "xyz789"
     end
@@ -39,16 +39,16 @@ defmodule Cybernetic.Transport.MessageTest do
       message = %{
         "security" => %{
           "_nonce" => "sec-nonce",
-          "_timestamp" => 555555555,
+          "_timestamp" => 555_555_555,
           "_site" => "node3@host",
           "_signature" => "def456"
         },
         "payload" => %{"data" => "test"}
       }
-      
+
       normalized = Message.normalize(message)
       assert normalized["_nonce"] == "sec-nonce"
-      assert normalized["_timestamp"] == 555555555
+      assert normalized["_timestamp"] == 555_555_555
       assert normalized["_site"] == "node3@host"
       assert normalized["_signature"] == "def456"
     end
@@ -57,17 +57,17 @@ defmodule Cybernetic.Transport.MessageTest do
       message = %{
         "headers" => %{
           "_nonce" => "header-nonce",
-          "_timestamp" => 111111111,
+          "_timestamp" => 111_111_111,
           "_site" => "node4@host",
           "_signature" => "ghi789",
           "other" => "data"
         },
         "payload" => %{"data" => "test"}
       }
-      
+
       normalized = Message.normalize(message)
       assert normalized["_nonce"] == "header-nonce"
-      assert normalized["_timestamp"] == 111111111
+      assert normalized["_timestamp"] == 111_111_111
       assert normalized["_site"] == "node4@host"
       assert normalized["_signature"] == "ghi789"
     end
@@ -88,7 +88,7 @@ defmodule Cybernetic.Transport.MessageTest do
         },
         "payload" => %{"data" => "test"}
       }
-      
+
       normalized = Message.normalize(message)
       # headers.security should win
       assert normalized["_nonce"] == "nested-nonce"
@@ -101,15 +101,15 @@ defmodule Cybernetic.Transport.MessageTest do
           "_nonce" => "partial-nonce"
         },
         "security" => %{
-          "_timestamp" => 999999999,
+          "_timestamp" => 999_999_999,
           "_signature" => "partial-sig"
         },
         "payload" => %{"data" => "test"}
       }
-      
+
       normalized = Message.normalize(message)
       assert normalized["_nonce"] == "partial-nonce"
-      assert normalized["_timestamp"] == 999999999
+      assert normalized["_timestamp"] == 999_999_999
       assert normalized["_signature"] == "partial-sig"
     end
 
@@ -132,6 +132,7 @@ defmodule Cybernetic.Transport.MessageTest do
         "_timestamp" => 123,
         "_signature" => "sig"
       }
+
       assert Message.has_security_envelope?(message)
     end
 
@@ -141,6 +142,7 @@ defmodule Cybernetic.Transport.MessageTest do
         "_timestamp" => 123
         # missing _signature
       }
+
       refute Message.has_security_envelope?(message)
     end
 

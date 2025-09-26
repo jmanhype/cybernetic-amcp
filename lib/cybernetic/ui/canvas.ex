@@ -1,4 +1,3 @@
-
 defmodule Cybernetic.UI.Canvas do
   @moduledoc """
   Visual programming canvas placeholder.

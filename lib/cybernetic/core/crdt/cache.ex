@@ -3,7 +3,7 @@ defmodule Cybernetic.Core.CRDT.Cache do
   High-performance caching layer for CRDT operations.
   Provides LRU caching with TTL for frequently accessed semantic triples
   and query results to reduce CRDT computation overhead.
-  
+
   NOTE: Current implementation uses lists for access_order tracking which
   results in O(n) operations for cache hits/updates. For high-frequency
   scenarios (>10k ops/sec), consider upgrading to a more efficient LRU
@@ -13,8 +13,10 @@ defmodule Cybernetic.Core.CRDT.Cache do
   require Logger
 
   @default_max_size 10_000
-  @default_ttl_ms 300_000  # 5 minutes
-  @cleanup_interval 60_000  # 1 minute
+  # 5 minutes
+  @default_ttl_ms 300_000
+  # 1 minute
+  @cleanup_interval 60_000
 
   defstruct [:max_size, :ttl_ms, :cache, :access_order, :cleanup_timer]
 
@@ -26,7 +28,7 @@ defmodule Cybernetic.Core.CRDT.Cache do
   def init(opts) do
     max_size = Keyword.get(opts, :max_size, @default_max_size)
     ttl_ms = Keyword.get(opts, :ttl_ms, @default_ttl_ms)
-    
+
     state = %__MODULE__{
       max_size: max_size,
       ttl_ms: ttl_ms,
@@ -34,7 +36,7 @@ defmodule Cybernetic.Core.CRDT.Cache do
       access_order: [],
       cleanup_timer: schedule_cleanup()
     }
-    
+
     Logger.info("CRDT Cache initialized: max_size=#{max_size}, ttl_ms=#{ttl_ms}")
     {:ok, state}
   end
@@ -94,27 +96,31 @@ defmodule Cybernetic.Core.CRDT.Cache do
 
   def handle_call({:get, key}, _from, state) do
     now = System.monotonic_time(:millisecond)
-    
+
     case Map.get(state.cache, key) do
       nil ->
         # Cache miss
         :telemetry.execute([:cyb, :crdt_cache, :miss], %{count: 1}, %{key_type: key_type(key)})
         {:reply, :miss, state}
-      
+
       {value, timestamp} ->
         if expired?(timestamp, now, state.ttl_ms) do
           # Expired entry
           new_cache = Map.delete(state.cache, key)
           new_access_order = List.delete(state.access_order, key)
           new_state = %{state | cache: new_cache, access_order: new_access_order}
-          
-          :telemetry.execute([:cyb, :crdt_cache, :miss], %{count: 1}, %{key_type: key_type(key), reason: :expired})
+
+          :telemetry.execute([:cyb, :crdt_cache, :miss], %{count: 1}, %{
+            key_type: key_type(key),
+            reason: :expired
+          })
+
           {:reply, :miss, new_state}
         else
           # Cache hit - update access order
           new_access_order = [key | List.delete(state.access_order, key)]
           new_state = %{state | access_order: new_access_order}
-          
+
           :telemetry.execute([:cyb, :crdt_cache, :hit], %{count: 1}, %{key_type: key_type(key)})
           {:reply, {:ok, value}, new_state}
         end
@@ -123,8 +129,8 @@ defmodule Cybernetic.Core.CRDT.Cache do
 
   def handle_call(:stats, _from, state) do
     now = System.monotonic_time(:millisecond)
-    
-    {active_entries, expired_entries} = 
+
+    {active_entries, expired_entries} =
       Enum.reduce(state.cache, {0, 0}, fn {_key, {_value, timestamp}}, {active, expired} ->
         if expired?(timestamp, now, state.ttl_ms) do
           {active, expired + 1}
@@ -132,53 +138,60 @@ defmodule Cybernetic.Core.CRDT.Cache do
           {active + 1, expired}
         end
       end)
-    
+
     stats = %{
       total_entries: active_entries + expired_entries,
       active_entries: active_entries,
       expired_entries: expired_entries,
       max_size: state.max_size,
       ttl_ms: state.ttl_ms,
-      cache_size_bytes: map_size(state.cache) * 64,  # Rough estimate without expensive calculation
+      # Rough estimate without expensive calculation
+      cache_size_bytes: map_size(state.cache) * 64,
       hits: Map.get(state, :hits, 0),
       misses: Map.get(state, :misses, 0)
     }
-    
+
     {:reply, stats, state}
   end
 
   def handle_cast({:put, key, value}, state) do
     now = System.monotonic_time(:millisecond)
-    
+
     # Add/update entry
     new_cache = Map.put(state.cache, key, {value, now})
     new_access_order = [key | List.delete(state.access_order, key)]
-    
+
     # Check if we need to evict entries
     state_after_put = %{state | cache: new_cache, access_order: new_access_order}
     final_state = maybe_evict_lru(state_after_put)
-    
+
     :telemetry.execute([:cyb, :crdt_cache, :put], %{count: 1}, %{key_type: key_type(key)})
     {:noreply, final_state}
   end
 
   def handle_cast({:invalidate_pattern, pattern}, state) do
     # Remove entries matching pattern
-    keys_to_remove = Enum.filter(Map.keys(state.cache), fn key ->
-      match_pattern?(key, pattern)
-    end)
-    
-    new_cache = Enum.reduce(keys_to_remove, state.cache, fn key, cache ->
-      Map.delete(cache, key)
-    end)
-    
-    new_access_order = Enum.reduce(keys_to_remove, state.access_order, fn key, access_order ->
-      List.delete(access_order, key)
-    end)
-    
+    keys_to_remove =
+      Enum.filter(Map.keys(state.cache), fn key ->
+        match_pattern?(key, pattern)
+      end)
+
+    new_cache =
+      Enum.reduce(keys_to_remove, state.cache, fn key, cache ->
+        Map.delete(cache, key)
+      end)
+
+    new_access_order =
+      Enum.reduce(keys_to_remove, state.access_order, fn key, access_order ->
+        List.delete(access_order, key)
+      end)
+
     new_state = %{state | cache: new_cache, access_order: new_access_order}
-    
-    Logger.debug("Invalidated #{length(keys_to_remove)} cache entries matching pattern: #{inspect(pattern)}")
+
+    Logger.debug(
+      "Invalidated #{length(keys_to_remove)} cache entries matching pattern: #{inspect(pattern)}"
+    )
+
     {:noreply, new_state}
   end
 
@@ -205,7 +218,7 @@ defmodule Cybernetic.Core.CRDT.Cache do
   defp key_type(_), do: :other
 
   defp expired?(timestamp, now, ttl_ms) do
-    (now - timestamp) > ttl_ms
+    now - timestamp > ttl_ms
   end
 
   defp maybe_evict_lru(%{cache: cache, access_order: access_order, max_size: max_size} = state) do
@@ -213,14 +226,15 @@ defmodule Cybernetic.Core.CRDT.Cache do
       # Evict least recently used entries
       excess_count = map_size(cache) - max_size
       {keys_to_evict, remaining_order} = Enum.split(Enum.reverse(access_order), excess_count)
-      
-      new_cache = Enum.reduce(keys_to_evict, cache, fn key, acc_cache ->
-        Map.delete(acc_cache, key)
-      end)
-      
+
+      new_cache =
+        Enum.reduce(keys_to_evict, cache, fn key, acc_cache ->
+          Map.delete(acc_cache, key)
+        end)
+
       :telemetry.execute([:cyb, :crdt_cache, :eviction], %{count: excess_count}, %{reason: :lru})
       Logger.debug("Evicted #{excess_count} LRU cache entries")
-      
+
       %{state | cache: new_cache, access_order: Enum.reverse(remaining_order)}
     else
       state
@@ -229,24 +243,30 @@ defmodule Cybernetic.Core.CRDT.Cache do
 
   defp cleanup_expired_entries(state) do
     now = System.monotonic_time(:millisecond)
-    
-    {new_cache, expired_keys} = Enum.reduce(state.cache, {%{}, []}, fn {key, {value, timestamp}}, {acc_cache, acc_expired} ->
-      if expired?(timestamp, now, state.ttl_ms) do
-        {acc_cache, [key | acc_expired]}
-      else
-        {Map.put(acc_cache, key, {value, timestamp}), acc_expired}
-      end
-    end)
-    
-    new_access_order = Enum.reduce(expired_keys, state.access_order, fn key, access_order ->
-      List.delete(access_order, key)
-    end)
-    
+
+    {new_cache, expired_keys} =
+      Enum.reduce(state.cache, {%{}, []}, fn {key, {value, timestamp}},
+                                             {acc_cache, acc_expired} ->
+        if expired?(timestamp, now, state.ttl_ms) do
+          {acc_cache, [key | acc_expired]}
+        else
+          {Map.put(acc_cache, key, {value, timestamp}), acc_expired}
+        end
+      end)
+
+    new_access_order =
+      Enum.reduce(expired_keys, state.access_order, fn key, access_order ->
+        List.delete(access_order, key)
+      end)
+
     if length(expired_keys) > 0 do
-      :telemetry.execute([:cyb, :crdt_cache, :eviction], %{count: length(expired_keys)}, %{reason: :ttl})
+      :telemetry.execute([:cyb, :crdt_cache, :eviction], %{count: length(expired_keys)}, %{
+        reason: :ttl
+      })
+
       Logger.debug("Cleaned up #{length(expired_keys)} expired cache entries")
     end
-    
+
     %{state | cache: new_cache, access_order: new_access_order}
   end
 
@@ -264,5 +284,4 @@ defmodule Cybernetic.Core.CRDT.Cache do
   defp schedule_cleanup do
     Process.send_after(self(), :cleanup_expired, @cleanup_interval)
   end
-
 end

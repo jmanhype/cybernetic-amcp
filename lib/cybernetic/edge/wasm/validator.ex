@@ -10,18 +10,18 @@ defmodule Cybernetic.Edge.WASM.Validator do
 
   @telemetry [:cybernetic, :edge, :wasm, :validate]
   @default_limits [fuel: 5_000_000, timeout_ms: 50, max_memory_pages: 64]
-  
+
   # Cache the implementation selection
-  @implementation (
-    cond do
-      System.find_executable("wasmtime") != nil ->
-        Cybernetic.Edge.WASM.Validator.PortImpl
-      Code.ensure_loaded?(Wasmex) ->
-        Cybernetic.Edge.WASM.Validator.WasmexImpl
-      true ->
-        Cybernetic.Edge.WASM.Validator.NoopImpl
-    end
-  )
+  @implementation (cond do
+                     System.find_executable("wasmtime") != nil ->
+                       Cybernetic.Edge.WASM.Validator.PortImpl
+
+                     Code.ensure_loaded?(Wasmex) ->
+                       Cybernetic.Edge.WASM.Validator.WasmexImpl
+
+                     true ->
+                       Cybernetic.Edge.WASM.Validator.NoopImpl
+                   end)
 
   @impl true
   def load(bytes, opts \\ []) when is_binary(bytes) do
@@ -40,7 +40,7 @@ defmodule Cybernetic.Edge.WASM.Validator do
     :telemetry.execute(
       @telemetry ++ [:stop],
       %{duration: System.monotonic_time() - start},
-      %{result: (if is_tuple(res), do: elem(res, 0), else: :unknown)}
+      %{result: if(is_tuple(res), do: elem(res, 0), else: :unknown)}
     )
 
     res

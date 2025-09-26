@@ -24,13 +24,14 @@ defmodule Cybernetic.VSM.System4.Providers.Null do
 
   @impl true
   def generate(_prompt_or_messages, _opts \\ []) do
-    {:ok, %{
-      text: "Mock response from Null provider",
-      tokens: %{input: 10, output: 20},
-      usage: %{cost_usd: 0.0, latency_ms: 1},
-      tool_calls: [],
-      finish_reason: :stop
-    }}
+    {:ok,
+     %{
+       text: "Mock response from Null provider",
+       tokens: %{input: 10, output: 20},
+       usage: %{cost_usd: 0.0, latency_ms: 1},
+       tool_calls: [],
+       finish_reason: :stop
+     }}
   end
 
   @impl true

@@ -12,7 +12,8 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     [
       {"cyb.events", :topic},
       {"cyb.commands", :topic},
-      {"cyb.telemetry", :fanout},  # telemetry is fanout, not topic
+      # telemetry is fanout, not topic
+      {"cyb.telemetry", :fanout},
       {"cyb.vsm.s1", :topic},
       {"cyb.vsm.s2", :topic},
       {"cyb.vsm.s3", :topic},
@@ -37,7 +38,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
         setup_exchanges(channel)
         Confirm.select(channel)
         {:noreply, %{state | channel: channel}}
-      
+
       {:error, _} ->
         Process.send_after(self(), :retry_setup, 5000)
         {:noreply, state}
@@ -55,7 +56,11 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     GenServer.call(__MODULE__, {:publish, exchange, routing_key, payload, opts}, 5000)
   end
 
-  def handle_call({:publish, exchange, routing_key, payload, opts}, _from, %{channel: nil} = state) do
+  def handle_call(
+        {:publish, exchange, routing_key, payload, opts},
+        _from,
+        %{channel: nil} = state
+      ) do
     # Try to get channel again
     case Cybernetic.Transport.AMQP.Connection.get_channel() do
       {:ok, channel} ->
@@ -63,22 +68,27 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
         Confirm.select(channel)
         new_state = %{state | channel: channel}
         handle_call({:publish, exchange, routing_key, payload, opts}, nil, new_state)
-      
+
       {:error, _} ->
         {:reply, {:error, :no_channel}, state}
     end
   end
 
-  def handle_call({:publish, exchange, routing_key, payload, opts}, _from, %{channel: channel} = state) do
+  def handle_call(
+        {:publish, exchange, routing_key, payload, opts},
+        _from,
+        %{channel: channel} = state
+      ) do
     headers = build_headers(opts)
+
     base_message = %{
       "headers" => headers,
       "payload" => payload
     }
-    
+
     # Add security envelope using NonceBloom
     secured_message = NonceBloom.enrich_message(base_message, site: node())
-    
+
     case Jason.encode(secured_message) do
       {:ok, json} ->
         Basic.publish(
@@ -90,19 +100,21 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
           content_type: "application/json",
           headers: []
         )
-        
+
         # Wait for confirm using AMQP.Confirm
         case Confirm.wait_for_confirms(channel, 1500) do
           true ->
             {:reply, :ok, state}
+
           false ->
             Logger.error("Message nack'd by broker")
             {:reply, {:error, :nack}, state}
+
           :timeout ->
             Logger.error("Timeout waiting for confirm")
             {:reply, {:error, :confirm_timeout}, state}
         end
-      
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
@@ -118,7 +130,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
     commands_exchange = Map.get(exchanges, :commands, "cyb.commands")
     telemetry_exchange = Map.get(exchanges, :telemetry, "cyb.telemetry")
-    
+
     [
       {"cyb.s1.ops", commands_exchange, "s1.*"},
       {"cyb.s2.coord", commands_exchange, "s2.*"},
@@ -142,8 +154,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     }
   end
 
-
   defp generate_correlation_id do
-    "corr_#{System.unique_integer([:positive, :monotonic])}_#{:rand.uniform(999999)}"
+    "corr_#{System.unique_integer([:positive, :monotonic])}_#{:rand.uniform(999_999)}"
   end
 end

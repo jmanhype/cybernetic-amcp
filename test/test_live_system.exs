@@ -29,7 +29,7 @@ alias Cybernetic.VSM.System1.Agents.TelegramAgent
 telegram_command = %{
   message: %{
     text: "/status",
-    chat: %{id: 999999},
+    chat: %{id: 999_999},
     from: %{id: 12345, username: "testuser"}
   }
 }
@@ -58,25 +58,43 @@ Process.sleep(100)
 IO.puts("\n🔄 TESTING IN-MEMORY TRANSPORT:")
 alias Cybernetic.Transport.InMemory
 
-InMemory.publish("test", "s1.operation", %{
-  type: "vsm.s1.operation",
-  operation: "memory_test",
-  timestamp: DateTime.utc_now()
-}, [])
+InMemory.publish(
+  "test",
+  "s1.operation",
+  %{
+    type: "vsm.s1.operation",
+    operation: "memory_test",
+    timestamp: DateTime.utc_now()
+  },
+  []
+)
+
 IO.puts("  ✅ Published to InMemory transport")
 
-InMemory.publish("test", "s2.coordinate", %{
-  type: "vsm.s2.coordinate",
-  source_system: "s1",
-  operation: "coordinate_test"
-}, [])
+InMemory.publish(
+  "test",
+  "s2.coordinate",
+  %{
+    type: "vsm.s2.coordinate",
+    source_system: "s1",
+    operation: "coordinate_test"
+  },
+  []
+)
+
 IO.puts("  ✅ Triggered S2 coordination")
 
-InMemory.publish("test", "s4.intelligence", %{
-  type: "vsm.s4.intelligence",
-  analysis_request: "pattern_detection",
-  source_system: "s2"
-}, [])
+InMemory.publish(
+  "test",
+  "s4.intelligence",
+  %{
+    type: "vsm.s4.intelligence",
+    analysis_request: "pattern_detection",
+    source_system: "s2"
+  },
+  []
+)
+
 IO.puts("  ✅ Triggered S4 intelligence analysis")
 
 Process.sleep(100)
@@ -86,25 +104,37 @@ IO.puts("\n🎯 TESTING ALGEDONIC SIGNALS:")
 
 # Simulate errors to trigger pain signal
 for i <- 1..10 do
-  InMemory.publish("test", "s1.error", %{
-    type: "vsm.s1.error",
-    error: "test_error_#{i}",
-    timestamp: DateTime.utc_now()
-  }, [])
+  InMemory.publish(
+    "test",
+    "s1.error",
+    %{
+      type: "vsm.s1.error",
+      error: "test_error_#{i}",
+      timestamp: DateTime.utc_now()
+    },
+    []
+  )
 end
+
 IO.puts("  ✅ Triggered pain signal (10 errors)")
 
 Process.sleep(100)
 
 # Simulate successes to trigger pleasure signal
 for i <- 1..20 do
-  InMemory.publish("test", "s1.success", %{
-    type: "vsm.s1.success",
-    operation: "task_#{i}",
-    latency: :rand.uniform(50),
-    timestamp: DateTime.utc_now()
-  }, [])
+  InMemory.publish(
+    "test",
+    "s1.success",
+    %{
+      type: "vsm.s1.success",
+      operation: "task_#{i}",
+      latency: :rand.uniform(50),
+      timestamp: DateTime.utc_now()
+    },
+    []
+  )
 end
+
 IO.puts("  ✅ Triggered pleasure signal (20 successes)")
 
 Process.sleep(200)
@@ -124,10 +154,15 @@ test_pid = self()
 )
 
 # Trigger an operation that emits telemetry
-InMemory.publish("test", "s1.operation", %{
-  type: "vsm.s1.operation",
-  operation: "telemetry_test"
-}, [])
+InMemory.publish(
+  "test",
+  "s1.operation",
+  %{
+    type: "vsm.s1.operation",
+    operation: "telemetry_test"
+  },
+  []
+)
 
 receive do
   {:telemetry, ^telemetry_ref, measurements, metadata} ->

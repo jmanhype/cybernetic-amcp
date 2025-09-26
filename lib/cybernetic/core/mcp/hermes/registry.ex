@@ -12,13 +12,13 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
 
   defmodule Tool do
     @type t :: %__MODULE__{
-      name: String.t(),
-      description: String.t(),
-      parameters: map(),
-      handler: {module(), atom()},
-      capabilities: list(String.t()),
-      metadata: map()
-    }
+            name: String.t(),
+            description: String.t(),
+            parameters: map(),
+            handler: {module(), atom()},
+            capabilities: list(String.t()),
+            metadata: map()
+          }
 
     defstruct [:name, :description, :parameters, :handler, :capabilities, metadata: %{}]
   end
@@ -29,15 +29,16 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
 
   def init(_opts) do
     :ets.new(@registry_table, [:named_table, :public, :set, read_concurrency: true])
-    
+
     # Register builtin tools after init
     Process.send_after(self(), :register_builtin_tools, 100)
-    
-    {:ok, %{
-      tools: %{},
-      invocations: %{},
-      stats: %{total_calls: 0, success: 0, failure: 0}
-    }}
+
+    {:ok,
+     %{
+       tools: %{},
+       invocations: %{},
+       stats: %{total_calls: 0, success: 0, failure: 0}
+     }}
   end
 
   # Public API
@@ -64,14 +65,14 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   def await_ready(timeout \\ 2_000) do
     ref = make_ref()
     parent = self()
-    
+
     :telemetry.attach(
       {:mcp_ready, ref},
       @ready_event,
       {__MODULE__, :handle_mcp_ready, [parent]},
       nil
     )
-    
+
     receive do
       {:mcp_ready, _count} ->
         :telemetry.detach({:mcp_ready, ref})
@@ -117,18 +118,19 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
       capabilities: Keyword.get(opts, :capabilities, []),
       metadata: Keyword.get(opts, :metadata, %{})
     }
-    
+
     :ets.insert(@registry_table, {name, tool})
     new_state = put_in(state.tools[name], tool)
-    
+
     Logger.info("Registered MCP tool: #{name}")
     {:reply, {:ok, tool}, new_state}
   end
 
   def handle_call(:list_tools, _from, state) do
-    tools = :ets.tab2list(@registry_table)
-    |> Enum.map(fn {_name, tool} -> tool end)
-    
+    tools =
+      :ets.tab2list(@registry_table)
+      |> Enum.map(fn {_name, tool} -> tool end)
+
     {:reply, {:ok, tools}, state}
   end
 
@@ -137,6 +139,7 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
       {:ok, tool} ->
         # Track invocation
         invocation_id = generate_invocation_id()
+
         invocation = %{
           id: invocation_id,
           tool: name,
@@ -145,17 +148,17 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
           started_at: System.monotonic_time(:millisecond),
           from: from
         }
-        
+
         new_state = put_in(state.invocations[invocation_id], invocation)
-        
+
         # Spawn task to handle invocation
         Task.start(fn ->
           result = invoke_handler(tool, params, context)
           send(self(), {:invocation_complete, invocation_id, result})
         end)
-        
+
         {:reply, {:ok, invocation_id}, new_state}
-        
+
       {:error, :not_found} = error ->
         {:reply, error, state}
     end
@@ -170,33 +173,36 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     :telemetry.execute(@ready_event, %{count: tools_registered}, %{})
     {:noreply, state}
   end
-  
+
   def handle_info({:invocation_complete, invocation_id, result}, state) do
     case Map.get(state.invocations, invocation_id) do
       nil ->
         {:noreply, state}
-        
+
       invocation ->
         # Update stats
-        stats = case result do
-          {:ok, _} -> Map.update!(state.stats, :success, &(&1 + 1))
-          {:error, _} -> Map.update!(state.stats, :failure, &(&1 + 1))
-        end
-        |> Map.update!(:total_calls, &(&1 + 1))
-        
+        stats =
+          case result do
+            {:ok, _} -> Map.update!(state.stats, :success, &(&1 + 1))
+            {:error, _} -> Map.update!(state.stats, :failure, &(&1 + 1))
+          end
+          |> Map.update!(:total_calls, &(&1 + 1))
+
         # Clean up invocation
-        new_state = state
-        |> Map.put(:stats, stats)
-        |> update_in([:invocations], &Map.delete(&1, invocation_id))
-        
+        new_state =
+          state
+          |> Map.put(:stats, stats)
+          |> update_in([:invocations], &Map.delete(&1, invocation_id))
+
         # Emit telemetry
         duration = System.monotonic_time(:millisecond) - invocation.started_at
+
         :telemetry.execute(
           [:mcp, :tool, :invocation],
           %{duration: duration},
           %{tool: invocation.tool, success: match?({:ok, _}, result)}
         )
-        
+
         {:noreply, new_state}
     end
   end
@@ -206,76 +212,82 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   defp register_builtin_tools do
     tools = [
       # VSM Tools
-      {"vsm_query", %Tool{
-        name: "vsm_query",
-        description: "Query VSM system state",
-        parameters: %{system: :string, query: :string},
-        handler: {Cybernetic.Apps.VSM.Query, :execute},
-        capabilities: ["vsm", "query", "state"]
-      }},
-      
+      {"vsm_query",
+       %Tool{
+         name: "vsm_query",
+         description: "Query VSM system state",
+         parameters: %{system: :string, query: :string},
+         handler: {Cybernetic.Apps.VSM.Query, :execute},
+         capabilities: ["vsm", "query", "state"]
+       }},
+
       # CRDT Tools
-      {"crdt_merge", %Tool{
-        name: "crdt_merge",
-        description: "Merge CRDT states",
-        parameters: %{state1: :map, state2: :map},
-        handler: {Cybernetic.Core.CRDT.Graph, :merge},
-        capabilities: ["crdt", "merge", "distributed"]
-      }},
-      
-      {"crdt_query", %Tool{
-        name: "crdt_query",
-        description: "Query CRDT graph",
-        parameters: %{query: :string, params: :map},
-        handler: {Cybernetic.Core.CRDT.Graph, :query},
-        capabilities: ["crdt", "query", "graph"]
-      }},
-      
+      {"crdt_merge",
+       %Tool{
+         name: "crdt_merge",
+         description: "Merge CRDT states",
+         parameters: %{state1: :map, state2: :map},
+         handler: {Cybernetic.Core.CRDT.Graph, :merge},
+         capabilities: ["crdt", "merge", "distributed"]
+       }},
+      {"crdt_query",
+       %Tool{
+         name: "crdt_query",
+         description: "Query CRDT graph",
+         parameters: %{query: :string, params: :map},
+         handler: {Cybernetic.Core.CRDT.Graph, :query},
+         capabilities: ["crdt", "query", "graph"]
+       }},
+
       # Telemetry Tools
-      {"telemetry_emit", %Tool{
-        name: "telemetry_emit",
-        description: "Emit telemetry event",
-        parameters: %{event: :string, measurements: :map, metadata: :map},
-        handler: {Cybernetic.Core.Telemetry, :emit},
-        capabilities: ["telemetry", "metrics", "events"]
-      }},
-      
+      {"telemetry_emit",
+       %Tool{
+         name: "telemetry_emit",
+         description: "Emit telemetry event",
+         parameters: %{event: :string, measurements: :map, metadata: :map},
+         handler: {Cybernetic.Core.Telemetry, :emit},
+         capabilities: ["telemetry", "metrics", "events"]
+       }},
+
       # Security Tools
-      {"generate_nonce", %Tool{
-        name: "generate_nonce",
-        description: "Generate cryptographic nonce",
-        parameters: %{},
-        handler: {Cybernetic.Core.Security.NonceBloom, :generate_nonce},
-        capabilities: ["security", "nonce", "crypto"]
-      }},
-      
+      {"generate_nonce",
+       %Tool{
+         name: "generate_nonce",
+         description: "Generate cryptographic nonce",
+         parameters: %{},
+         handler: {Cybernetic.Core.Security.NonceBloom, :generate_nonce},
+         capabilities: ["security", "nonce", "crypto"]
+       }},
+
       # Telegram Tools
-      {"send_telegram", %Tool{
-        name: "send_telegram",
-        description: "Send message via Telegram",
-        parameters: %{chat_id: :string, text: :string, options: :map},
-        handler: {Cybernetic.Apps.Telegram.Client, :send_message},
-        capabilities: ["telegram", "messaging", "notification"]
-      }}
+      {"send_telegram",
+       %Tool{
+         name: "send_telegram",
+         description: "Send message via Telegram",
+         parameters: %{chat_id: :string, text: :string, options: :map},
+         handler: {Cybernetic.Apps.Telegram.Client, :send_message},
+         capabilities: ["telegram", "messaging", "notification"]
+       }}
     ]
-    
+
     # Insert directly into ETS to avoid self-call
     Enum.each(tools, fn {name, tool} ->
       :ets.insert(@registry_table, {name, tool})
     end)
-    
+
     Logger.info("Registered #{length(tools)} builtin MCP tools")
   end
 
   defp invoke_handler(%Tool{handler: {module, function}}, params, context) do
     try do
       # Add context to params if the handler supports it
-      args = if function_exported?(module, function, 2) do
-        [params, context]
-      else
-        [params]
-      end
-      
+      args =
+        if function_exported?(module, function, 2) do
+          [params, context]
+        else
+          [params]
+        end
+
       result = apply(module, function, args)
       {:ok, result}
     rescue
@@ -286,6 +298,6 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   end
 
   defp generate_invocation_id do
-    "inv_#{System.unique_integer([:positive, :monotonic])}_#{:rand.uniform(999999)}"
+    "inv_#{System.unique_integer([:positive, :monotonic])}_#{:rand.uniform(999_999)}"
   end
 end

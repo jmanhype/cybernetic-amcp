@@ -3,7 +3,7 @@ defmodule Cybernetic.Transport.AMQP do
   AMQP transport implementation using RabbitMQ.
   Production transport that uses the existing AMQP publisher.
   """
-  
+
   @behaviour Cybernetic.Transport.Behaviour
   alias Cybernetic.Core.Transport.AMQP.Publisher
 

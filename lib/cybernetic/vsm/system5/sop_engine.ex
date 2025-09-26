@@ -35,7 +35,11 @@ defmodule Cybernetic.VSM.System5.SOPEngine do
       _ = create(Map.merge(%{"source" => "s4"}, sop_attrs))
     end)
 
-    :telemetry.execute(@telemetry ++ [:create], %{count: length(list)}, %{source: :s4, episode: payload.episode})
+    :telemetry.execute(@telemetry ++ [:create], %{count: length(list)}, %{
+      source: :s4,
+      episode: payload.episode
+    })
+
     {:noreply, state}
   end
 
@@ -88,13 +92,24 @@ defmodule Cybernetic.VSM.System5.SOPEngine do
          sop <- load_version!(sop_id, v),
          {:ok, result} <- run_steps(sop["steps"] || [], input) do
       exec_id = generate_id()
-      :ets.insert(:sop_exec_log, {exec_id, sop_id, v, input, result, System.system_time(:millisecond)})
+
+      :ets.insert(
+        :sop_exec_log,
+        {exec_id, sop_id, v, input, result, System.system_time(:millisecond)}
+      )
+
       :telemetry.execute(@telemetry ++ [:execute], %{count: 1}, %{id: sop_id, version: v})
       {:reply, {:ok, %{exec_id: exec_id, result: result}}, state}
     else
-      [] -> {:reply, {:error, :not_found}, state}
+      [] ->
+        {:reply, {:error, :not_found}, state}
+
       {:error, reason} ->
-        :telemetry.execute(@telemetry ++ [:error], %{count: 1}, %{reason: inspect(reason), id: sop_id})
+        :telemetry.execute(@telemetry ++ [:error], %{count: 1}, %{
+          reason: inspect(reason),
+          id: sop_id
+        })
+
         {:reply, {:error, reason}, state}
     end
   end
@@ -108,8 +123,10 @@ defmodule Cybernetic.VSM.System5.SOPEngine do
 
   # naive, replace with proper action runners (AMQP, HTTP, function, etc.)
   defp run_steps([], input), do: {:ok, input}
+
   defp run_steps([%{"action" => "tag", "key" => k, "value" => val} | rest], input),
     do: run_steps(rest, Map.put(input, k, val))
+
   defp run_steps([unknown | _], _), do: {:error, {:unknown_step, unknown}}
 
   defp generate_id do
