@@ -23,6 +23,9 @@ defmodule Cybernetic.Application do
     children = [
       {Cluster.Supervisor, [Application.get_env(:libcluster, :topologies, []), [name: Cybernetic.ClusterSupervisor]]},
       
+      # Phoenix Edge Gateway Endpoint
+      Cybernetic.Edge.Gateway.Endpoint,
+      
       # Core Security
       Cybernetic.Core.Security.NonceBloom,
       
