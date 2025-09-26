@@ -195,7 +195,8 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
       commands: :topic,
       mcp_tools: :topic,
       s1: :topic,
-      vsm: :topic
+      vsm: :topic,
+      dlx: :fanout
     }
 
     for {key, exchange_name} <- exchanges do
@@ -214,6 +215,21 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
           Logger.error("Failed to declare exchange #{key}=#{exchange_name}: #{inspect(reason)}")
           error
       end
+    end
+
+    # Declare dead letter exchange (not in config)
+    case Exchange.declare(channel, "vsm.dlx", :fanout, durable: true, auto_delete: false) do
+      :ok ->
+        Logger.debug("Declared dead letter exchange: vsm.dlx (fanout)")
+        :ok
+
+      {:error, {:resource_locked, _}} ->
+        Logger.debug("Dead letter exchange already exists: vsm.dlx")
+        :ok
+
+      {:error, reason} = error ->
+        Logger.error("Failed to declare dead letter exchange vsm.dlx: #{inspect(reason)}")
+        error
     end
 
     :ok
