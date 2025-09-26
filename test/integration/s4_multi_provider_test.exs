@@ -20,9 +20,16 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
   @moduletag timeout: 120_000
 
   setup_all do
-    # Start required services
-    {:ok, _} = start_supervised(RateLimiter)
-    {:ok, _} = start_supervised(Service)
+    # Start required services (handle already_started case)
+    case start_supervised(RateLimiter) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+    end
+
+    case start_supervised(Service) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+    end
 
     # Wait for services to initialize
     :timer.sleep(1000)
