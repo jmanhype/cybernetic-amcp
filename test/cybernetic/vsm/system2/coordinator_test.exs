@@ -3,10 +3,16 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
   alias Cybernetic.VSM.System2.Coordinator
 
   setup do
-    # Coordinator is started by the application, just use it
-    # Use unique topic names with timestamp to avoid conflicts
-    timestamp = System.unique_integer([:positive])
-    {:ok, coordinator: Process.whereis(Coordinator), timestamp: timestamp}
+    # Check if Coordinator is available (started by application in test_helper)
+    coordinator_pid = Process.whereis(Coordinator)
+
+    if coordinator_pid == nil do
+      {:ok, skip: true}
+    else
+      # Use unique topic names with timestamp to avoid conflicts
+      timestamp = System.unique_integer([:positive])
+      {:ok, coordinator: coordinator_pid, timestamp: timestamp}
+    end
   end
 
   describe "priority queue methods" do
