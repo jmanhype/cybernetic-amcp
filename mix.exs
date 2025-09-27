@@ -77,6 +77,7 @@ defmodule Cybernetic.MixProject do
 
       # Testing
       {:stream_data, "~> 1.0", only: [:test, :dev]},
+      {:excoveralls, "~> 0.18", only: :test},
 
       # Web UI (Phoenix)
       {:phoenix, "~> 1.7"},
