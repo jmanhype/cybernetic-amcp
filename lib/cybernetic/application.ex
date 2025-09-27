@@ -53,8 +53,6 @@ defmodule Cybernetic.Application do
           {Cybernetic.Core.Aggregator.CentralAggregator, []},
           # S5 SOP Engine (must be before S4 Bridge so it can receive messages)
           {Cybernetic.VSM.System5.SOPEngine, []},
-          # S5 Policy Store
-          {Cybernetic.VSM.System5.Policy, []},
           # S5 Policy Intelligence Engine
           {Cybernetic.VSM.System5.PolicyIntelligence, []},
           # S4 Intelligence Layer
