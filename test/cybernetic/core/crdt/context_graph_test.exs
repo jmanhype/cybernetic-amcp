@@ -3,22 +3,16 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
   alias Cybernetic.Core.CRDT.ContextGraph
 
   setup do
-    # Wait for ContextGraph to be available (started by Application)
+    # Ensure ContextGraph is started (may be started by Application or needs manual start)
     pid =
-      Enum.reduce_while(1..50, nil, fn _, _ ->
-        case Process.whereis(ContextGraph) do
-          nil ->
-            Process.sleep(10)
-            {:cont, nil}
+      case Process.whereis(ContextGraph) do
+        nil ->
+          {:ok, pid} = ContextGraph.start_link([])
+          pid
 
-          pid ->
-            {:halt, pid}
-        end
-      end)
-
-    if pid == nil do
-      flunk("ContextGraph process not found after waiting")
-    end
+        existing_pid ->
+          existing_pid
+      end
 
     {:ok, graph: pid}
   end
