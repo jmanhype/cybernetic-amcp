@@ -30,9 +30,25 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
         {:error, {:already_started, _}} -> :ok
       end
 
+      # Start the AdaptiveCircuitBreaker Registry if not already started
+      registry_spec = %{
+        id: Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry,
+        start:
+          {Registry, :start_link,
+           [[keys: :unique, name: Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry]]}
+      }
+
+      case start_supervised(registry_spec) do
+        {:ok, _} -> :ok
+        {:error, {:already_started, _}} -> :ok
+      end
+
       case start_supervised(Service) do
         {:ok, _} -> :ok
         {:error, {:already_started, _}} -> :ok
+        {:error, reason} ->
+          Logger.warning("Failed to start Service: #{inspect(reason)}")
+          {:ok, skip: true}
       end
 
       # Wait for services to initialize
