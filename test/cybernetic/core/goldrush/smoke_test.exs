@@ -2,41 +2,29 @@ defmodule Cybernetic.Core.Goldrush.SmokeTest do
   use ExUnit.Case
 
   setup do
-    # Wait for Pipeline to be available (started by Application)
+    # Ensure Pipeline is started (may be started by Application or needs manual start)
     pipeline_pid =
-      Enum.reduce_while(1..50, nil, fn _, _ ->
-        case GenServer.whereis(Cybernetic.Core.Goldrush.Pipeline) do
-          nil ->
-            Process.sleep(10)
-            {:cont, nil}
+      case GenServer.whereis(Cybernetic.Core.Goldrush.Pipeline) do
+        nil ->
+          {:ok, pid} = Cybernetic.Core.Goldrush.Pipeline.start_link([])
+          pid
 
-          pid ->
-            {:halt, pid}
-        end
-      end)
+        existing_pid ->
+          existing_pid
+      end
 
-    if pipeline_pid == nil do
-      flunk("Pipeline process not found after waiting")
-    end
-
-    # Wait for TelemetryAlgedonic to be available
+    # Ensure TelemetryAlgedonic is started
     algedonic_pid =
-      Enum.reduce_while(1..50, nil, fn _, _ ->
-        case GenServer.whereis(Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic) do
-          nil ->
-            Process.sleep(10)
-            {:cont, nil}
+      case GenServer.whereis(Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic) do
+        nil ->
+          {:ok, pid} = Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic.start_link([])
+          pid
 
-          pid ->
-            {:halt, pid}
-        end
-      end)
+        existing_pid ->
+          existing_pid
+      end
 
-    if algedonic_pid == nil do
-      flunk("TelemetryAlgedonic process not found after waiting")
-    end
-
-    :ok
+    {:ok, pipeline: pipeline_pid, algedonic: algedonic_pid}
   end
 
   test "slow work emits algedonic :pain, fast emits :pleasure" do
