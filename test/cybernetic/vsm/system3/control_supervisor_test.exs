@@ -3,8 +3,12 @@ defmodule Cybernetic.VSM.System3.ControlSupervisorTest do
   alias Cybernetic.VSM.System3.ControlSupervisor
 
   setup do
-    # Start the control supervisor
-    {:ok, pid} = ControlSupervisor.start_link()
+    # Start the control supervisor (handle already_started case)
+    pid =
+      case ControlSupervisor.start_link() do
+        {:ok, pid} -> pid
+        {:error, {:already_started, pid}} -> pid
+      end
 
     on_exit(fn ->
       if Process.alive?(pid), do: GenServer.stop(pid)
