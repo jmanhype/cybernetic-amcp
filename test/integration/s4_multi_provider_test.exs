@@ -181,7 +181,7 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
       Logger.info("🚀 Starting end-to-end S4 analysis...")
 
       # Analyze episode through S4 Service
-      case Service.analyze(episode) do
+      case Service.analyze_episode(episode) do
         {:ok, analysis} ->
           Logger.info("✓ S4 analysis completed successfully")
 
@@ -315,7 +315,7 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
         })
 
       # Trigger analysis that should emit telemetry
-      Service.analyze(episode)
+      Service.analyze_episode(episode)
 
       # Collect telemetry events
       received_events = collect_telemetry_events([], 5000)
