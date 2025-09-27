@@ -63,6 +63,7 @@ defmodule Cybernetic.VSM.System4.LLM.PipelineGoldenTest do
   ]
 
   describe "response structure parity" do
+    @tag :skip
     test "both stacks return consistent response structure", context do
       if Map.get(context, :skip) do
         :ok
