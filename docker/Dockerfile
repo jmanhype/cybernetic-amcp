@@ -61,9 +61,6 @@ WORKDIR /app
 # Copy release from builder
 COPY --from=builder --chown=cybernetic:cybernetic /app/_build/prod/rel/cybernetic ./
 
-# Copy configuration templates
-COPY --chown=cybernetic:cybernetic docker/config ./config
-
 # Set environment
 ENV HOME=/app \
     LANG=en_US.UTF-8 \
