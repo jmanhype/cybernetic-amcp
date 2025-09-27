@@ -161,6 +161,12 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       Process.sleep(50)
 
       # Old entry should be pruned
+      # Ensure table exists before accessing
+      case :ets.whereis(:cyb_agg_window) do
+        :undefined -> flunk("ETS table :cyb_agg_window does not exist")
+        _ -> :ok
+      end
+
       entries = :ets.tab2list(:cyb_agg_window)
       timestamps = Enum.map(entries, fn {ts, _} -> ts end)
 
