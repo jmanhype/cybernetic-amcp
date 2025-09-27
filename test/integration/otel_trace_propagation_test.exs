@@ -16,7 +16,12 @@ defmodule Cybernetic.Integration.OTELTracePropagationTest do
     OTEL.setup()
 
     # Clear any existing spans for clean test state
-    :otel_batch_processor.force_flush()
+    # Note: force_flush/0 is not available in all otel_batch_processor versions
+    try do
+      :otel_batch_processor.force_flush()
+    rescue
+      UndefinedFunctionError -> :ok
+    end
 
     :ok
   end
