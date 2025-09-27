@@ -8,7 +8,10 @@ defmodule Cybernetic.MixProject do
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      test_coverage: [
+        summary: [threshold: 25]
+      ]
     ]
   end
 
