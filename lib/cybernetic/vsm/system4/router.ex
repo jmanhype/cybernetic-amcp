@@ -105,12 +105,12 @@ defmodule Cybernetic.VSM.System4.Router do
             try_chain(episode, rest, opts, attempts + 1)
 
           {:error, reason} ->
-            Logger.error("S4 Router: Provider #{provider} failed permanently: #{reason}")
+            Logger.error("S4 Router: Provider #{provider} failed permanently: #{inspect(reason)}")
             {:error, reason}
         end
 
       {:error, reason} ->
-        Logger.error("S4 Router: Provider #{provider} not available: #{reason}")
+        Logger.error("S4 Router: Provider #{provider} not available: #{inspect(reason)}")
         try_chain(episode, rest, opts, attempts)
     end
   end

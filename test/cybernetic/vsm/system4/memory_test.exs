@@ -113,32 +113,38 @@ defmodule Cybernetic.VSM.System4.MemoryTest do
     end
 
     test "clears all memory when :all specified", context do
-      if Map.get(context, :skip), do: :ok
-      Memory.store("episode-1", :user, "Message 1", %{})
-      Memory.store("episode-2", :user, "Message 2", %{})
+      if Map.get(context, :skip) do
+        :ok
+      else
+        Memory.store("episode-1", :user, "Message 1", %{})
+        Memory.store("episode-2", :user, "Message 2", %{})
 
-      Memory.clear(:all)
+        Memory.clear(:all)
 
-      {:ok, context1} = Memory.get_context("episode-1")
-      {:ok, context2} = Memory.get_context("episode-2")
+        {:ok, context1} = Memory.get_context("episode-1")
+        {:ok, context2} = Memory.get_context("episode-2")
 
-      assert context1 == []
-      assert context2 == []
+        assert context1 == []
+        assert context2 == []
+      end
     end
   end
 
   describe "stats/0" do
     test "returns memory statistics", context do
-      if Map.get(context, :skip), do: :ok
-      Memory.store("episode-1", :user, "Test message", %{})
+      if Map.get(context, :skip) do
+        :ok
+      else
+        Memory.store("episode-1", :user, "Test message", %{})
 
-      stats = Memory.stats()
+        stats = Memory.stats()
 
-      assert stats.total_entries >= 1
-      assert stats.total_tokens > 0
-      assert stats.active_episodes >= 1
-      assert is_integer(stats.cache_hits)
-      assert is_integer(stats.cache_misses)
+        assert stats.total_entries >= 1
+        assert stats.total_tokens > 0
+        assert stats.active_episodes >= 1
+        assert is_integer(stats.cache_hits)
+        assert is_integer(stats.cache_misses)
+      end
     end
   end
 
