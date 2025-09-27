@@ -30,45 +30,50 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
     end
 
     test "analyzes policy evolution patterns", context do
-      if Map.get(context, :skip), do: :ok
-      policy_id = "test_policy_001"
+      if Map.get(context, :skip) do
+        :ok
+      else
+        policy_id = "test_policy_001"
 
-      context = %{
-        domain: "operational_efficiency",
-        last_review: "2024-01-15",
-        performance_metrics: %{
-          compliance_rate: 0.95,
-          effectiveness_score: 0.82
+        context = %{
+          domain: "operational_efficiency",
+          last_review: "2024-01-15",
+          performance_metrics: %{
+            compliance_rate: 0.95,
+            effectiveness_score: 0.82
+          }
         }
-      }
 
-      assert {:ok, analysis} = PolicyIntelligence.analyze_policy_evolution(policy_id, context)
-      assert Map.has_key?(analysis, :summary)
-      assert Map.has_key?(analysis, :recommendations)
-      assert is_list(analysis.recommendations)
+        assert {:ok, analysis} = PolicyIntelligence.analyze_policy_evolution(policy_id, context)
+        assert Map.has_key?(analysis, :summary)
+        assert Map.has_key?(analysis, :recommendations)
+        assert is_list(analysis.recommendations)
+      end
     end
 
     test "provides governance recommendations", context do
-      if Map.get(context, :skip), do: :ok
+      if Map.get(context, :skip) do
+        :ok
+      else
+        proposed_policy = %{
+          "id" => "new_security_policy",
+          "type" => "security",
+          "scope" => "cross_system",
+          "authority_level" => "high",
+          "requirements" => ["encryption", "access_control", "audit_logging"]
+        }
 
-      proposed_policy = %{
-        "id" => "new_security_policy",
-        "type" => "security",
-        "scope" => "cross_system",
-        "authority_level" => "high",
-        "requirements" => ["encryption", "access_control", "audit_logging"]
-      }
+        current_policies = [
+          %{"id" => "existing_auth_policy", "type" => "security", "scope" => "s1_operations"},
+          %{"id" => "data_policy", "type" => "data_governance", "scope" => "enterprise"}
+        ]
 
-      current_policies = [
-        %{"id" => "existing_auth_policy", "type" => "security", "scope" => "s1_operations"},
-        %{"id" => "data_policy", "type" => "data_governance", "scope" => "enterprise"}
-      ]
+        assert {:ok, recommendations} =
+                 PolicyIntelligence.recommend_governance(proposed_policy, current_policies)
 
-      assert {:ok, recommendations} =
-               PolicyIntelligence.recommend_governance(proposed_policy, current_policies)
-
-      assert Map.has_key?(recommendations, :summary)
-      assert Map.has_key?(recommendations, :approval_status)
+        assert Map.has_key?(recommendations, :summary)
+        assert Map.has_key?(recommendations, :approval_status)
+      end
     end
 
     test "evolves meta-policies based on system performance", context do

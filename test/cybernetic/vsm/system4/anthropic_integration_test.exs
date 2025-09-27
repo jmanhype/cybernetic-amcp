@@ -90,9 +90,9 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
     end
 
     test "LLM Bridge integration with mocked Anthropic provider", %{episode: episode} do
-      # Create a mock provider that behaves like Anthropic
-      mock_provider = %{
-        analyze_episode: fn _episode, _opts ->
+      # Create a mock provider module that behaves like Anthropic
+      defmodule MockProvider do
+        def analyze_episode(_episode, _opts) do
           {:ok,
            %{
              summary: "Mock analysis: Resource contention detected between S1 workers",
@@ -132,7 +132,9 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
              ]
            }}
         end
-      }
+      end
+
+      mock_provider = MockProvider
 
       # Start LLM Bridge with mock provider (handle already_started)
       bridge_pid =
@@ -206,12 +208,14 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
     end
 
     test "handles Anthropic provider errors gracefully", %{episode: episode} do
-      # Create a provider that fails
-      failing_provider = %{
-        analyze_episode: fn _episode, _opts ->
+      # Create a provider module that fails
+      defmodule FailingProvider do
+        def analyze_episode(_episode, _opts) do
           {:error, {:http_error, 401, "Invalid API key"}}
         end
-      }
+      end
+
+      failing_provider = FailingProvider
 
       # Start LLM Bridge with failing provider (handle already_started)
       bridge_pid =
@@ -253,9 +257,9 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
     end
 
     test "OpenTelemetry tracing works with Anthropic provider", %{episode: episode} do
-      # Mock provider that simulates successful analysis
-      traced_provider = %{
-        analyze_episode: fn episode, opts ->
+      # Mock provider module that simulates successful analysis
+      defmodule TracedProvider do
+        def analyze_episode(episode, _opts) do
           # Simulate the OTEL.with_span call
           Cybernetic.Telemetry.OTEL.with_span "anthropic.analyze_episode", %{
             model: "claude-3-5-sonnet-20241022",
@@ -272,11 +276,11 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
              }}
           end
         end
-      }
+      end
 
       # This test verifies that tracing doesn't break the provider
       # In a real environment, you'd capture actual trace spans
-      {:ok, result} = traced_provider.analyze_episode(episode, [])
+      {:ok, result} = TracedProvider.analyze_episode(episode, [])
 
       assert result.summary == "Traced analysis completed"
       assert result.risk_level == "medium"
