@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Cybernetic VSM Framework
 # Stage 1: Build
-FROM elixir:1.18.4-otp-28-alpine AS builder
+FROM elixir:1.17.3-otp-27-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
