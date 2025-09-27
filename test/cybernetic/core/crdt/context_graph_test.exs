@@ -3,9 +3,23 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
   alias Cybernetic.Core.CRDT.ContextGraph
 
   setup do
-    # Use existing instance started by Application
-    # Don't stop it since it's managed by the supervision tree
-    pid = Process.whereis(ContextGraph)
+    # Wait for ContextGraph to be available (started by Application)
+    pid =
+      Enum.reduce_while(1..50, nil, fn _, _ ->
+        case Process.whereis(ContextGraph) do
+          nil ->
+            Process.sleep(10)
+            {:cont, nil}
+
+          pid ->
+            {:halt, pid}
+        end
+      end)
+
+    if pid == nil do
+      flunk("ContextGraph process not found after waiting")
+    end
+
     {:ok, graph: pid}
   end
 
