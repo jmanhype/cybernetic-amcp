@@ -3,8 +3,12 @@ defmodule Cybernetic.Security.AuthManagerTest do
   alias Cybernetic.Security.AuthManager
 
   setup do
-    # Start AuthManager for each test
-    {:ok, pid} = AuthManager.start_link()
+    # Start AuthManager for each test (handle already_started case)
+    pid =
+      case AuthManager.start_link() do
+        {:ok, pid} -> pid
+        {:error, {:already_started, pid}} -> pid
+      end
 
     on_exit(fn ->
       if Process.alive?(pid), do: GenServer.stop(pid)

@@ -6,8 +6,12 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
 
   describe "Policy Intelligence Engine" do
     setup do
-      # Start the PolicyIntelligence process for testing
-      {:ok, pid} = PolicyIntelligence.start_link()
+      # Start the PolicyIntelligence process for testing (handle already_started case)
+      pid =
+        case PolicyIntelligence.start_link() do
+          {:ok, pid} -> pid
+          {:error, {:already_started, pid}} -> pid
+        end
 
       on_exit(fn ->
         if Process.alive?(pid) do
