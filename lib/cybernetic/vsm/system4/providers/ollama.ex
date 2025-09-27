@@ -100,10 +100,25 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
 
   @impl Cybernetic.VSM.System4.LLMProvider
   def health_check do
-    case make_ollama_request(%{}, "/api/tags") do
-      {:ok, %{"models" => models}} when is_list(models) -> :ok
-      {:ok, _} -> {:error, :no_models_available}
-      {:error, reason} -> {:error, reason}
+    url = "#{get_endpoint()}/api/tags"
+    options = [timeout: 5_000, recv_timeout: 5_000]
+
+    case HTTPoison.get(url, [], options) do
+      {:ok, %{status_code: 200, body: body}} ->
+        case Jason.decode(body) do
+          {:ok, %{"models" => models}} when is_list(models) -> :ok
+          {:ok, _} -> {:error, :no_models_available}
+          {:error, _} -> {:error, :invalid_response}
+        end
+
+      {:ok, %{status_code: _}} ->
+        {:error, :server_unavailable}
+
+      {:error, %HTTPoison.Error{reason: :econnrefused}} ->
+        {:error, :server_unavailable}
+
+      {:error, _} ->
+        {:error, :server_unavailable}
     end
   end
 
