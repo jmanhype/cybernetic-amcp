@@ -5,19 +5,34 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
   setup do
     # Use existing instance started by Application
     # Don't stop it since it's managed by the supervision tree
-    pid = Process.whereis(ContextGraph)
+    # Wait for process to be available (max 5 seconds)
+    pid = wait_for_process(ContextGraph, 50)
 
-    case pid do
+    unless pid do
+      raise "ContextGraph process not available after 5 seconds"
+    end
+
+    {:ok, graph: pid}
+  end
+
+  defp wait_for_process(name, retries) when retries > 0 do
+    case Process.whereis(name) do
       nil ->
-        # Start if not running
-        {:ok, pid} = ContextGraph.start_link()
-        {:ok, graph: pid}
+        Process.sleep(100)
+        wait_for_process(name, retries - 1)
 
       pid when is_pid(pid) ->
-        # Use existing instance
-        {:ok, graph: pid}
+        # Verify process is actually alive
+        if Process.alive?(pid) do
+          pid
+        else
+          Process.sleep(100)
+          wait_for_process(name, retries - 1)
+        end
     end
   end
+
+  defp wait_for_process(_name, 0), do: nil
 
   describe "distributed sync" do
     test "initializes with node monitoring enabled" do
