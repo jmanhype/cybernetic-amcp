@@ -69,43 +69,47 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
     end
 
     test "routes code_gen episodes to OpenAI primary chain", context do
-      if Map.get(context, :skip), do: :ok
+      if Map.get(context, :skip) do
+        :ok
+      else
+        episode =
+          create_test_episode(:code_gen, %{
+            title: "Generate Authentication Module",
+            data: %{
+              language: "elixir",
+              requirements: ["JWT validation", "role-based access"],
+              context: "web application"
+            }
+          })
 
-      episode =
-        create_test_episode(:code_gen, %{
-          title: "Generate Authentication Module",
-          data: %{
-            language: "elixir",
-            requirements: ["JWT validation", "role-based access"],
-            context: "web application"
-          }
-        })
+        # Should route to [:openai, :anthropic] chain
+        chain = Router.select_chain(episode, [])
+        assert chain == [:openai, :anthropic]
 
-      # Should route to [:openai, :anthropic] chain
-      chain = Router.select_chain(episode, [])
-      assert chain == [:openai, :anthropic]
-
-      Logger.info("✓ Code generation episode correctly routed to OpenAI primary")
+        Logger.info("✓ Code generation episode correctly routed to OpenAI primary")
+      end
     end
 
     test "routes anomaly_detection to balanced chain", context do
-      if Map.get(context, :skip), do: :ok
+      if Map.get(context, :skip) do
+        :ok
+      else
+        episode =
+          create_test_episode(:anomaly_detection, %{
+            title: "Unusual System Behavior Detected",
+            data: %{
+              metric: "response_time",
+              threshold: "95th percentile",
+              deviation: "300% above normal"
+            }
+          })
 
-      episode =
-        create_test_episode(:anomaly_detection, %{
-          title: "Unusual System Behavior Detected",
-          data: %{
-            metric: "response_time",
-            threshold: "95th percentile",
-            deviation: "300% above normal"
-          }
-        })
+        # Should route to [:anthropic, :openai, :ollama] chain
+        chain = Router.select_chain(episode, [])
+        assert chain == [:anthropic, :openai, :ollama]
 
-      # Should route to [:anthropic, :openai, :ollama] chain
-      chain = Router.select_chain(episode, [])
-      assert chain == [:anthropic, :openai, :ollama]
-
-      Logger.info("✓ Anomaly detection episode correctly routed to balanced chain")
+        Logger.info("✓ Anomaly detection episode correctly routed to balanced chain")
+      end
     end
   end
 
@@ -178,54 +182,56 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
   describe "Complete S4 Analysis Flow" do
     @tag :requires_api_keys
     test "end-to-end episode analysis with provider fallback", context do
-      if Map.get(context, :skip), do: :ok
+      if Map.get(context, :skip) do
+        :ok
+      else
+        episode =
+          create_test_episode(:policy_review, %{
+            title: "Critical Security Incident Response",
+            data: %{
+              incident_type: "data_breach",
+              affected_systems: ["user_db", "audit_logs"],
+              severity: "critical",
+              timeline: "2024-01-15T10:30:00Z"
+            },
+            context: %{
+              previous_incidents: 2,
+              compliance_frameworks: ["SOC2", "GDPR"],
+              business_impact: "high"
+            }
+          })
 
-      episode =
-        create_test_episode(:policy_review, %{
-          title: "Critical Security Incident Response",
-          data: %{
-            incident_type: "data_breach",
-            affected_systems: ["user_db", "audit_logs"],
-            severity: "critical",
-            timeline: "2024-01-15T10:30:00Z"
-          },
-          context: %{
-            previous_incidents: 2,
-            compliance_frameworks: ["SOC2", "GDPR"],
-            business_impact: "high"
-          }
-        })
+        Logger.info("🚀 Starting end-to-end S4 analysis...")
 
-      Logger.info("🚀 Starting end-to-end S4 analysis...")
+        # Analyze episode through S4 Service
+        case Service.analyze_episode(episode) do
+          {:ok, analysis} ->
+            Logger.info("✓ S4 analysis completed successfully")
 
-      # Analyze episode through S4 Service
-      case Service.analyze_episode(episode) do
-        {:ok, analysis} ->
-          Logger.info("✓ S4 analysis completed successfully")
+            # Verify analysis structure
+            assert is_binary(analysis.text)
+            assert is_map(analysis.tokens)
+            assert is_map(analysis.usage)
+            assert is_list(analysis.sop_suggestions)
+            assert is_list(analysis.recommendations)
 
-          # Verify analysis structure
-          assert is_binary(analysis.text)
-          assert is_map(analysis.tokens)
-          assert is_map(analysis.usage)
-          assert is_list(analysis.sop_suggestions)
-          assert is_list(analysis.recommendations)
+            Logger.info("  - Analysis text: #{String.length(analysis.text)} characters")
 
-          Logger.info("  - Analysis text: #{String.length(analysis.text)} characters")
+            Logger.info(
+              "  - Tokens used: #{analysis.tokens.input} input, #{analysis.tokens.output} output"
+            )
 
-          Logger.info(
-            "  - Tokens used: #{analysis.tokens.input} input, #{analysis.tokens.output} output"
-          )
+            Logger.info("  - Cost: $#{Float.round(analysis.usage.cost_usd, 4)}")
+            Logger.info("  - SOP suggestions: #{length(analysis.sop_suggestions)}")
+            Logger.info("  - Recommendations: #{length(analysis.recommendations)}")
 
-          Logger.info("  - Cost: $#{Float.round(analysis.usage.cost_usd, 4)}")
-          Logger.info("  - SOP suggestions: #{length(analysis.sop_suggestions)}")
-          Logger.info("  - Recommendations: #{length(analysis.recommendations)}")
+            # Test SOP generation from analysis
+            test_sop_generation(analysis, episode)
 
-          # Test SOP generation from analysis
-          test_sop_generation(analysis, episode)
-
-        {:error, reason} ->
-          Logger.warning("S4 analysis failed (expected if no API keys): #{inspect(reason)}")
-          # This is acceptable in test environment without API keys
+          {:error, reason} ->
+            Logger.warning("S4 analysis failed (expected if no API keys): #{inspect(reason)}")
+            # This is acceptable in test environment without API keys
+        end
       end
     end
 
@@ -307,50 +313,53 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
 
   describe "Telemetry and Observability" do
     test "telemetry events are emitted during analysis", context do
-      if Map.get(context, :skip), do: :ok
-      # Set up telemetry handler to capture events
-      events = []
-      ref = make_ref()
+      if Map.get(context, :skip) do
+        :ok
+      else
+        # Set up telemetry handler to capture events
+        events = []
+        ref = make_ref()
 
-      :telemetry.attach_many(
-        "s4_test_handler_#{inspect(ref)}",
-        [
-          [:cybernetic, :s4, :anthropic, :request],
-          [:cybernetic, :s4, :openai, :request],
-          [:cybernetic, :s4, :ollama, :request],
-          [:cybernetic, :s3, :rate_limiter]
-        ],
-        fn event, measurements, metadata, acc ->
-          send(self(), {:telemetry_event, event, measurements, metadata})
-          acc
-        end,
-        events
-      )
+        :telemetry.attach_many(
+          "s4_test_handler_#{inspect(ref)}",
+          [
+            [:cybernetic, :s4, :anthropic, :request],
+            [:cybernetic, :s4, :openai, :request],
+            [:cybernetic, :s4, :ollama, :request],
+            [:cybernetic, :s3, :rate_limiter]
+          ],
+          fn event, measurements, metadata, acc ->
+            send(self(), {:telemetry_event, event, measurements, metadata})
+            acc
+          end,
+          events
+        )
 
-      episode =
-        create_test_episode(:root_cause, %{
-          title: "Telemetry Test Episode",
-          data: %{test: true}
-        })
+        episode =
+          create_test_episode(:root_cause, %{
+            title: "Telemetry Test Episode",
+            data: %{test: true}
+          })
 
-      # Trigger analysis that should emit telemetry
-      Service.analyze_episode(episode)
+        # Trigger analysis that should emit telemetry
+        Service.analyze_episode(episode)
 
-      # Collect telemetry events
-      received_events = collect_telemetry_events([], 5000)
+        # Collect telemetry events
+        received_events = collect_telemetry_events([], 5000)
 
-      Logger.info("📊 Telemetry events captured: #{length(received_events)}")
+        Logger.info("📊 Telemetry events captured: #{length(received_events)}")
 
-      for {event, measurements, metadata} <- received_events do
-        Logger.info("  - Event: #{inspect(event)}")
-        Logger.info("    Measurements: #{inspect(measurements)}")
-        Logger.info("    Metadata: #{inspect(metadata)}")
+        for {event, measurements, metadata} <- received_events do
+          Logger.info("  - Event: #{inspect(event)}")
+          Logger.info("    Measurements: #{inspect(measurements)}")
+          Logger.info("    Metadata: #{inspect(metadata)}")
+        end
+
+        # Cleanup
+        :telemetry.detach("s4_test_handler_#{inspect(ref)}")
+
+        assert length(received_events) > 0
       end
-
-      # Cleanup
-      :telemetry.detach("s4_test_handler_#{inspect(ref)}")
-
-      assert length(received_events) > 0
     end
   end
 

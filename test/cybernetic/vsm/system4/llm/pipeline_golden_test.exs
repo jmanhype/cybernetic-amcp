@@ -64,27 +64,30 @@ defmodule Cybernetic.VSM.System4.LLM.PipelineGoldenTest do
 
   describe "response structure parity" do
     test "both stacks return consistent response structure", context do
-      if Map.get(context, :skip), do: :ok
-      # Test with a simple episode
-      episode = %Episode{
-        id: "structure_test",
-        kind: :classification,
-        priority: :normal,
-        source_system: :test,
-        created_at: DateTime.utc_now(),
-        data: "Classify this text: 'The product arrived damaged'"
-      }
+      if Map.get(context, :skip) do
+        :ok
+      else
+        # Test with a simple episode
+        episode = %Episode{
+          id: "structure_test",
+          kind: :classification,
+          priority: :normal,
+          source_system: :test,
+          created_at: DateTime.utc_now(),
+          data: "Classify this text: 'The product arrived damaged'"
+        }
 
-      # Get result from legacy stack
-      Application.put_env(:cybernetic, :llm_stack, stack: :legacy_httpoison)
-      {:ok, legacy_result, _info} = Router.route(episode, max_tokens: 50)
+        # Get result from legacy stack
+        Application.put_env(:cybernetic, :llm_stack, stack: :legacy_httpoison)
+        {:ok, legacy_result, _info} = Router.route(episode, max_tokens: 50)
 
-      # Get result from req_llm pipeline
-      Application.put_env(:cybernetic, :llm_stack, stack: :req_llm_pipeline)
-      {:ok, pipeline_result, _info} = Router.route(episode, max_tokens: 50)
+        # Get result from req_llm pipeline
+        Application.put_env(:cybernetic, :llm_stack, stack: :req_llm_pipeline)
+        {:ok, pipeline_result, _info} = Router.route(episode, max_tokens: 50)
 
-      # Verify structure compatibility
-      assert_response_structure(legacy_result, pipeline_result)
+        # Verify structure compatibility
+        assert_response_structure(legacy_result, pipeline_result)
+      end
     end
 
     # Skip by default to avoid API costs
