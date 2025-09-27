@@ -149,6 +149,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
     test "handles multiple wire_neighbors calls" do
       # Multiple wiring attempts should not cause issues
       pid = Process.whereis(ContextGraph)
+
       for _ <- 1..5 do
         send(pid, :wire_neighbors)
         Process.sleep(10)
@@ -161,6 +162,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
     test "survives rapid node events" do
       # Rapid node up/down events
       pid = Process.whereis(ContextGraph)
+
       for i <- 1..10 do
         node = :"node#{i}@test"
         send(pid, {:nodeup, node, %{}})
