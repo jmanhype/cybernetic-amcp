@@ -44,8 +44,12 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
       end
 
       case start_supervised(Service) do
-        {:ok, _} -> :ok
-        {:error, {:already_started, _}} -> :ok
+        {:ok, _} ->
+          :ok
+
+        {:error, {:already_started, _}} ->
+          :ok
+
         {:error, reason} ->
           Logger.warning("Failed to start Service: #{inspect(reason)}")
           {:ok, skip: true}
