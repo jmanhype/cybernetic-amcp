@@ -2,24 +2,29 @@ defmodule Cybernetic.Core.Goldrush.SmokeTest do
   use ExUnit.Case
 
   setup do
-    # Ensure Pipeline and TelemetryAlgedonic are started
-    case GenServer.whereis(Cybernetic.Core.Goldrush.Pipeline) do
-      nil ->
-        {:ok, _} = Cybernetic.Core.Goldrush.Pipeline.start_link([])
+    # Ensure Pipeline is started (may be started by Application or needs manual start)
+    pipeline_pid =
+      case GenServer.whereis(Cybernetic.Core.Goldrush.Pipeline) do
+        nil ->
+          {:ok, pid} = Cybernetic.Core.Goldrush.Pipeline.start_link([])
+          pid
 
-      _ ->
-        :ok
-    end
+        existing_pid ->
+          existing_pid
+      end
 
-    case GenServer.whereis(Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic) do
-      nil ->
-        {:ok, _} = Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic.start_link([])
+    # Ensure TelemetryAlgedonic is started
+    algedonic_pid =
+      case GenServer.whereis(Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic) do
+        nil ->
+          {:ok, pid} = Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic.start_link([])
+          pid
 
-      _ ->
-        :ok
-    end
+        existing_pid ->
+          existing_pid
+      end
 
-    :ok
+    {:ok, pipeline: pipeline_pid, algedonic: algedonic_pid}
   end
 
   test "slow work emits algedonic :pain, fast emits :pleasure" do

@@ -3,11 +3,23 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
   alias Cybernetic.Core.Aggregator.CentralAggregator
 
   setup do
-    # Get or start CentralAggregator
+    # Ensure CentralAggregator is started (may be started by Application or needs manual start)
     pid =
       case Process.whereis(CentralAggregator) do
         nil ->
           {:ok, p} = CentralAggregator.start_link([])
+          # Wait for ETS table to be created by init
+          Enum.reduce_while(1..50, nil, fn _, _ ->
+            case :ets.whereis(:cyb_agg_window) do
+              :undefined ->
+                Process.sleep(10)
+                {:cont, nil}
+
+              _ ->
+                {:halt, :ok}
+            end
+          end)
+
           p
 
         existing_pid ->
@@ -161,6 +173,12 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       Process.sleep(50)
 
       # Old entry should be pruned
+      # Ensure table exists before accessing
+      case :ets.whereis(:cyb_agg_window) do
+        :undefined -> flunk("ETS table :cyb_agg_window does not exist")
+        _ -> :ok
+      end
+
       entries = :ets.tab2list(:cyb_agg_window)
       timestamps = Enum.map(entries, fn {ts, _} -> ts end)
 

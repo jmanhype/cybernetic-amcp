@@ -32,6 +32,8 @@ defmodule Cybernetic.Application do
           Cybernetic.Core.Security.NonceBloom,
           # CRDT Graph
           Cybernetic.Core.CRDT.Graph,
+          # CRDT Context Graph for semantic triples
+          Cybernetic.Core.CRDT.ContextGraph,
           # AMQP Transport
           Cybernetic.Transport.AMQP.Connection,
           {Cybernetic.Core.Transport.AMQP.Topology, []},

@@ -32,7 +32,7 @@ RUN mix deps.get --only prod && \
 
 # Copy source code
 COPY lib lib
-COPY priv priv
+RUN mkdir -p priv
 
 # Compile application
 RUN mix compile
@@ -60,9 +60,6 @@ WORKDIR /app
 
 # Copy release from builder
 COPY --from=builder --chown=cybernetic:cybernetic /app/_build/prod/rel/cybernetic ./
-
-# Copy configuration templates
-COPY --chown=cybernetic:cybernetic docker/config ./config
 
 # Set environment
 ENV HOME=/app \

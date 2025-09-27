@@ -3,27 +3,26 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
   alias Cybernetic.Core.CRDT.ContextGraph
 
   setup do
-    # Use existing instance started by Application
-    # Don't stop it since it's managed by the supervision tree
-    pid = Process.whereis(ContextGraph)
+    # Ensure ContextGraph is started (may be started by Application or needs manual start)
+    pid =
+      case Process.whereis(ContextGraph) do
+        nil ->
+          {:ok, pid} = ContextGraph.start_link([])
+          pid
 
-    case pid do
-      nil ->
-        # Start if not running
-        {:ok, pid} = ContextGraph.start_link()
-        {:ok, graph: pid}
+        existing_pid ->
+          existing_pid
+      end
 
-      pid when is_pid(pid) ->
-        # Use existing instance
-        {:ok, graph: pid}
-    end
+    {:ok, graph: pid}
   end
 
   describe "distributed sync" do
     test "initializes with node monitoring enabled" do
       # The module sets up node monitoring in init
       # We can verify by checking the process is alive
-      assert Process.alive?(Process.whereis(ContextGraph))
+      pid = Process.whereis(ContextGraph)
+      assert Process.alive?(pid)
     end
 
     test "enables sync manually" do
@@ -34,7 +33,8 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
       Process.sleep(50)
 
       # Should not crash
-      assert Process.alive?(Process.whereis(ContextGraph))
+      pid = Process.whereis(ContextGraph)
+      assert Process.alive?(pid)
     end
 
     test "gets current neighbors" do
@@ -47,27 +47,30 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
 
     test "handles nodeup events" do
       # Simulate a nodeup event
-      send(ContextGraph, {:nodeup, :test@node, %{}})
+      pid = Process.whereis(ContextGraph)
+      send(pid, {:nodeup, :test@node, %{}})
 
       Process.sleep(50)
 
       # Should not crash
-      assert Process.alive?(Process.whereis(ContextGraph))
+      assert Process.alive?(pid)
     end
 
     test "handles nodedown events" do
       # Simulate a nodedown event
-      send(ContextGraph, {:nodedown, :test@node, %{}})
+      pid = Process.whereis(ContextGraph)
+      send(pid, {:nodedown, :test@node, %{}})
 
       Process.sleep(50)
 
       # Should not crash
-      assert Process.alive?(Process.whereis(ContextGraph))
+      assert Process.alive?(pid)
     end
 
     test "wires neighbors when requested" do
       # Send wire_neighbors message
-      send(ContextGraph, :wire_neighbors)
+      pid = Process.whereis(ContextGraph)
+      send(pid, :wire_neighbors)
 
       Process.sleep(50)
 
@@ -121,11 +124,12 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
       ContextGraph.put_triple("persistent", "remains", "intact")
 
       # Simulate node events
-      send(ContextGraph, {:nodeup, :new@node, %{}})
+      pid = Process.whereis(ContextGraph)
+      send(pid, {:nodeup, :new@node, %{}})
       Process.sleep(10)
-      send(ContextGraph, {:nodedown, :new@node, %{}})
+      send(pid, {:nodedown, :new@node, %{}})
       Process.sleep(10)
-      send(ContextGraph, :wire_neighbors)
+      send(pid, :wire_neighbors)
       Process.sleep(10)
 
       # Data should still be there
@@ -142,7 +146,8 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
       assert ContextGraph.get_neighbors() == []
 
       # Wire neighbors (will find no other nodes in test)
-      send(ContextGraph, :wire_neighbors)
+      pid = Process.whereis(ContextGraph)
+      send(pid, :wire_neighbors)
       Process.sleep(50)
 
       # Still empty in single-node test
@@ -151,27 +156,31 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
 
     test "handles multiple wire_neighbors calls" do
       # Multiple wiring attempts should not cause issues
+      pid = Process.whereis(ContextGraph)
+
       for _ <- 1..5 do
-        send(ContextGraph, :wire_neighbors)
+        send(pid, :wire_neighbors)
         Process.sleep(10)
       end
 
-      assert Process.alive?(Process.whereis(ContextGraph))
+      assert Process.alive?(pid)
       assert is_list(ContextGraph.get_neighbors())
     end
 
     test "survives rapid node events" do
       # Rapid node up/down events
+      pid = Process.whereis(ContextGraph)
+
       for i <- 1..10 do
         node = :"node#{i}@test"
-        send(ContextGraph, {:nodeup, node, %{}})
-        send(ContextGraph, {:nodedown, node, %{}})
+        send(pid, {:nodeup, node, %{}})
+        send(pid, {:nodedown, node, %{}})
       end
 
       Process.sleep(100)
 
       # Should handle gracefully
-      assert Process.alive?(Process.whereis(ContextGraph))
+      assert Process.alive?(pid)
     end
   end
 
@@ -184,17 +193,19 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
       # We can't directly test this, but verify it doesn't crash
       Process.sleep(1100)
 
-      assert Process.alive?(Process.whereis(ContextGraph))
+      pid = Process.whereis(ContextGraph)
+      assert Process.alive?(pid)
     end
 
     test "re-wires on nodeup with delay" do
       # Send nodeup
-      send(ContextGraph, {:nodeup, :new@node, %{}})
+      pid = Process.whereis(ContextGraph)
+      send(pid, {:nodeup, :new@node, %{}})
 
       # Should schedule re-wiring for 500ms later
       Process.sleep(600)
 
-      assert Process.alive?(Process.whereis(ContextGraph))
+      assert Process.alive?(pid)
     end
   end
 end
