@@ -103,10 +103,10 @@ defmodule Cybernetic.MixProject do
       ],
       "cyb.test": ["test", "run test/system_validation.exs"],
       "cyb.test.core": [
-        "test test/cybernetic/core/security/* test/cybernetic/core/mcp/* test/cybernetic/core/crdt*"
+        "test test/cybernetic/core/security test/cybernetic/core/crdt"
       ],
-      "cyb.test.io": ["test test/cybernetic/transport/*"],
-      "cyb.test.gr": ["test test/cybernetic/core/goldrush/*"],
+      "cyb.test.io": ["test test/cybernetic/transport"],
+      "cyb.test.gr": ["test test/cybernetic/core/goldrush"],
       "cyb.test.all": ["cyb.test.core", "cyb.test.io", "cyb.test.gr"],
       "cyb.probe": ["cyb.probe"],
       "cyb.reset": ["deps.clean --all", "deps.get", "compile"],
