@@ -41,10 +41,17 @@ defmodule Cybernetic.VSM.System4.LLMBridge do
   end
 
   defp notify_sop_engine(%{sop_suggestions: list} = res, ep) when is_list(list) do
-    payload = %{episode: ep, sop_suggestions: list, recommendations: res.recommendations}
+    payload = %{
+      episode: ep,
+      sop_suggestions: list,
+      recommendations: Map.get(res, :recommendations, [])
+    }
+
     send(Cybernetic.VSM.System5.SOPEngine, {:s4_suggestions, payload})
     :ok
   end
+
+  defp notify_sop_engine(_res, _ep), do: :ok
 
   def handle_episode_event(_event, _measurements, metadata, pid) do
     send(pid, {:episode, metadata.episode})
