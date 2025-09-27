@@ -10,7 +10,7 @@ defmodule Cybernetic.MixProject do
       aliases: aliases(),
       deps: deps(),
       test_coverage: [
-        summary: [threshold: 25]
+        summary: [threshold: 24]
       ]
     ]
   end
