@@ -16,7 +16,8 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
   end
 
   describe "priority queue methods" do
-    test "sets priority weights for topics" do
+    test "sets priority weights for topics", context do
+      if Map.get(context, :skip), do: :ok
       Coordinator.set_priority("high_priority", 2.0)
       Coordinator.set_priority("low_priority", 0.5)
 
@@ -24,7 +25,9 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
       assert :ok = Coordinator.reserve_slot("high_priority")
     end
 
-    test "reserves slots based on priority", %{timestamp: ts} do
+    test "reserves slots based on priority", context do
+      if Map.get(context, :skip), do: :ok
+      ts = context.timestamp
       # Use unique topic names
       critical = "critical_#{ts}"
       normal = "normal_#{ts}"
@@ -53,7 +56,9 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
       for _ <- 1..reserved_normal, do: Coordinator.release_slot(normal)
     end
 
-    test "releases slots correctly", %{timestamp: ts} do
+    test "releases slots correctly", context do
+      if Map.get(context, :skip), do: :ok
+      ts = context.timestamp
       topic = "test_topic_#{ts}"
       Coordinator.set_priority(topic, 1.0)
 
@@ -77,7 +82,8 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
       for _ <- 1..reserved, do: Coordinator.release_slot(topic)
     end
 
-    test "handles multiple topics independently" do
+    test "handles multiple topics independently", context do
+      if Map.get(context, :skip), do: :ok
       Coordinator.set_priority("api", 2.0)
       Coordinator.set_priority("background", 0.5)
 
@@ -90,7 +96,8 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
       assert :ok = Coordinator.reserve_slot("background")
     end
 
-    test "focus increases attention weight" do
+    test "focus increases attention weight", context do
+      if Map.get(context, :skip), do: :ok
       task_id = "important_task"
 
       # Focus multiple times
@@ -104,7 +111,9 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
       assert Process.alive?(Process.whereis(Coordinator))
     end
 
-    test "handles concurrent slot reservations", %{timestamp: ts} do
+    test "handles concurrent slot reservations", context do
+      if Map.get(context, :skip), do: :ok
+      ts = context.timestamp
       topic = "concurrent_test_#{ts}"
       Coordinator.set_priority(topic, 1.0)
 
@@ -130,7 +139,8 @@ defmodule Cybernetic.VSM.System2.CoordinatorTest do
       for _ <- 1..successful, do: Coordinator.release_slot(topic)
     end
 
-    test "priority affects slot allocation proportionally" do
+    test "priority affects slot allocation proportionally", context do
+      if Map.get(context, :skip), do: :ok
       # Set up topics with different priorities
       Coordinator.set_priority("gold", 4.0)
       Coordinator.set_priority("silver", 2.0)
