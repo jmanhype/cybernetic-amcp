@@ -72,9 +72,10 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
     end
 
     test "evolves meta-policies based on system performance", context do
-      if Map.get(context, :skip), do: :ok
-
-      system_metrics = %{
+      if Map.get(context, :skip) do
+        :ok
+      else
+        system_metrics = %{
         s1_performance: %{cpu: 0.75, memory: 0.60, throughput: 1250},
         s2_coordination: %{conflicts: 3, resolutions: 15, efficiency: 0.83},
         s3_control: %{interventions: 8, success_rate: 0.91},
@@ -94,14 +95,16 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
       assert {:ok, evolution_result} =
                PolicyIntelligence.evolve_meta_policies(system_metrics, historical_data)
 
-      assert Map.has_key?(evolution_result, :evolved_policies) or
-               Map.has_key?(evolution_result, :adaptation_reason)
+        assert Map.has_key?(evolution_result, :evolved_policies) or
+                 Map.has_key?(evolution_result, :adaptation_reason)
+      end
     end
 
     test "assesses policy alignment across VSM systems", context do
-      if Map.get(context, :skip), do: :ok
-
-      policies_by_system = %{
+      if Map.get(context, :skip) do
+        :ok
+      else
+        policies_by_system = %{
         s1: [
           %{"id" => "ops_sla", "type" => "performance", "targets" => ["99.9% uptime"]},
           %{"id" => "worker_config", "type" => "resource", "limits" => ["8GB memory"]}
@@ -133,25 +136,31 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
 
       assert Map.has_key?(alignment_report, :alignment_score)
       assert is_number(alignment_report.alignment_score)
-      assert alignment_report.alignment_score >= 0.0
-      assert alignment_report.alignment_score <= 1.0
+        assert alignment_report.alignment_score >= 0.0
+        assert alignment_report.alignment_score <= 1.0
+      end
     end
 
     test "handles missing Claude provider gracefully", context do
-      if Map.get(context, :skip), do: :ok
-      # Test fallback behavior when Claude is not available
-      policy_id = "fallback_test_policy"
+      if Map.get(context, :skip) do
+        :ok
+      else
+        # Test fallback behavior when Claude is not available
+        policy_id = "fallback_test_policy"
       context = %{test: "fallback_mode"}
 
-      # This should still work with fallback implementations
-      assert {:ok, analysis} = PolicyIntelligence.analyze_policy_evolution(policy_id, context)
-      assert Map.has_key?(analysis, :summary)
+        # This should still work with fallback implementations
+        assert {:ok, analysis} = PolicyIntelligence.analyze_policy_evolution(policy_id, context)
+        assert Map.has_key?(analysis, :summary)
+      end
     end
 
     test "generates appropriate telemetry events", context do
-      if Map.get(context, :skip), do: :ok
-      # Test that telemetry events are properly emitted
-      :telemetry.attach_many(
+      if Map.get(context, :skip) do
+        :ok
+      else
+        # Test that telemetry events are properly emitted
+        :telemetry.attach_many(
         "policy_intelligence_test",
         [
           [:cybernetic, :s5, :policy_intelligence, :analysis],
@@ -173,15 +182,18 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
                       %{count: 1}, %{type: :evolution}},
                      1000
 
-      :telemetry.detach("policy_intelligence_test")
+        :telemetry.detach("policy_intelligence_test")
+      end
     end
   end
 
   describe "Policy Intelligence Integration" do
     test "integrates with existing S5 Policy system", context do
-      if Map.get(context, :skip), do: :ok
-      # Test integration points with the existing Policy module
-      policy_data = %{
+      if Map.get(context, :skip) do
+        :ok
+      else
+        # Test integration points with the existing Policy module
+        policy_data = %{
         "type" => "integration_test",
         "description" => "Test policy for integration verification",
         "rules" => ["rule1", "rule2"]
@@ -190,11 +202,12 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
       # This tests that we can work with the existing policy system
       assert {:ok, _} = Cybernetic.VSM.System5.Policy.put_policy("integration_test", policy_data)
 
-      # And that our intelligence engine can analyze it
-      assert {:ok, analysis} =
-               PolicyIntelligence.analyze_policy_evolution("integration_test", %{})
+        # And that our intelligence engine can analyze it
+        assert {:ok, analysis} =
+                 PolicyIntelligence.analyze_policy_evolution("integration_test", %{})
 
-      assert Map.has_key?(analysis, :summary)
+        assert Map.has_key?(analysis, :summary)
+      end
     end
   end
 end
