@@ -8,7 +8,17 @@ defmodule Cybernetic.MixProject do
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      test_coverage: [
+        summary: [threshold: 24],
+        tool: ExCoveralls
+      ],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test
+      ]
     ]
   end
 
@@ -74,6 +84,7 @@ defmodule Cybernetic.MixProject do
 
       # Testing
       {:stream_data, "~> 1.0", only: [:test, :dev]},
+      {:excoveralls, "~> 0.18", only: :test},
 
       # Web UI (Phoenix)
       {:phoenix, "~> 1.7"},

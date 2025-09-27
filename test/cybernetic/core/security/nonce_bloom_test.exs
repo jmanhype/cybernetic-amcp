@@ -28,11 +28,11 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
   end
 
   setup do
-    # NonceBloom is started by the application, no need to start it again
-    # Just ensure it's running
+    # Ensure NonceBloom is running for each test
+    # Use start_supervised! to properly manage the process in tests
     case Process.whereis(NonceBloom) do
       nil ->
-        {:ok, _pid} = NonceBloom.start_link()
+        start_supervised!(NonceBloom)
 
       _pid ->
         :ok

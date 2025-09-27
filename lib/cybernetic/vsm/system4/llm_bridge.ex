@@ -40,9 +40,30 @@ defmodule Cybernetic.VSM.System4.LLMBridge do
     end
   end
 
-  defp notify_sop_engine(%{sop_suggestions: list} = res, ep) when is_list(list) do
-    payload = %{episode: ep, sop_suggestions: list, recommendations: res.recommendations}
-    send(Cybernetic.VSM.System5.SOPEngine, {:s4_suggestions, payload})
+  defp notify_sop_engine(res, ep) do
+    # Extract sop_suggestions from either atom or string keys
+    sop_suggestions =
+      Map.get(res, :sop_suggestions) ||
+        Map.get(res, "sop_suggestions") ||
+        []
+
+    # Extract recommendations from either atom or string keys
+    recommendations =
+      Map.get(res, :recommendations) ||
+        Map.get(res, "recommendations") ||
+        []
+
+    # Only send if we have suggestions
+    if is_list(sop_suggestions) and length(sop_suggestions) > 0 do
+      payload = %{
+        episode: ep,
+        sop_suggestions: sop_suggestions,
+        recommendations: recommendations
+      }
+
+      send(Cybernetic.VSM.System5.SOPEngine, {:s4_suggestions, payload})
+    end
+
     :ok
   end
 

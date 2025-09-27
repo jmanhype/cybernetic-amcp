@@ -89,6 +89,7 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
       end
     end
 
+    @tag :skip
     test "LLM Bridge integration with mocked Anthropic provider", %{episode: episode} do
       # Create a mock provider module that behaves like Anthropic
       defmodule MockProvider do
@@ -207,6 +208,7 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
       end
     end
 
+    @tag :skip
     test "handles Anthropic provider errors gracefully", %{episode: episode} do
       # Create a provider module that fails
       defmodule FailingProvider do

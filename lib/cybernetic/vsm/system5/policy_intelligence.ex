@@ -112,7 +112,7 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
         do_evolve_meta_policies(state, system_metrics, historical_data)
       end
 
-    {:reply, result, update_meta_policies(state, result), state}
+    {:reply, result, update_meta_policies(state, result)}
   end
 
   def handle_call({:assess_alignment, policies_by_system}, _from, state) do
@@ -129,27 +129,39 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   # Private implementation functions
 
   defp do_analyze_evolution(state, policy_id, context) do
-    with {:ok, policy_history} <- get_policy_history(policy_id),
-         {:ok, analysis} <-
-           analyze_with_claude(state, :policy_evolution, %{
-             policy_id: policy_id,
-             history: policy_history,
-             context: context
-           }) do
-      :telemetry.execute(@telemetry ++ [:analysis], %{count: 1}, %{
-        type: :evolution,
-        policy_id: policy_id
-      })
+    result =
+      with {:ok, policy_history} <- get_policy_history(policy_id),
+           {:ok, analysis} <-
+             analyze_with_claude(state, :policy_evolution, %{
+               policy_id: policy_id,
+               history: policy_history,
+               context: context
+             }) do
+        {:ok, analysis}
+      else
+        {:error, :no_claude} ->
+          {:ok, fallback_evolution_analysis(policy_id, context)}
 
-      {:ok, analysis}
-    else
-      {:error, :no_claude} ->
-        {:ok, fallback_evolution_analysis(policy_id, context)}
+        {:error, :policy_not_found} ->
+          {:ok, fallback_evolution_analysis(policy_id, context)}
 
-      error ->
-        Logger.error("Policy evolution analysis failed: #{inspect(error)}")
-        error
+        error ->
+          Logger.error("Policy evolution analysis failed: #{inspect(error)}")
+          error
+      end
+
+    case result do
+      {:ok, _analysis} ->
+        :telemetry.execute(@telemetry ++ [:analysis], %{count: 1}, %{
+          type: :evolution,
+          policy_id: policy_id
+        })
+
+      _error ->
+        :ok
     end
+
+    result
   end
 
   defp do_recommend_governance(state, proposed_policy, current_policies) do
@@ -333,10 +345,14 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   # Helper functions
 
   defp get_policy_history(policy_id) do
-    case Policy.get_policy(policy_id) do
-      nil -> {:error, :policy_not_found}
-      # In real implementation, get full history
-      policy -> {:ok, [policy]}
+    try do
+      case Policy.get_policy(policy_id) do
+        nil -> {:error, :policy_not_found}
+        # In real implementation, get full history
+        policy -> {:ok, [policy]}
+      end
+    catch
+      :exit, _ -> {:error, :policy_not_found}
     end
   end
 
