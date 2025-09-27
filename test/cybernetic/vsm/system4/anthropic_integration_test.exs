@@ -137,10 +137,10 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
       # Start LLM Bridge with mock provider (handle already_started)
       bridge_pid =
         case LLMBridge.start_link(
-          provider: mock_provider,
-          # Skip telemetry subscription for test
-          subscribe: fn _pid -> :ok end
-        ) do
+               provider: mock_provider,
+               # Skip telemetry subscription for test
+               subscribe: fn _pid -> :ok end
+             ) do
           {:ok, pid} -> pid
           {:error, {:already_started, pid}} -> pid
         end
@@ -216,9 +216,9 @@ defmodule Cybernetic.VSM.System4.AnthropicIntegrationTest do
       # Start LLM Bridge with failing provider (handle already_started)
       bridge_pid =
         case LLMBridge.start_link(
-          provider: failing_provider,
-          subscribe: fn _pid -> :ok end
-        ) do
+               provider: failing_provider,
+               subscribe: fn _pid -> :ok end
+             ) do
           {:ok, pid} -> pid
           {:error, {:already_started, pid}} -> pid
         end

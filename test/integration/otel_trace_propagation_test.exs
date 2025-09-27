@@ -61,6 +61,7 @@ defmodule Cybernetic.Integration.OTELTracePropagationTest do
 
   test "NonceBloom validation with tracing", context do
     if Map.get(context, :skip), do: :ok
+
     OTEL.with_span "test.nonce_validation", %{"component" => "security"} do
       parent_trace_id = :otel_tracer.current_span_ctx() |> :otel_span.trace_id()
 

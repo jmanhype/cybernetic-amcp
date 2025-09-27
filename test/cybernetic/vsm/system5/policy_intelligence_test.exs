@@ -76,24 +76,24 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
         :ok
       else
         system_metrics = %{
-        s1_performance: %{cpu: 0.75, memory: 0.60, throughput: 1250},
-        s2_coordination: %{conflicts: 3, resolutions: 15, efficiency: 0.83},
-        s3_control: %{interventions: 8, success_rate: 0.91},
-        s4_intelligence: %{analyses: 42, accuracy: 0.88},
-        s5_policy: %{updates: 5, compliance: 0.94}
-      }
+          s1_performance: %{cpu: 0.75, memory: 0.60, throughput: 1250},
+          s2_coordination: %{conflicts: 3, resolutions: 15, efficiency: 0.83},
+          s3_control: %{interventions: 8, success_rate: 0.91},
+          s4_intelligence: %{analyses: 42, accuracy: 0.88},
+          s5_policy: %{updates: 5, compliance: 0.94}
+        }
 
-      historical_data = %{
-        trends: %{
-          performance_improving: true,
-          stability_increasing: true,
-          complexity_growing: false
-        },
-        period: "last_30_days"
-      }
+        historical_data = %{
+          trends: %{
+            performance_improving: true,
+            stability_increasing: true,
+            complexity_growing: false
+          },
+          period: "last_30_days"
+        }
 
-      assert {:ok, evolution_result} =
-               PolicyIntelligence.evolve_meta_policies(system_metrics, historical_data)
+        assert {:ok, evolution_result} =
+                 PolicyIntelligence.evolve_meta_policies(system_metrics, historical_data)
 
         assert Map.has_key?(evolution_result, :evolved_policies) or
                  Map.has_key?(evolution_result, :adaptation_reason)
@@ -105,37 +105,41 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
         :ok
       else
         policies_by_system = %{
-        s1: [
-          %{"id" => "ops_sla", "type" => "performance", "targets" => ["99.9% uptime"]},
-          %{"id" => "worker_config", "type" => "resource", "limits" => ["8GB memory"]}
-        ],
-        s2: [
-          %{
-            "id" => "coordination_rules",
-            "type" => "workflow",
-            "priorities" => ["customer_first"]
-          },
-          %{"id" => "resource_allocation", "type" => "resource", "algorithm" => "weighted_fair"}
-        ],
-        s3: [
-          %{"id" => "monitoring_policy", "type" => "oversight", "thresholds" => ["cpu > 80%"]},
-          %{"id" => "intervention_rules", "type" => "control", "escalation" => ["auto_scale"]}
-        ],
-        s4: [
-          %{"id" => "learning_policy", "type" => "intelligence", "models" => ["trend_analysis"]},
-          %{"id" => "prediction_rules", "type" => "forecasting", "horizon" => "24h"}
-        ],
-        s5: [
-          %{"id" => "governance_framework", "type" => "meta", "version" => "2.1"},
-          %{"id" => "identity_policy", "type" => "organizational", "values" => ["innovation"]}
-        ]
-      }
+          s1: [
+            %{"id" => "ops_sla", "type" => "performance", "targets" => ["99.9% uptime"]},
+            %{"id" => "worker_config", "type" => "resource", "limits" => ["8GB memory"]}
+          ],
+          s2: [
+            %{
+              "id" => "coordination_rules",
+              "type" => "workflow",
+              "priorities" => ["customer_first"]
+            },
+            %{"id" => "resource_allocation", "type" => "resource", "algorithm" => "weighted_fair"}
+          ],
+          s3: [
+            %{"id" => "monitoring_policy", "type" => "oversight", "thresholds" => ["cpu > 80%"]},
+            %{"id" => "intervention_rules", "type" => "control", "escalation" => ["auto_scale"]}
+          ],
+          s4: [
+            %{
+              "id" => "learning_policy",
+              "type" => "intelligence",
+              "models" => ["trend_analysis"]
+            },
+            %{"id" => "prediction_rules", "type" => "forecasting", "horizon" => "24h"}
+          ],
+          s5: [
+            %{"id" => "governance_framework", "type" => "meta", "version" => "2.1"},
+            %{"id" => "identity_policy", "type" => "organizational", "values" => ["innovation"]}
+          ]
+        }
 
-      assert {:ok, alignment_report} =
-               PolicyIntelligence.assess_system_alignment(policies_by_system)
+        assert {:ok, alignment_report} =
+                 PolicyIntelligence.assess_system_alignment(policies_by_system)
 
-      assert Map.has_key?(alignment_report, :alignment_score)
-      assert is_number(alignment_report.alignment_score)
+        assert Map.has_key?(alignment_report, :alignment_score)
+        assert is_number(alignment_report.alignment_score)
         assert alignment_report.alignment_score >= 0.0
         assert alignment_report.alignment_score <= 1.0
       end
@@ -147,7 +151,7 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
       else
         # Test fallback behavior when Claude is not available
         policy_id = "fallback_test_policy"
-      context = %{test: "fallback_mode"}
+        context = %{test: "fallback_mode"}
 
         # This should still work with fallback implementations
         assert {:ok, analysis} = PolicyIntelligence.analyze_policy_evolution(policy_id, context)
@@ -161,26 +165,26 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
       else
         # Test that telemetry events are properly emitted
         :telemetry.attach_many(
-        "policy_intelligence_test",
-        [
-          [:cybernetic, :s5, :policy_intelligence, :analysis],
-          [:cybernetic, :s5, :policy_intelligence, :governance],
-          [:cybernetic, :s5, :policy_intelligence, :meta_evolution],
-          [:cybernetic, :s5, :policy_intelligence, :alignment]
-        ],
-        fn event, measurements, metadata, _config ->
-          send(self(), {:telemetry_event, event, measurements, metadata})
-        end,
-        nil
-      )
+          "policy_intelligence_test",
+          [
+            [:cybernetic, :s5, :policy_intelligence, :analysis],
+            [:cybernetic, :s5, :policy_intelligence, :governance],
+            [:cybernetic, :s5, :policy_intelligence, :meta_evolution],
+            [:cybernetic, :s5, :policy_intelligence, :alignment]
+          ],
+          fn event, measurements, metadata, _config ->
+            send(self(), {:telemetry_event, event, measurements, metadata})
+          end,
+          nil
+        )
 
-      # Trigger each type of analysis
-      PolicyIntelligence.analyze_policy_evolution("telemetry_test", %{})
+        # Trigger each type of analysis
+        PolicyIntelligence.analyze_policy_evolution("telemetry_test", %{})
 
-      # Verify telemetry events were emitted
-      assert_receive {:telemetry_event, [:cybernetic, :s5, :policy_intelligence, :analysis],
-                      %{count: 1}, %{type: :evolution}},
-                     1000
+        # Verify telemetry events were emitted
+        assert_receive {:telemetry_event, [:cybernetic, :s5, :policy_intelligence, :analysis],
+                        %{count: 1}, %{type: :evolution}},
+                       1000
 
         :telemetry.detach("policy_intelligence_test")
       end
@@ -194,13 +198,14 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligenceTest do
       else
         # Test integration points with the existing Policy module
         policy_data = %{
-        "type" => "integration_test",
-        "description" => "Test policy for integration verification",
-        "rules" => ["rule1", "rule2"]
-      }
+          "type" => "integration_test",
+          "description" => "Test policy for integration verification",
+          "rules" => ["rule1", "rule2"]
+        }
 
-      # This tests that we can work with the existing policy system
-      assert {:ok, _} = Cybernetic.VSM.System5.Policy.put_policy("integration_test", policy_data)
+        # This tests that we can work with the existing policy system
+        assert {:ok, _} =
+                 Cybernetic.VSM.System5.Policy.put_policy("integration_test", policy_data)
 
         # And that our intelligence engine can analyze it
         assert {:ok, analysis} =
