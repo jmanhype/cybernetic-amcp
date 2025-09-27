@@ -8,6 +8,18 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       case Process.whereis(CentralAggregator) do
         nil ->
           {:ok, p} = CentralAggregator.start_link([])
+          # Wait for ETS table to be created by init
+          Enum.reduce_while(1..50, nil, fn _, _ ->
+            case :ets.whereis(:cyb_agg_window) do
+              :undefined ->
+                Process.sleep(10)
+                {:cont, nil}
+
+              _ ->
+                {:halt, :ok}
+            end
+          end)
+
           p
 
         existing_pid ->
