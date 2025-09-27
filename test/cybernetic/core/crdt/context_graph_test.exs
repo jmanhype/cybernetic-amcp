@@ -25,7 +25,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
       assert Process.alive?(pid)
     end
 
-    test "enables sync manually" do
+    test "enables sync manually", %{graph: pid} do
       # This should trigger :wire_neighbors message
       ContextGraph.enable_sync()
 
@@ -33,7 +33,6 @@ defmodule Cybernetic.Core.CRDT.ContextGraphTest do
       Process.sleep(50)
 
       # Should not crash
-      pid = Process.whereis(ContextGraph)
       assert Process.alive?(pid)
     end
 
