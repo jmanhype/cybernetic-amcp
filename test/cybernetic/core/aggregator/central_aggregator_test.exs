@@ -3,16 +3,34 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
   alias Cybernetic.Core.Aggregator.CentralAggregator
 
   setup do
-    # Get or start CentralAggregator
+    # Wait for CentralAggregator to be available (started by Application)
     pid =
-      case Process.whereis(CentralAggregator) do
-        nil ->
-          {:ok, p} = CentralAggregator.start_link([])
-          p
+      Enum.reduce_while(1..50, nil, fn _, _ ->
+        case Process.whereis(CentralAggregator) do
+          nil ->
+            Process.sleep(10)
+            {:cont, nil}
 
-        existing_pid ->
-          existing_pid
+          pid ->
+            {:halt, pid}
+        end
+      end)
+
+    if pid == nil do
+      flunk("CentralAggregator process not found after waiting")
+    end
+
+    # Wait for ETS table to be created
+    Enum.reduce_while(1..50, nil, fn _, _ ->
+      case :ets.whereis(:cyb_agg_window) do
+        :undefined ->
+          Process.sleep(10)
+          {:cont, nil}
+
+        _ ->
+          {:halt, :ok}
       end
+    end)
 
     # Clear the ETS table for clean test state
     case :ets.whereis(:cyb_agg_window) do

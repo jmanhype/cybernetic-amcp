@@ -2,21 +2,38 @@ defmodule Cybernetic.Core.Goldrush.SmokeTest do
   use ExUnit.Case
 
   setup do
-    # Ensure Pipeline and TelemetryAlgedonic are started
-    case GenServer.whereis(Cybernetic.Core.Goldrush.Pipeline) do
-      nil ->
-        {:ok, _} = Cybernetic.Core.Goldrush.Pipeline.start_link([])
+    # Wait for Pipeline to be available (started by Application)
+    pipeline_pid =
+      Enum.reduce_while(1..50, nil, fn _, _ ->
+        case GenServer.whereis(Cybernetic.Core.Goldrush.Pipeline) do
+          nil ->
+            Process.sleep(10)
+            {:cont, nil}
 
-      _ ->
-        :ok
+          pid ->
+            {:halt, pid}
+        end
+      end)
+
+    if pipeline_pid == nil do
+      flunk("Pipeline process not found after waiting")
     end
 
-    case GenServer.whereis(Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic) do
-      nil ->
-        {:ok, _} = Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic.start_link([])
+    # Wait for TelemetryAlgedonic to be available
+    algedonic_pid =
+      Enum.reduce_while(1..50, nil, fn _, _ ->
+        case GenServer.whereis(Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic) do
+          nil ->
+            Process.sleep(10)
+            {:cont, nil}
 
-      _ ->
-        :ok
+          pid ->
+            {:halt, pid}
+        end
+      end)
+
+    if algedonic_pid == nil do
+      flunk("TelemetryAlgedonic process not found after waiting")
     end
 
     :ok
