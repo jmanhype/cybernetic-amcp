@@ -32,7 +32,7 @@ RUN mix deps.get --only prod && \
 
 # Copy source code
 COPY lib lib
-COPY priv priv
+RUN mkdir -p priv
 
 # Compile application
 RUN mix compile
