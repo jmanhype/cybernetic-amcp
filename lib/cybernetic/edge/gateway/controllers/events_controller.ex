@@ -90,7 +90,8 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
 
       # Keepalive ping every 30 seconds
       :keepalive ->
-        ping_event = format_sse_event("ping", %{timestamp: DateTime.utc_now() |> DateTime.to_iso8601()})
+        ping_event =
+          format_sse_event("ping", %{timestamp: DateTime.utc_now() |> DateTime.to_iso8601()})
 
         case chunk(conn, ping_event) do
           {:ok, conn} ->
