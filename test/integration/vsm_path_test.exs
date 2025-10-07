@@ -222,8 +222,16 @@ defmodule Cybernetic.Integration.VSMPathTest do
 
   describe "Error Handling" do
     test "S2 failure is handled gracefully", %{collector: collector} do
-      # Stop S2 to simulate failure
-      GenServer.stop(System2)
+      # Stop S2 to simulate failure - check if it's running first
+      case Process.whereis(System2) do
+        nil ->
+          :ok
+
+        pid when is_pid(pid) ->
+          Process.exit(pid, :kill)
+          # Wait for process to fully terminate
+          :timer.sleep(100)
+      end
 
       # Send S1 event
       event = %{
