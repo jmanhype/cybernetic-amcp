@@ -22,6 +22,8 @@ defmodule Cybernetic.VSM.System4.Router do
 
   {:ok, result, provider_info} | {:error, reason}
   """
+  @spec route(Episode.t(), keyword()) ::
+          {:ok, any(), map()} | {:error, atom()}
   def route(%Episode{} = episode, opts \\ []) do
     start_time = System.monotonic_time(:millisecond)
 
@@ -48,6 +50,7 @@ defmodule Cybernetic.VSM.System4.Router do
   @doc """
   Select provider chain based on episode kind and routing policy.
   """
+  @spec select_chain(Episode.t(), keyword()) :: [atom()]
   def select_chain(%Episode{} = episode, opts) do
     # Check for override chain first
     case Keyword.get(opts, :override_chain) do
@@ -69,6 +72,7 @@ defmodule Cybernetic.VSM.System4.Router do
   @doc """
   Get default provider chain from configuration.
   """
+  @spec default_chain() :: [atom()]
   def default_chain do
     Application.get_env(:cybernetic, :s4, [])
     |> Keyword.get(:default_chain, [:anthropic])
@@ -81,6 +85,8 @@ defmodule Cybernetic.VSM.System4.Router do
   @doc """
   Try provider chain with exponential backoff and circuit breaking.
   """
+  @spec try_chain(Episode.t(), [atom()], keyword(), non_neg_integer()) ::
+          {:ok, any(), map()} | {:error, atom()}
   def try_chain(_episode, [], _opts, attempts) do
     Logger.error("S4 Router: All providers failed after #{attempts} attempts")
     {:error, :all_providers_failed}

@@ -12,7 +12,9 @@ Usage:
 import csv
 import json
 import os
+import sys
 from pathlib import Path
+from typing import Dict, List, Any
 
 
 def find_repo_root(start: Path) -> Path:
@@ -24,10 +26,30 @@ def find_repo_root(start: Path) -> Path:
     return start.resolve()
 
 
-def load_tasks(repo_root: Path):
+def load_tasks(repo_root: Path) -> List[Dict[str, str]]:
+    """Load and normalize tasks from blackbox_roadmap_with_backlog.json.
+
+    Args:
+        repo_root: Path to repository root containing the JSON file
+
+    Returns:
+        List of normalized task dictionaries with title, description, phase, and status
+
+    Raises:
+        FileNotFoundError: If the roadmap JSON file doesn't exist
+        json.JSONDecodeError: If the JSON file is malformed
+    """
     src = repo_root / "blackbox_roadmap_with_backlog.json"
-    with src.open("r", encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with src.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: {src} not found", file=sys.stderr)
+        raise
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in {src}: {e}", file=sys.stderr)
+        raise
+
     tasks = data.get("tasks", data)
     norm = []
     for t in tasks:
@@ -43,12 +65,23 @@ def load_tasks(repo_root: Path):
     return norm
 
 
-def ensure_dirs(repo_root: Path):
+def ensure_dirs(repo_root: Path) -> None:
+    """Ensure required directories exist for output files.
+
+    Args:
+        repo_root: Path to repository root
+    """
     (repo_root / "docs").mkdir(exist_ok=True)
     (repo_root / "tools" / "github").mkdir(parents=True, exist_ok=True)
 
 
-def write_markdown(repo_root: Path, tasks):
+def write_markdown(repo_root: Path, tasks: List[Dict[str, str]]) -> None:
+    """Generate ROADMAP.md and ROADMAP_KANBAN.md files.
+
+    Args:
+        repo_root: Path to repository root
+        tasks: List of normalized task dictionaries
+    """
     by_phase = {"Now": [], "Next": [], "Later": [], "Unassigned": []}
     for t in tasks:
         by_phase.setdefault(t["phase"], []).append(t)
@@ -93,7 +126,13 @@ def write_markdown(repo_root: Path, tasks):
     (repo_root / "docs" / "ROADMAP_KANBAN.md").write_text("\n".join(kanban) + "\n", encoding="utf-8")
 
 
-def write_csv(repo_root: Path, tasks):
+def write_csv(repo_root: Path, tasks: List[Dict[str, str]]) -> None:
+    """Generate roadmap.csv and issues_import.csv files.
+
+    Args:
+        repo_root: Path to repository root
+        tasks: List of normalized task dictionaries
+    """
     with (repo_root / "docs" / "roadmap.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["title", "description", "phase", "status"])
@@ -109,14 +148,24 @@ def write_csv(repo_root: Path, tasks):
             w.writerow([t["title"], body, ",".join(labels)])
 
 
-def main():
-    repo_root = find_repo_root(Path(__file__).parent)
-    ensure_dirs(repo_root)
-    tasks = load_tasks(repo_root)
-    write_markdown(repo_root, tasks)
-    write_csv(repo_root, tasks)
-    print(f"Generated roadmap assets for {len(tasks)} tasks under docs/ and tools/github/.")
+def main() -> int:
+    """Main entry point for roadmap generation.
+
+    Returns:
+        Exit code: 0 for success, 1 for failure
+    """
+    try:
+        repo_root = find_repo_root(Path(__file__).parent)
+        ensure_dirs(repo_root)
+        tasks = load_tasks(repo_root)
+        write_markdown(repo_root, tasks)
+        write_csv(repo_root, tasks)
+        print(f"Generated roadmap assets for {len(tasks)} tasks under docs/ and tools/github/.")
+        return 0
+    except Exception as e:
+        print(f"Error generating roadmap: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

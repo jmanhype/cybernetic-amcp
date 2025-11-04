@@ -27,6 +27,7 @@ defmodule Cybernetic.MCP.Core do
   @doc """
   Call an MCP tool with parameters.
   """
+  @spec call_tool(String.t(), map(), timeout()) :: {:ok, map()} | {:error, any()}
   def call_tool(tool_name, params, timeout \\ 30_000) do
     GenServer.call(__MODULE__, {:call_tool, tool_name, params}, timeout)
   end
@@ -34,6 +35,7 @@ defmodule Cybernetic.MCP.Core do
   @doc """
   Send a prompt to the MCP server.
   """
+  @spec send_prompt(String.t(), map()) :: {:ok, map()} | {:error, any()}
   def send_prompt(prompt, context \\ %{}) do
     GenServer.call(__MODULE__, {:send_prompt, prompt, context})
   end
@@ -42,6 +44,7 @@ defmodule Cybernetic.MCP.Core do
   List available tools.
   Returns {:ok, tools} on success, {:error, reason} on failure.
   """
+  @spec list_tools() :: {:ok, [map()]} | {:error, any()}
   def list_tools do
     GenServer.call(__MODULE__, :list_tools)
   end
@@ -50,6 +53,7 @@ defmodule Cybernetic.MCP.Core do
   List available tools, raising on error.
   Returns tools list directly or raises on failure.
   """
+  @spec list_tools!() :: [map()] | no_return()
   def list_tools! do
     case list_tools() do
       {:ok, tools} -> tools
