@@ -21,7 +21,9 @@ config :logger, :console,
 
 # Phoenix Edge Gateway configuration
 config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
+  url: [host: "localhost"],
   http: [port: 4000],
+  server: true,
   debug_errors: true,
   code_reloader: true,
   check_origin: false,

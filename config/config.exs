@@ -30,3 +30,6 @@ config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
   url: [host: "localhost"],
   secret_key_base: "YOUR_SECRET_KEY_BASE_HERE_64_CHARS_MIN_DEVELOPMENT_ONLY",
   render_errors: [view: Cybernetic.Edge.Gateway.ErrorView, accepts: ~w(json)]
+
+# Import environment specific config
+import_config "#{config_env()}.exs"
