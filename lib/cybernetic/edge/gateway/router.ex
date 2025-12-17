@@ -45,4 +45,10 @@ defmodule Cybernetic.Edge.Gateway.Router do
   scope "/metrics", Cybernetic.Edge.Gateway do
     get("/", MetricsController, :index)
   end
+
+  # Health check at root (no auth)
+  scope "/", Cybernetic.Edge.Gateway do
+    get("/", HealthController, :index)
+    get("/health", HealthController, :index)
+  end
 end
