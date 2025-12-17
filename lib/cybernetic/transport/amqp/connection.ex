@@ -57,17 +57,27 @@ defmodule Cybernetic.Transport.AMQP.Connection do
   end
 
   def handle_info(:connect, state) do
-    case establish_connection(state.config) do
-      {:ok, conn, chan} ->
-        Logger.info("AMQP connected successfully")
-        setup_exchanges_and_queues(chan, state.config)
-        {:noreply, %{state | connection: conn, channel: chan, status: :connected}}
+    # Spawn async connection to avoid blocking GenServer calls
+    parent = self()
 
-      {:error, reason} ->
-        Logger.error("AMQP connection failed: #{inspect(reason)}")
-        Process.send_after(self(), :connect, @reconnect_interval)
-        {:noreply, %{state | status: :disconnected}}
-    end
+    Task.start(fn ->
+      result = establish_connection(state.config)
+      send(parent, {:connection_result, result})
+    end)
+
+    {:noreply, %{state | status: :connecting}}
+  end
+
+  def handle_info({:connection_result, {:ok, conn, chan}}, state) do
+    Logger.info("AMQP connected successfully")
+    setup_exchanges_and_queues(chan, state.config)
+    {:noreply, %{state | connection: conn, channel: chan, status: :connected}}
+  end
+
+  def handle_info({:connection_result, {:error, reason}}, state) do
+    Logger.error("AMQP connection failed: #{inspect(reason)}")
+    Process.send_after(self(), :connect, @reconnect_interval)
+    {:noreply, %{state | status: :disconnected}}
   end
 
   def handle_info({:DOWN, _, :process, _pid, reason}, state) do

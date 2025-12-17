@@ -16,7 +16,7 @@ config :cybernetic, :transport,
   adapter: Cybernetic.Transport.AMQP,
   max_demand: 1000,
   amqp: [
-    url: {:system, "AMQP_URL", "amqp://guest:guest@localhost:5672"},
+    url: "amqp://cybernetic:changeme@localhost:5672",
     prefetch_count: 10,
     consumers: [
       systems: [:system1, :system2, :system3, :system4, :system5],

@@ -142,9 +142,12 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @max_retries 10
+  @retry_delay 500
+
   def init(_opts) do
-    # Setup topology on connection
-    case Connection.get_channel() do
+    # Setup topology with retries since connection is async
+    case get_channel_with_retry(@max_retries) do
       {:ok, channel} ->
         case setup(channel) do
           :ok -> {:ok, %{channel: channel}}
@@ -152,8 +155,44 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
         end
 
       {:error, reason} ->
-        Logger.warning("Failed to get AMQP channel for topology setup: #{inspect(reason)}")
+        Logger.warning("Failed to get AMQP channel for topology setup after retries: #{inspect(reason)}")
+        # Schedule a delayed retry instead of failing
+        Process.send_after(self(), :retry_setup, 5_000)
         {:ok, %{channel: nil}}
+    end
+  end
+
+  def handle_info(:retry_setup, state) do
+    case get_channel_with_retry(@max_retries) do
+      {:ok, channel} ->
+        case setup(channel) do
+          :ok ->
+            Logger.info("Topology setup completed on retry")
+            {:noreply, %{state | channel: channel}}
+
+          error ->
+            Logger.error("Topology setup failed on retry: #{inspect(error)}")
+            Process.send_after(self(), :retry_setup, 5_000)
+            {:noreply, state}
+        end
+
+      {:error, _reason} ->
+        Logger.warning("Still waiting for AMQP connection, will retry...")
+        Process.send_after(self(), :retry_setup, 5_000)
+        {:noreply, state}
+    end
+  end
+
+  defp get_channel_with_retry(0), do: {:error, :max_retries_exceeded}
+
+  defp get_channel_with_retry(retries_left) do
+    case Connection.get_channel() do
+      {:ok, channel} ->
+        {:ok, channel}
+
+      {:error, _reason} ->
+        Process.sleep(@retry_delay)
+        get_channel_with_retry(retries_left - 1)
     end
   end
 

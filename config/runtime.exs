@@ -6,7 +6,7 @@ config :cybernetic, :transport, Cybernetic.Transport.AMQP
 
 # AMQP Configuration for production transport
 config :cybernetic, :amqp,
-  url: System.get_env("AMQP_URL") || "amqp://guest:guest@localhost:5672",
+  url: System.get_env("AMQP_URL") || "amqp://cybernetic:changeme@localhost:5672",
   exchange: System.get_env("AMQP_EXCHANGE") || "cyb.commands",
   exchange_type: :topic,
   exchanges: %{
