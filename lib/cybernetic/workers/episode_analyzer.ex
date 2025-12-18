@@ -14,6 +14,13 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
       config :cybernetic, Oban,
         queues: [analysis: 5]
 
+      config :cybernetic, :llm,
+        max_content_length: 10_000,
+        model: "gpt-4o-mini"
+
+      config :cybernetic, :workers,
+        analysis_parallelism: 4
+
   ## Job Arguments
 
       %{
@@ -22,6 +29,12 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
         analysis_type: "full" | "summary" | "entities",
         options: %{}
       }
+
+  ## Security
+
+  - Episode IDs are validated as UUIDs
+  - Content is truncated before sending to LLM
+  - LLM responses are sanitized
   """
   use Oban.Worker,
     queue: :analysis,
@@ -30,7 +43,12 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
 
   require Logger
 
+  alias Cybernetic.Config
+  alias Cybernetic.Validation
+
   @telemetry [:cybernetic, :worker, :episode_analyzer]
+
+  @valid_analysis_types [:full, :summary, :entities, :sentiment]
 
   @type analysis_type :: :full | :summary | :entities | :sentiment
   @type job_args :: %{
@@ -43,58 +61,117 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
   @impl Oban.Worker
   @spec perform(Oban.Job.t()) :: :ok | {:error, term()} | {:snooze, pos_integer()}
   def perform(%Oban.Job{args: args, attempt: attempt}) do
-    episode_id = args["episode_id"]
-    tenant_id = args["tenant_id"]
-    analysis_type = String.to_existing_atom(args["analysis_type"] || "full")
-    options = args["options"] || %{}
-
-    Logger.info("Starting episode analysis",
-      episode_id: episode_id,
-      tenant_id: tenant_id,
-      analysis_type: analysis_type,
-      attempt: attempt
-    )
-
     start_time = System.monotonic_time(:millisecond)
 
-    result =
-      with {:ok, episode} <- fetch_episode(tenant_id, episode_id),
-           {:ok, analysis} <- analyze_episode(episode, analysis_type, options),
-           :ok <- store_analysis(tenant_id, episode_id, analysis) do
-        emit_telemetry(:success, start_time, analysis_type)
-        publish_analysis_complete(tenant_id, episode_id, analysis)
-        :ok
-      else
-        {:error, :not_found} ->
-          Logger.warning("Episode not found",
-            episode_id: episode_id,
-            tenant_id: tenant_id
-          )
+    # Validate and extract arguments
+    with {:ok, validated} <- validate_args(args) do
+      %{
+        episode_id: episode_id,
+        tenant_id: tenant_id,
+        analysis_type: analysis_type,
+        options: options
+      } = validated
 
-          emit_telemetry(:not_found, start_time, analysis_type)
-          {:error, :not_found}
+      Logger.info("Starting episode analysis",
+        episode_id: episode_id,
+        tenant_id: tenant_id,
+        analysis_type: analysis_type,
+        attempt: attempt
+      )
 
-        {:error, :rate_limited} ->
-          # Snooze and retry later
-          Logger.info("Rate limited, snoozing", episode_id: episode_id)
-          emit_telemetry(:rate_limited, start_time, analysis_type)
-          {:snooze, 60}
+      result =
+        with {:ok, episode} <- fetch_episode(tenant_id, episode_id),
+             {:ok, content} <- extract_and_validate_content(episode),
+             {:ok, analysis} <- analyze_content(content, analysis_type, options),
+             :ok <- store_analysis(tenant_id, episode_id, analysis) do
+          emit_telemetry(:success, start_time, analysis_type)
+          publish_analysis_complete(tenant_id, episode_id, analysis)
+          :ok
+        else
+          {:error, :not_found} ->
+            Logger.warning("Episode not found",
+              episode_id: episode_id,
+              tenant_id: tenant_id
+            )
 
-        {:error, reason} ->
-          Logger.error("Episode analysis failed",
-            episode_id: episode_id,
-            reason: reason
-          )
+            emit_telemetry(:not_found, start_time, analysis_type)
+            {:error, :not_found}
 
-          emit_telemetry(:error, start_time, analysis_type)
-          {:error, reason}
-      end
+          {:error, :rate_limited} ->
+            backoff = calculate_backoff(attempt)
+            Logger.info("Rate limited, snoozing",
+              episode_id: episode_id,
+              backoff_seconds: backoff
+            )
 
-    result
+            emit_telemetry(:rate_limited, start_time, analysis_type)
+            {:snooze, backoff}
+
+          {:error, :empty_content} ->
+            Logger.warning("Episode has no content",
+              episode_id: episode_id,
+              tenant_id: tenant_id
+            )
+
+            emit_telemetry(:empty_content, start_time, analysis_type)
+            {:error, :empty_content}
+
+          {:error, reason} ->
+            Logger.error("Episode analysis failed",
+              episode_id: episode_id,
+              reason: inspect(reason)
+            )
+
+            emit_telemetry(:error, start_time, analysis_type)
+            {:error, reason}
+        end
+
+      result
+    else
+      {:error, reason} ->
+        Logger.error("Invalid job arguments", reason: reason, args: inspect(args))
+        emit_telemetry(:validation_error, start_time, :unknown)
+        {:error, reason}
+    end
   end
 
-  # Fetch episode from storage
+  # Validate job arguments
+  @spec validate_args(map()) :: {:ok, map()} | {:error, atom()}
+  defp validate_args(args) do
+    with {:ok, episode_id} <- validate_episode_id(args["episode_id"]),
+         {:ok, tenant_id} <- Validation.validate_tenant_id(args["tenant_id"]),
+         {:ok, analysis_type} <- validate_analysis_type(args["analysis_type"]) do
+      {:ok,
+       %{
+         episode_id: episode_id,
+         tenant_id: tenant_id,
+         analysis_type: analysis_type,
+         options: args["options"] || %{}
+       }}
+    end
+  end
 
+  defp validate_episode_id(nil), do: {:error, :missing_episode_id}
+
+  defp validate_episode_id(id) when is_binary(id) do
+    if Validation.valid_uuid?(id) do
+      {:ok, id}
+    else
+      {:error, :invalid_episode_id}
+    end
+  end
+
+  defp validate_episode_id(_), do: {:error, :invalid_episode_id}
+
+  defp validate_analysis_type(nil), do: {:ok, :full}
+
+  defp validate_analysis_type(type) when is_binary(type) do
+    Validation.safe_to_atom(type, @valid_analysis_types)
+  end
+
+  defp validate_analysis_type(_), do: {:error, :invalid_analysis_type}
+
+  # Fetch episode from storage
   @spec fetch_episode(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   defp fetch_episode(tenant_id, episode_id) do
     # Try to get episode from EpisodeStore or database
@@ -108,7 +185,10 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
 
         case Cybernetic.Storage.get(tenant_id, path) do
           {:ok, content} ->
-            {:ok, Jason.decode!(content)}
+            Validation.safe_json_decode(content)
+
+          {:error, %Cybernetic.Storage.Error{reason: :not_found}} ->
+            {:error, :not_found}
 
           error ->
             error
@@ -116,252 +196,347 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
     end
   end
 
-  defp get_episode_from_store(tenant_id, episode_id) do
+  defp get_episode_from_store(_tenant_id, _episode_id) do
     # Placeholder - would query EpisodeStore GenServer
-    # For now, return not_found to trigger storage fallback
     {:error, :not_found}
   end
 
-  # Analyze episode content
+  # Extract and validate content from episode
+  @spec extract_and_validate_content(map()) :: {:ok, String.t()} | {:error, atom()}
+  defp extract_and_validate_content(episode) do
+    content = episode["content"] || episode["text"] || episode["body"] || ""
 
-  @spec analyze_episode(map(), analysis_type(), map()) :: {:ok, map()} | {:error, term()}
-  defp analyze_episode(episode, :full, options) do
-    # Full analysis includes all components
-    with {:ok, summary} <- generate_summary(episode, options),
-         {:ok, entities} <- extract_entities(episode, options),
-         {:ok, sentiment} <- analyze_sentiment(episode, options),
-         {:ok, topics} <- extract_topics(episode, options) do
-      analysis = %{
-        type: :full,
-        summary: summary,
-        entities: entities,
-        sentiment: sentiment,
-        topics: topics,
-        analyzed_at: DateTime.utc_now(),
-        model: get_model_info()
-      }
+    cond do
+      not is_binary(content) ->
+        {:error, :invalid_content}
 
-      {:ok, analysis}
+      String.trim(content) == "" ->
+        {:error, :empty_content}
+
+      true ->
+        # Truncate content to prevent token overflow and cost explosion
+        truncated = Validation.truncate_content(content)
+        {:ok, truncated}
     end
   end
 
-  defp analyze_episode(episode, :summary, options) do
-    with {:ok, summary} <- generate_summary(episode, options) do
-      {:ok, %{type: :summary, summary: summary, analyzed_at: DateTime.utc_now()}}
+  # Analyze content based on type
+  @spec analyze_content(String.t(), analysis_type(), map()) :: {:ok, map()} | {:error, term()}
+  defp analyze_content(content, :full, options) do
+    # Run all analyses in parallel for performance
+    # Note: parallelism config available for future task pool implementation
+    timeout = Config.llm_timeout() * 2
+
+    tasks = [
+      Task.async(fn -> {:summary, generate_summary(content, options)} end),
+      Task.async(fn -> {:entities, extract_entities(content, options)} end),
+      Task.async(fn -> {:sentiment, analyze_sentiment(content, options)} end),
+      Task.async(fn -> {:topics, extract_topics(content, options)} end)
+    ]
+
+    results =
+      tasks
+      |> Task.await_many(timeout)
+      |> Enum.into(%{})
+
+    # Check for any failures
+    errors =
+      results
+      |> Enum.filter(fn {_key, result} -> match?({:error, _}, result) end)
+      |> Enum.map(fn {key, {:error, reason}} -> {key, reason} end)
+
+    if errors != [] do
+      # Check if any error is rate limiting
+      if Enum.any?(errors, fn {_, reason} -> reason == :rate_limited end) do
+        {:error, :rate_limited}
+      else
+        Logger.warning("Some analyses failed", errors: errors)
+        # Continue with partial results
+        build_analysis_result(:full, results)
+      end
+    else
+      build_analysis_result(:full, results)
     end
   end
 
-  defp analyze_episode(episode, :entities, options) do
-    with {:ok, entities} <- extract_entities(episode, options) do
-      {:ok, %{type: :entities, entities: entities, analyzed_at: DateTime.utc_now()}}
+  defp analyze_content(content, :summary, options) do
+    case generate_summary(content, options) do
+      {:ok, summary} ->
+        {:ok,
+         %{
+           type: :summary,
+           summary: summary,
+           analyzed_at: DateTime.utc_now(),
+           model: get_model_info()
+         }}
+
+      error ->
+        error
     end
   end
 
-  defp analyze_episode(episode, :sentiment, options) do
-    with {:ok, sentiment} <- analyze_sentiment(episode, options) do
-      {:ok, %{type: :sentiment, sentiment: sentiment, analyzed_at: DateTime.utc_now()}}
+  defp analyze_content(content, :entities, options) do
+    case extract_entities(content, options) do
+      {:ok, entities} ->
+        {:ok,
+         %{
+           type: :entities,
+           entities: entities,
+           analyzed_at: DateTime.utc_now(),
+           model: get_model_info()
+         }}
+
+      error ->
+        error
     end
   end
 
-  # LLM-based analysis functions
+  defp analyze_content(content, :sentiment, options) do
+    case analyze_sentiment(content, options) do
+      {:ok, sentiment} ->
+        {:ok,
+         %{
+           type: :sentiment,
+           sentiment: sentiment,
+           analyzed_at: DateTime.utc_now(),
+           model: get_model_info()
+         }}
 
-  @spec generate_summary(map(), map()) :: {:ok, String.t()} | {:error, term()}
-  defp generate_summary(episode, _options) do
-    content = episode["content"] || episode["text"] || ""
+      error ->
+        error
+    end
+  end
 
+  # Build analysis result from parallel task results
+  defp build_analysis_result(:full, results) do
+    {:ok,
+     %{
+       type: :full,
+       summary: extract_result(results[:summary], ""),
+       entities: extract_result(results[:entities], []),
+       sentiment: extract_result(results[:sentiment], %{"overall" => "neutral"}),
+       topics: extract_result(results[:topics], []),
+       analyzed_at: DateTime.utc_now(),
+       model: get_model_info()
+     }}
+  end
+
+  defp extract_result({:ok, value}, _default), do: value
+  defp extract_result({:error, _}, default), do: default
+  defp extract_result(nil, default), do: default
+
+  # LLM-based analysis functions with content already truncated
+
+  @spec generate_summary(String.t(), map()) :: {:ok, String.t()} | {:error, term()}
+  defp generate_summary(content, _options) do
     if String.length(content) < 100 do
       {:ok, content}
     else
-      # Use ReqLLM for summary generation (per constitution)
       prompt = """
-      Summarize the following content in 2-3 sentences:
+      Summarize the following content in 2-3 sentences. Be concise and factual.
 
+      Content:
       #{content}
       """
 
-      case call_llm(prompt) do
-        {:ok, summary} -> {:ok, summary}
-        error -> error
-      end
+      call_llm(prompt)
     end
   end
 
-  @spec extract_entities(map(), map()) :: {:ok, [map()]} | {:error, term()}
-  defp extract_entities(episode, _options) do
-    content = episode["content"] || episode["text"] || ""
-
+  @spec extract_entities(String.t(), map()) :: {:ok, [map()]} | {:error, term()}
+  defp extract_entities(content, _options) do
     prompt = """
-    Extract named entities from the following content. Return as JSON array with objects containing:
+    Extract named entities from the following content. Return ONLY a JSON array with objects containing:
     - name: entity name
     - type: person, organization, location, product, event, or other
     - mentions: number of times mentioned
 
     Content:
     #{content}
+
+    Response (JSON array only):
     """
 
     case call_llm(prompt) do
       {:ok, response} ->
-        entities = parse_json_response(response, [])
-        {:ok, entities}
+        case Validation.extract_json(response, []) do
+          {:ok, entities} when is_list(entities) -> {:ok, entities}
+          _ -> {:ok, []}
+        end
 
       error ->
         error
     end
   end
 
-  @spec analyze_sentiment(map(), map()) :: {:ok, map()} | {:error, term()}
-  defp analyze_sentiment(episode, _options) do
-    content = episode["content"] || episode["text"] || ""
-
+  @spec analyze_sentiment(String.t(), map()) :: {:ok, map()} | {:error, term()}
+  defp analyze_sentiment(content, _options) do
     prompt = """
-    Analyze the sentiment of the following content. Return as JSON with:
-    - overall: positive, negative, neutral, or mixed
-    - confidence: 0.0 to 1.0
-    - aspects: array of {aspect, sentiment, confidence}
+    Analyze the sentiment of the following content. Return ONLY a JSON object with:
+    - overall: "positive", "negative", "neutral", or "mixed"
+    - confidence: number between 0.0 and 1.0
+    - aspects: array of objects with {aspect, sentiment, confidence}
 
     Content:
     #{content}
+
+    Response (JSON object only):
     """
+
+    default = %{"overall" => "neutral", "confidence" => 0.5, "aspects" => []}
 
     case call_llm(prompt) do
       {:ok, response} ->
-        sentiment =
-          parse_json_response(response, %{
-            "overall" => "neutral",
-            "confidence" => 0.5,
-            "aspects" => []
-          })
-
-        {:ok, sentiment}
+        case Validation.extract_json(response, default) do
+          {:ok, sentiment} when is_map(sentiment) -> {:ok, sentiment}
+          _ -> {:ok, default}
+        end
 
       error ->
         error
     end
   end
 
-  @spec extract_topics(map(), map()) :: {:ok, [String.t()]} | {:error, term()}
-  defp extract_topics(episode, _options) do
-    content = episode["content"] || episode["text"] || ""
-
+  @spec extract_topics(String.t(), map()) :: {:ok, [String.t()]} | {:error, term()}
+  defp extract_topics(content, _options) do
     prompt = """
-    Extract the main topics from the following content. Return as JSON array of strings.
-    List 3-5 main topics.
+    Extract 3-5 main topics from the following content. Return ONLY a JSON array of topic strings.
 
     Content:
     #{content}
+
+    Response (JSON array of strings only):
     """
 
     case call_llm(prompt) do
       {:ok, response} ->
-        topics = parse_json_response(response, [])
-        {:ok, topics}
+        case Validation.extract_json(response, []) do
+          {:ok, topics} when is_list(topics) ->
+            # Ensure all topics are strings
+            valid_topics = Enum.filter(topics, &is_binary/1)
+            {:ok, valid_topics}
+
+          _ ->
+            {:ok, []}
+        end
 
       error ->
         error
     end
   end
 
-  # LLM API call (uses ReqLLM per constitution)
-
+  # LLM API call with timeout and error handling
   @spec call_llm(String.t()) :: {:ok, String.t()} | {:error, term()}
   defp call_llm(prompt) do
-    # Check if ReqLLM is available
     if Code.ensure_loaded?(ReqLLM) do
-      config = get_llm_config()
-
-      req =
-        Req.new(base_url: config[:base_url])
-        |> ReqLLM.attach()
-
-      case Req.post(req,
-             json: %{
-               model: config[:model],
-               messages: [%{role: "user", content: prompt}],
-               max_tokens: 1000
-             }
-           ) do
-        {:ok, %{body: %{"choices" => [%{"message" => %{"content" => content}} | _]}}} ->
-          {:ok, content}
-
-        {:ok, %{status: 429}} ->
-          {:error, :rate_limited}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      call_llm_with_reqllm(prompt)
     else
-      # Fallback: return placeholder
       Logger.warning("ReqLLM not available, using placeholder analysis")
       {:ok, "[Analysis placeholder - ReqLLM not configured]"}
     end
+  end
+
+  defp call_llm_with_reqllm(prompt) do
+    base_url = Config.llm_base_url()
+    model = Config.llm_model()
+    max_tokens = Config.llm_max_tokens()
+    timeout = Config.llm_timeout()
+
+    req =
+      Req.new(
+        base_url: base_url,
+        receive_timeout: timeout,
+        retry: false
+      )
+      |> ReqLLM.attach()
+
+    case Req.post(req,
+           url: "/chat/completions",
+           json: %{
+             model: model,
+             messages: [%{role: "user", content: prompt}],
+             max_tokens: max_tokens,
+             temperature: 0.3
+           }
+         ) do
+      {:ok, %{status: 200, body: %{"choices" => [%{"message" => %{"content" => content}} | _]}}} ->
+        {:ok, String.trim(content)}
+
+      {:ok, %{status: 429}} ->
+        {:error, :rate_limited}
+
+      {:ok, %{status: 401}} ->
+        Logger.error("LLM API authentication failed")
+        {:error, :auth_failed}
+
+      {:ok, %{status: status, body: body}} ->
+        Logger.error("LLM API error", status: status, body: inspect(body))
+        {:error, {:api_error, status}}
+
+      {:error, %Req.TransportError{reason: :timeout}} ->
+        {:error, :timeout}
+
+      {:error, reason} ->
+        Logger.error("LLM request failed", reason: inspect(reason))
+        {:error, :request_failed}
+    end
   rescue
     e ->
-      Logger.error("LLM call failed", error: inspect(e))
+      Logger.error("LLM call exception", error: Exception.message(e))
       {:error, :llm_error}
   end
 
-  defp get_llm_config do
-    Application.get_env(:cybernetic, :llm, [])
-    |> Keyword.merge(
-      base_url: "https://api.openai.com/v1",
-      model: "gpt-4o-mini"
-    )
-  end
-
   defp get_model_info do
-    config = get_llm_config()
-    %{provider: "openai", model: config[:model]}
+    %{
+      provider: to_string(Config.llm_provider()),
+      model: Config.llm_model()
+    }
   end
 
   # Store analysis results
-
   @spec store_analysis(String.t(), String.t(), map()) :: :ok | {:error, term()}
   defp store_analysis(tenant_id, episode_id, analysis) do
     path = "episodes/#{episode_id}/analysis.json"
-    content = Jason.encode!(analysis)
 
-    case Cybernetic.Storage.put(tenant_id, path, content, content_type: "application/json") do
-      {:ok, _} -> :ok
-      error -> error
+    case Jason.encode(analysis) do
+      {:ok, content} ->
+        case Cybernetic.Storage.put(tenant_id, path, content, content_type: "application/json") do
+          {:ok, _} -> :ok
+          error -> error
+        end
+
+      {:error, _} ->
+        {:error, :encoding_failed}
     end
   end
 
   # Publish completion event
-
   defp publish_analysis_complete(tenant_id, episode_id, analysis) do
+    pubsub = Config.pubsub_module()
+
     Phoenix.PubSub.broadcast(
-      Cybernetic.PubSub,
+      pubsub,
       "events:episode",
-      {:event, "episode.analyzed", %{
-        tenant_id: tenant_id,
-        episode_id: episode_id,
-        analysis_type: analysis.type,
-        timestamp: DateTime.utc_now()
-      }}
+      {:event, "episode.analyzed",
+       %{
+         tenant_id: tenant_id,
+         episode_id: episode_id,
+         analysis_type: analysis.type,
+         timestamp: DateTime.utc_now()
+       }}
     )
   end
 
-  # Parse JSON from LLM response
+  # Calculate exponential backoff for rate limiting
+  defp calculate_backoff(attempt) do
+    base = 30
+    max_backoff = 300
+    jitter = :rand.uniform(10)
 
-  defp parse_json_response(response, default) do
-    # Try to extract JSON from response
-    json_pattern = ~r/\[[\s\S]*\]|\{[\s\S]*\}/
-
-    case Regex.run(json_pattern, response) do
-      [json_str | _] ->
-        case Jason.decode(json_str) do
-          {:ok, parsed} -> parsed
-          _ -> default
-        end
-
-      nil ->
-        default
-    end
+    min(base * :math.pow(2, attempt - 1) |> round(), max_backoff) + jitter
   end
 
   # Telemetry
-
   defp emit_telemetry(status, start_time, analysis_type) do
     duration = System.monotonic_time(:millisecond) - start_time
 
