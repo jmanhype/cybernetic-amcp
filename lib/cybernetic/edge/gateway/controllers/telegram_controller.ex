@@ -59,13 +59,21 @@ defmodule Cybernetic.Edge.Gateway.TelegramController do
   # Verify the X-Telegram-Bot-Api-Secret-Token header
   @spec verify_webhook_secret(Plug.Conn.t()) :: :ok | {:error, :invalid_secret}
   defp verify_webhook_secret(conn) do
+    env = Application.get_env(:cybernetic, :environment, :prod)
     expected_secret = get_webhook_secret()
 
-    case Plug.Conn.get_req_header(conn, "x-telegram-bot-api-secret-token") do
-      [^expected_secret] -> :ok
-      # Allow requests without secret in dev mode if secret is not configured
-      [] when is_nil(expected_secret) -> :ok
-      _ -> {:error, :invalid_secret}
+    cond do
+      env in [:dev, :test] and (is_nil(expected_secret) or expected_secret == "") ->
+        :ok
+
+      is_binary(expected_secret) and expected_secret != "" ->
+        case Plug.Conn.get_req_header(conn, "x-telegram-bot-api-secret-token") do
+          [^expected_secret] -> :ok
+          _ -> {:error, :invalid_secret}
+        end
+
+      true ->
+        {:error, :invalid_secret}
     end
   end
 
@@ -290,7 +298,6 @@ defmodule Cybernetic.Edge.Gateway.TelegramController do
   # Get webhook secret from config
   @spec get_webhook_secret() :: String.t() | nil
   defp get_webhook_secret do
-    Application.get_env(:cybernetic, :telegram, [])
-    |> Keyword.get(:webhook_secret)
+    Cybernetic.Config.telegram_webhook_secret()
   end
 end

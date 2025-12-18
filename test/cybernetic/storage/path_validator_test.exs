@@ -7,13 +7,18 @@ defmodule Cybernetic.Storage.PathValidatorTest do
     test "accepts valid simple paths" do
       assert {:ok, "file.txt"} = PathValidator.validate_path("file.txt")
       assert {:ok, "data/file.json"} = PathValidator.validate_path("data/file.json")
-      assert {:ok, "artifacts/2024/01/data.bin"} = PathValidator.validate_path("artifacts/2024/01/data.bin")
+
+      assert {:ok, "artifacts/2024/01/data.bin"} =
+               PathValidator.validate_path("artifacts/2024/01/data.bin")
     end
 
     test "accepts paths with valid characters" do
       assert {:ok, "file-name.txt"} = PathValidator.validate_path("file-name.txt")
       assert {:ok, "file_name.txt"} = PathValidator.validate_path("file_name.txt")
-      assert {:ok, "file.multiple.dots.txt"} = PathValidator.validate_path("file.multiple.dots.txt")
+
+      assert {:ok, "file.multiple.dots.txt"} =
+               PathValidator.validate_path("file.multiple.dots.txt")
+
       assert {:ok, "UPPERCASE.TXT"} = PathValidator.validate_path("UPPERCASE.TXT")
       assert {:ok, "123numeric.txt"} = PathValidator.validate_path("123numeric.txt")
     end

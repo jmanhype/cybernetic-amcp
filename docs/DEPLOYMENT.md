@@ -41,6 +41,11 @@ Required variables:
 - `REDIS_URL` - Redis connection string
 - `SECRET_KEY_BASE` - Phoenix secret key
 - `CYBERNETIC_HMAC_SECRET` - HMAC secret for security
+- `JWT_SECRET` - Token signing secret (min 32 chars)
+- `PASSWORD_SALT` - Password hashing salt (min 16 chars)
+
+Recommended:
+- `CYBERNETIC_SYSTEM_API_KEY` - Edge Gateway `x-api-key` authentication (system access)
 
 Optional AI providers:
 - `ANTHROPIC_API_KEY` - For Claude AI
@@ -190,6 +195,9 @@ resources:
 # Generate secure secrets
 openssl rand -hex 32  # For SECRET_KEY_BASE
 openssl rand -hex 32  # For CYBERNETIC_HMAC_SECRET
+openssl rand -hex 32  # For JWT_SECRET
+openssl rand -hex 16  # For PASSWORD_SALT
+openssl rand -hex 32  # For CYBERNETIC_SYSTEM_API_KEY (optionally prefix with cyb_)
 openssl rand -hex 16  # For RELEASE_COOKIE
 ```
 

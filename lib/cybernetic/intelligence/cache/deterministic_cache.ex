@@ -49,8 +49,10 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @default_ttl :timer.hours(24)
   @default_max_size 10_000
-  @default_max_memory 100 * 1024 * 1024  # 100MB
-  @default_max_content_size 10 * 1024 * 1024  # 10MB per item
+  # 100MB
+  @default_max_memory 100 * 1024 * 1024
+  # 10MB per item
+  @default_max_content_size 10 * 1024 * 1024
 
   @telemetry [:cybernetic, :intelligence, :cache]
 
@@ -145,7 +147,8 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
     name = Keyword.get(opts, :name, __MODULE__)
 
     # Create public ETS table for cache data (read bypass)
-    data_table = :ets.new(cache_table_name(name), [:set, :public, :named_table, {:read_concurrency, true}])
+    data_table =
+      :ets.new(cache_table_name(name), [:set, :public, :named_table, {:read_concurrency, true}])
 
     # Create private ETS table for O(1) LRU tracking: {access_counter, key}
     lru_table = :ets.new(:cache_lru, [:ordered_set, :private])
@@ -154,9 +157,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
       name: name,
       data_table: data_table,
       bloom: :atomics.new(@bloom_size, signed: false),
-      bloom_generation: 0,  # Track Bloom filter resets
+      # Track Bloom filter resets
+      bloom_generation: 0,
       lru_table: lru_table,
-      access_counter: 0,    # Monotonic counter for LRU ordering
+      # Monotonic counter for LRU ordering
+      access_counter: 0,
       max_size: Keyword.get(opts, :max_size, @default_max_size),
       max_memory: Keyword.get(opts, :max_memory, @default_max_memory),
       max_content_size: Keyword.get(opts, :max_content_size, @default_max_content_size),

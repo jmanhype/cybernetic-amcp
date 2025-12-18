@@ -17,7 +17,8 @@ defmodule Cybernetic.Capabilities.LLMCDNTest do
 
       assert fp1 == fp2
       assert is_binary(fp1)
-      assert String.length(fp1) == 64  # SHA256 hex
+      # SHA256 hex
+      assert String.length(fp1) == 64
     end
 
     test "different params produce different fingerprints" do
@@ -142,7 +143,8 @@ defmodule Cybernetic.Capabilities.LLMCDNTest do
   describe "stats/0" do
     test "returns cache statistics" do
       {:ok, _} = LLMCDN.complete(%{model: "stats1", messages: []})
-      {:ok, _} = LLMCDN.complete(%{model: "stats1", messages: []})  # hit
+      # hit
+      {:ok, _} = LLMCDN.complete(%{model: "stats1", messages: []})
       {:ok, _} = LLMCDN.complete(%{model: "stats2", messages: []})
 
       stats = LLMCDN.stats()

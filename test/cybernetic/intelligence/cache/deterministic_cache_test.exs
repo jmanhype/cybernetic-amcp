@@ -4,7 +4,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCacheTest do
   alias Cybernetic.Intelligence.Cache.DeterministicCache
 
   setup do
-    {:ok, pid} = start_supervised({DeterministicCache, [name: :test_cache, max_size: 100, max_memory: 10_000]})
+    {:ok, pid} =
+      start_supervised(
+        {DeterministicCache, [name: :test_cache, max_size: 100, max_memory: 10_000]}
+      )
+
     # start_supervised handles cleanup automatically
     %{pid: pid}
   end
@@ -13,7 +17,8 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCacheTest do
     test "stores content and returns SHA256 key" do
       {:ok, key} = DeterministicCache.put("hello world", server: :test_cache)
       assert is_binary(key)
-      assert String.length(key) == 64  # SHA256 hex = 64 chars
+      # SHA256 hex = 64 chars
+      assert String.length(key) == 64
     end
 
     test "returns same key for identical content" do
@@ -29,10 +34,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCacheTest do
     end
 
     test "rejects content exceeding max size" do
-      {:ok, _pid} = start_supervised(
-        {DeterministicCache, [name: :small_cache, max_content_size: 10]},
-        id: :small_cache
-      )
+      {:ok, _pid} =
+        start_supervised(
+          {DeterministicCache, [name: :small_cache, max_content_size: 10]},
+          id: :small_cache
+        )
 
       assert {:error, :content_too_large} =
                DeterministicCache.put("this content is too large", server: :small_cache)
@@ -105,7 +111,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCacheTest do
 
     test "may return true for non-existent keys (false positive)" do
       # This test just verifies the function works, not the FP rate
-      result = DeterministicCache.probably_exists?("random_key_#{:rand.uniform(1_000_000)}", server: :test_cache)
+      result =
+        DeterministicCache.probably_exists?("random_key_#{:rand.uniform(1_000_000)}",
+          server: :test_cache
+        )
+
       assert is_boolean(result)
     end
   end
@@ -171,10 +181,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCacheTest do
 
   describe "LRU eviction" do
     test "evicts least recently used when max_size reached" do
-      {:ok, pid} = start_supervised(
-        {DeterministicCache, [name: :lru_cache, max_size: 3]},
-        id: :lru_cache
-      )
+      {:ok, pid} =
+        start_supervised(
+          {DeterministicCache, [name: :lru_cache, max_size: 3]},
+          id: :lru_cache
+        )
 
       {:ok, key1} = DeterministicCache.put("first", server: :lru_cache)
       {:ok, key2} = DeterministicCache.put("second", server: :lru_cache)
@@ -193,10 +204,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCacheTest do
     end
 
     test "evicts by memory limit" do
-      {:ok, _pid} = start_supervised(
-        {DeterministicCache, [name: :mem_cache, max_memory: 100]},
-        id: :mem_cache
-      )
+      {:ok, _pid} =
+        start_supervised(
+          {DeterministicCache, [name: :mem_cache, max_memory: 100]},
+          id: :mem_cache
+        )
 
       {:ok, key1} = DeterministicCache.put(String.duplicate("a", 30), server: :mem_cache)
       {:ok, key2} = DeterministicCache.put(String.duplicate("b", 30), server: :mem_cache)

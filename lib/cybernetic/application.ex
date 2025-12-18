@@ -27,6 +27,8 @@ defmodule Cybernetic.Application do
           {Oban, Application.fetch_env!(:cybernetic, Oban)},
           # PromEx metrics
           Cybernetic.PromEx,
+          # Phoenix PubSub (used by SSE and event broadcasting)
+          {Phoenix.PubSub, name: Cybernetic.PubSub},
           # Cluster discovery
           {Cluster.Supervisor,
            [

@@ -107,6 +107,8 @@ nav:
   - Getting Started:
     - Installation: getting-started/installation.md
     - Setup Guide: README_SETUP.md
+  - API:
+    - Overview: api/overview.md
   - Architecture:
     - Overview: architecture.md
     - Features: features.md

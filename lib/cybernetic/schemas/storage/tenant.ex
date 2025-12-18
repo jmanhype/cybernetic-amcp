@@ -30,15 +30,15 @@ defmodule Cybernetic.Schemas.Storage.Tenant do
   @foreign_key_type :binary_id
 
   schema "tenants" do
-    field :name, :string
-    field :slug, :string
-    field :settings, :map, default: %{}
-    field :active, :boolean, default: true
+    field(:name, :string)
+    field(:slug, :string)
+    field(:settings, :map, default: %{})
+    field(:active, :boolean, default: true)
 
-    has_many :system_states, Cybernetic.Schemas.VSM.SystemState
-    has_many :episodes, Cybernetic.Schemas.VSM.Episode
-    has_many :policies, Cybernetic.Schemas.VSM.Policy
-    has_many :artifacts, Cybernetic.Schemas.Storage.Artifact
+    has_many(:system_states, Cybernetic.Schemas.VSM.SystemState)
+    has_many(:episodes, Cybernetic.Schemas.VSM.Episode)
+    has_many(:policies, Cybernetic.Schemas.VSM.Policy)
+    has_many(:artifacts, Cybernetic.Schemas.Storage.Artifact)
 
     timestamps(type: :utc_datetime_usec)
   end

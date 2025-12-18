@@ -218,7 +218,10 @@ defmodule Cybernetic.Workers.PolicyEvaluator do
     Enum.all?(conditions, &evaluate_condition(&1, context))
   end
 
-  defp evaluate_condition(%{"type" => "field_equals", "field" => field, "value" => value}, context) do
+  defp evaluate_condition(
+         %{"type" => "field_equals", "field" => field, "value" => value},
+         context
+       ) do
     actual = get_in(context.event_data, String.split(field, "."))
     actual == value
   end
@@ -243,7 +246,10 @@ defmodule Cybernetic.Workers.PolicyEvaluator do
     get_in(context.event_data, String.split(field, ".")) != nil
   end
 
-  defp evaluate_condition(%{"type" => "time_window", "start" => start_hour, "end" => end_hour}, _context) do
+  defp evaluate_condition(
+         %{"type" => "time_window", "start" => start_hour, "end" => end_hour},
+         _context
+       ) do
     current_hour = DateTime.utc_now().hour
     current_hour >= start_hour and current_hour < end_hour
   end
@@ -272,7 +278,11 @@ defmodule Cybernetic.Workers.PolicyEvaluator do
     Enum.each(actions, &execute_action(&1, tenant_id, result))
   end
 
-  defp execute_action(%{"type" => "enqueue_job", "worker" => worker_name, "args" => args}, tenant_id, _result) do
+  defp execute_action(
+         %{"type" => "enqueue_job", "worker" => worker_name, "args" => args},
+         tenant_id,
+         _result
+       ) do
     worker_module = get_worker_module(worker_name)
 
     job_args =
@@ -289,7 +299,11 @@ defmodule Cybernetic.Workers.PolicyEvaluator do
     end
   end
 
-  defp execute_action(%{"type" => "send_notification", "channel" => channel, "message" => message}, tenant_id, _result) do
+  defp execute_action(
+         %{"type" => "send_notification", "channel" => channel, "message" => message},
+         tenant_id,
+         _result
+       ) do
     Cybernetic.Workers.NotificationSender.new(%{
       tenant_id: tenant_id,
       channel: channel,
@@ -302,11 +316,12 @@ defmodule Cybernetic.Workers.PolicyEvaluator do
     Phoenix.PubSub.broadcast(
       Cybernetic.PubSub,
       "events:policy",
-      {:event, event_type, %{
-        tenant_id: tenant_id,
-        policy_id: result.policy_id,
-        timestamp: DateTime.utc_now()
-      }}
+      {:event, event_type,
+       %{
+         tenant_id: tenant_id,
+         policy_id: result.policy_id,
+         timestamp: DateTime.utc_now()
+       }}
     )
   end
 

@@ -56,7 +56,8 @@ defmodule Cybernetic.Content.Buckets.CBCP do
   # Configuration
   @max_buckets_per_tenant 100
   @max_name_length 128
-  @default_quota nil  # No limit by default
+  # No limit by default
+  @default_quota nil
   @cleanup_interval :timer.hours(1)
 
   @telemetry [:cybernetic, :content, :buckets]

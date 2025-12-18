@@ -95,7 +95,8 @@ defmodule Cybernetic.Storage.Adapters.Local do
     max_size = Config.storage_max_file_size()
 
     if max_size > 0 and byte_size(content) > max_size do
-      {:error, Error.new(:quota_exceeded, message: "File exceeds maximum size of #{max_size} bytes")}
+      {:error,
+       Error.new(:quota_exceeded, message: "File exceeds maximum size of #{max_size} bytes")}
     else
       :ok
     end
@@ -118,7 +119,7 @@ defmodule Cybernetic.Storage.Adapters.Local do
   @impl true
   @spec stream(String.t(), String.t(), keyword()) ::
           {:ok, Enumerable.t()} | {:error, Error.t()}
-  def stream(tenant_id, path, opts \\ []) do
+  def stream(tenant_id, path, opts) do
     with {:ok, full_path} <- build_full_path(tenant_id, path),
          {:ok, true} <- exists?(tenant_id, path) do
       chunk_size = Keyword.get(opts, :chunk_size, Config.storage_chunk_size())
@@ -224,7 +225,12 @@ defmodule Cybernetic.Storage.Adapters.Local do
           {:ok, artifact}
 
         {:ok, %File.Stat{type: :directory}} ->
-          {:error, Error.new(:invalid_path, path: path, tenant_id: tenant_id, message: "Path is a directory")}
+          {:error,
+           Error.new(:invalid_path,
+             path: path,
+             tenant_id: tenant_id,
+             message: "Path is a directory"
+           )}
 
         {:error, reason} ->
           {:error, Error.wrap(reason, path: path, tenant_id: tenant_id, operation: :stat)}

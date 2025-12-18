@@ -60,7 +60,8 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
   @gc_interval :timer.minutes(5)
   @tombstone_ttl :timer.hours(24)
   @max_beliefs 100_000
-  @max_value_size 1024 * 1024  # 1MB per value
+  # 1MB per value
+  @max_value_size 1024 * 1024
 
   @telemetry [:cybernetic, :intelligence, :crdt]
 
@@ -220,7 +221,13 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
         emit_telemetry(:remove, %{id: id, version: new_version})
 
         {:reply, :ok,
-         %{state | beliefs: new_beliefs, version: new_version, version_clock: new_clock, stats: new_stats}}
+         %{
+           state
+           | beliefs: new_beliefs,
+             version: new_version,
+             version_clock: new_clock,
+             stats: new_stats
+         }}
     end
   end
 
@@ -267,7 +274,8 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
     entries =
       changed_ids
-      |> Enum.uniq()  # Dedupe: same ID may appear at multiple versions (add then remove)
+      # Dedupe: same ID may appear at multiple versions (add then remove)
+      |> Enum.uniq()
       |> Enum.map(&Map.get(state.beliefs, &1))
       |> Enum.reject(&is_nil/1)
 
@@ -297,9 +305,10 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
         end
       end)
 
-    new_clock = Map.update(state.version_clock, delta.node_id, delta.to_version, fn existing ->
-      max(existing, delta.to_version)
-    end)
+    new_clock =
+      Map.update(state.version_clock, delta.node_id, delta.to_version, fn existing ->
+        max(existing, delta.to_version)
+      end)
 
     new_version = max(state.version, delta.to_version)
 
@@ -321,7 +330,13 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     })
 
     {:reply, :ok,
-     %{state | beliefs: new_beliefs, version: new_version, version_clock: new_clock, stats: new_stats}}
+     %{
+       state
+       | beliefs: new_beliefs,
+         version: new_version,
+         version_clock: new_clock,
+         stats: new_stats
+     }}
   end
 
   @impl true
@@ -448,7 +463,13 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     emit_telemetry(:add, %{id: id, version: new_version})
 
     {:reply, :ok,
-     %{state | beliefs: new_beliefs, version: new_version, version_clock: new_clock, stats: new_stats}}
+     %{
+       state
+       | beliefs: new_beliefs,
+         version: new_version,
+         version_clock: new_clock,
+         stats: new_stats
+     }}
   end
 
   @spec merge_entries(belief_entry(), belief_entry()) :: {belief_entry(), boolean()}

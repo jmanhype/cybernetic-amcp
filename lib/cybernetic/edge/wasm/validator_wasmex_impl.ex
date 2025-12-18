@@ -13,33 +13,33 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
     if not wasmex_available?() do
       {:error, :wasmex_not_available}
     else
-    fuel = Keyword.get(opts, :fuel, 5_000_000)
-    max_pages = Keyword.get(opts, :max_memory_pages, 64)
+      fuel = Keyword.get(opts, :fuel, 5_000_000)
+      max_pages = Keyword.get(opts, :max_memory_pages, 64)
 
-    start_time = System.monotonic_time(:microsecond)
+      start_time = System.monotonic_time(:microsecond)
 
-    with {:ok, store} <- apply(Wasmex.Store, :new, [[limits: %{fuel: fuel}]]),
-         {:ok, module} <- apply(Wasmex.Module, :compile, [store, bytes]),
-         {:ok, imports} <- build_imports(store),
-         {:ok, instance} <-
-           apply(Wasmex.Instance, :new, [
-             store,
-             module,
-             imports,
-             [fuel: fuel, memory_limits: %{max_pages: max_pages}]
-           ]) do
-      load_time = System.monotonic_time(:microsecond) - start_time
-      :telemetry.execute(@telemetry ++ [:loaded], %{duration_us: load_time}, %{})
+      with {:ok, store} <- apply(Wasmex.Store, :new, [[limits: %{fuel: fuel}]]),
+           {:ok, module} <- apply(Wasmex.Module, :compile, [store, bytes]),
+           {:ok, imports} <- build_imports(store),
+           {:ok, instance} <-
+             apply(Wasmex.Instance, :new, [
+               store,
+               module,
+               imports,
+               [fuel: fuel, memory_limits: %{max_pages: max_pages}]
+             ]) do
+        load_time = System.monotonic_time(:microsecond) - start_time
+        :telemetry.execute(@telemetry ++ [:loaded], %{duration_us: load_time}, %{})
 
-      {:ok, %{instance: instance, store: store, fuel_limit: fuel}}
-    else
-      {:error, r} ->
-        Logger.error("WASM load failed: #{inspect(r)}")
-        {:error, r}
+        {:ok, %{instance: instance, store: store, fuel_limit: fuel}}
+      else
+        {:error, r} ->
+          Logger.error("WASM load failed: #{inspect(r)}")
+          {:error, r}
 
-      other ->
-        {:error, other}
-    end
+        other ->
+          {:error, other}
+      end
     end
   end
 
@@ -48,75 +48,75 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
     if not wasmex_available?() do
       {:error, :wasmex_not_available}
     else
-    %{instance: instance, store: store, fuel_limit: fuel_limit} = validator_state
-    timeout = Keyword.get(opts, :timeout_ms, 50)
+      %{instance: instance, store: store, fuel_limit: fuel_limit} = validator_state
+      timeout = Keyword.get(opts, :timeout_ms, 50)
 
-    # Reset fuel for each validation
-    :ok = apply(Wasmex.Store, :set_fuel, [store, fuel_limit])
+      # Reset fuel for each validation
+      :ok = apply(Wasmex.Store, :set_fuel, [store, fuel_limit])
 
-    start_time = System.monotonic_time(:microsecond)
-    json = Jason.encode!(message)
+      start_time = System.monotonic_time(:microsecond)
+      json = Jason.encode!(message)
 
-    # Add security context
-    context = %{
-      timestamp: System.system_time(:millisecond),
-      nonce: :crypto.strong_rand_bytes(16) |> Base.encode16()
-    }
+      # Add security context
+      context = %{
+        timestamp: System.system_time(:millisecond),
+        nonce: :crypto.strong_rand_bytes(16) |> Base.encode16()
+      }
 
-    result =
-      apply(Wasmex.Instance, :call_exported_function, [
-        instance,
-        "validate",
-        [json, Jason.encode!(context)],
-        [timeout: timeout]
-      ])
+      result =
+        apply(Wasmex.Instance, :call_exported_function, [
+          instance,
+          "validate",
+          [json, Jason.encode!(context)],
+          [timeout: timeout]
+        ])
 
-    validation_time = System.monotonic_time(:microsecond) - start_time
+      validation_time = System.monotonic_time(:microsecond) - start_time
 
-    fuel_consumed =
-      try do
-        fuel_limit - apply(Wasmex.Store, :fuel_remaining, [store])
-      rescue
-        # If fuel tracking fails, report 0 consumption
-        _ -> 0
+      fuel_consumed =
+        try do
+          fuel_limit - apply(Wasmex.Store, :fuel_remaining, [store])
+        rescue
+          # If fuel tracking fails, report 0 consumption
+          _ -> 0
+        end
+
+      :telemetry.execute(
+        @telemetry ++ [:executed],
+        %{
+          duration_us: validation_time,
+          fuel_consumed: fuel_consumed
+        },
+        %{result: if(is_tuple(result), do: elem(result, 0), else: :unknown)}
+      )
+
+      case result do
+        {:ok, 0} ->
+          {:ok, %{valid: true, fuel_consumed: fuel_consumed, duration_us: validation_time}}
+
+        {:ok, code} when is_integer(code) ->
+          {:error,
+           %{
+             valid: false,
+             error_code: code,
+             error_message: decode_error(code),
+             fuel_consumed: fuel_consumed
+           }}
+
+        {:error, :timeout} ->
+          Logger.warning("WASM validation timeout after #{timeout}ms")
+          {:error, :validation_timeout}
+
+        {:error, :out_of_fuel} ->
+          Logger.warning("WASM exhausted fuel limit: #{fuel_limit}")
+          {:error, :fuel_exhausted}
+
+        {:error, reason} ->
+          {:error, reason}
+
+        other ->
+          {:error, {:unexpected_return, other}}
       end
-
-    :telemetry.execute(
-      @telemetry ++ [:executed],
-      %{
-        duration_us: validation_time,
-        fuel_consumed: fuel_consumed
-      },
-      %{result: if(is_tuple(result), do: elem(result, 0), else: :unknown)}
-    )
-
-    case result do
-      {:ok, 0} ->
-        {:ok, %{valid: true, fuel_consumed: fuel_consumed, duration_us: validation_time}}
-
-      {:ok, code} when is_integer(code) ->
-        {:error,
-         %{
-           valid: false,
-           error_code: code,
-           error_message: decode_error(code),
-           fuel_consumed: fuel_consumed
-         }}
-
-      {:error, :timeout} ->
-        Logger.warning("WASM validation timeout after #{timeout}ms")
-        {:error, :validation_timeout}
-
-      {:error, :out_of_fuel} ->
-        Logger.warning("WASM exhausted fuel limit: #{fuel_limit}")
-        {:error, :fuel_exhausted}
-
-      {:error, reason} ->
-        {:error, reason}
-
-      other ->
-        {:error, {:unexpected_return, other}}
-    end
     end
   rescue
     e ->

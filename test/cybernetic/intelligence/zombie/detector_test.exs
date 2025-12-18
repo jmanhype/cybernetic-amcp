@@ -20,9 +20,11 @@ defmodule Cybernetic.Intelligence.Zombie.DetectorTest do
 
     test "rejects dead processes" do
       dead_pid = spawn(fn -> :ok end)
-      Process.sleep(10)  # Let it die
+      # Let it die
+      Process.sleep(10)
 
-      assert {:error, :process_not_alive} = Detector.register(dead_pid, %{}, server: :test_detector)
+      assert {:error, :process_not_alive} =
+               Detector.register(dead_pid, %{}, server: :test_detector)
     end
 
     test "accepts timeout_ms option" do
@@ -39,10 +41,15 @@ defmodule Cybernetic.Intelligence.Zombie.DetectorTest do
     test "accepts restart_mfa option" do
       test_pid = spawn(fn -> Process.sleep(:infinity) end)
 
-      {:ok, _ref} = Detector.register(test_pid, %{
-        name: "restartable",
-        restart_mfa: {Kernel, :exit, [:normal]}
-      }, server: :test_detector)
+      {:ok, _ref} =
+        Detector.register(
+          test_pid,
+          %{
+            name: "restartable",
+            restart_mfa: {Kernel, :exit, [:normal]}
+          },
+          server: :test_detector
+        )
 
       {:ok, info} = Detector.get_status(test_pid, server: :test_detector)
       assert info.restart_mfa == {Kernel, :exit, [:normal]}
@@ -205,7 +212,8 @@ defmodule Cybernetic.Intelligence.Zombie.DetectorTest do
 
       # Kill the process
       Process.exit(test_pid, :kill)
-      Process.sleep(50)  # Allow DOWN message to be processed
+      # Allow DOWN message to be processed
+      Process.sleep(50)
 
       # Should be removed
       assert {:error, :not_found} = Detector.get_status(test_pid, server: :test_detector)

@@ -40,12 +40,12 @@ defmodule Cybernetic.Schemas.VSM.SystemState do
   @systems 1..5
 
   schema "system_states" do
-    field :system, :integer
-    field :state, :map, default: %{}
-    field :version, :integer, default: 1
-    field :metadata, :map, default: %{}
+    field(:system, :integer)
+    field(:state, :map, default: %{})
+    field(:version, :integer, default: 1)
+    field(:metadata, :map, default: %{})
 
-    belongs_to :tenant, Cybernetic.Schemas.Storage.Tenant
+    belongs_to(:tenant, Cybernetic.Schemas.Storage.Tenant)
 
     timestamps(type: :utc_datetime_usec)
   end

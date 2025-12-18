@@ -46,7 +46,8 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
 
   @default_timeout_ms 60_000
   @default_check_interval_ms 10_000
-  @memory_growth_threshold 5.0  # 5x baseline = zombie
+  # 5x baseline = zombie
+  @memory_growth_threshold 5.0
 
   # MFA whitelist for restart security - only allow calls to known safe modules
   # Configure via Application.put_env(:cybernetic, :zombie_restart_whitelist, [MyModule])
@@ -70,7 +71,8 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
   end
 
   @doc "Register a process for monitoring"
-  @spec register(process_id(), map(), keyword()) :: {:ok, reference()} | {:error, :process_not_alive}
+  @spec register(process_id(), map(), keyword()) ::
+          {:ok, reference()} | {:error, :process_not_alive}
   def register(pid, config \\ %{}, opts \\ []) do
     server = Keyword.get(opts, :server, __MODULE__)
     GenServer.call(server, {:register, pid, config})
@@ -142,7 +144,8 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
       processes: %{},
       check_interval: Keyword.get(opts, :check_interval_ms, @default_check_interval_ms),
       default_timeout: Keyword.get(opts, :default_timeout_ms, @default_timeout_ms),
-      on_zombie: Keyword.get(opts, :on_zombie, nil),  # Optional callback
+      # Optional callback
+      on_zombie: Keyword.get(opts, :on_zombie, nil),
       stats: %{
         zombies_detected: 0,
         processes_restarted: 0,
@@ -170,7 +173,8 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
       memory_baseline = get_process_memory(pid)
 
       # Convert restart_fn to MFA if provided as function (with warning)
-      restart_mfa = normalize_restart_spec(Map.get(config, :restart_mfa) || Map.get(config, :restart_fn))
+      restart_mfa =
+        normalize_restart_spec(Map.get(config, :restart_mfa) || Map.get(config, :restart_fn))
 
       process = %{
         pid: pid,
@@ -512,10 +516,15 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
 
   @spec normalize_restart_spec(term()) :: restart_spec()
   defp normalize_restart_spec(nil), do: nil
-  defp normalize_restart_spec({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a), do: {m, f, a}
+
+  defp normalize_restart_spec({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a),
+    do: {m, f, a}
 
   defp normalize_restart_spec(fun) when is_function(fun, 0) do
-    Logger.warning("restart_fn as anonymous function is deprecated, use restart_mfa: {Mod, :fun, []} instead")
+    Logger.warning(
+      "restart_fn as anonymous function is deprecated, use restart_mfa: {Mod, :fun, []} instead"
+    )
+
     # Wrap function in a module call - but warn that this won't work across nodes
     nil
   end

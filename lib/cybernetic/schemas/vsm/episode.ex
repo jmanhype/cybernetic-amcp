@@ -48,16 +48,16 @@ defmodule Cybernetic.Schemas.VSM.Episode do
   @statuses ~w(pending analyzing complete error)
 
   schema "episodes" do
-    field :title, :string
-    field :content, :string
-    field :source, :string
-    field :source_id, :string
-    field :analysis, :map, default: %{}
-    field :embeddings, {:array, :float}
-    field :tags, {:array, :string}, default: []
-    field :status, :string, default: "pending"
+    field(:title, :string)
+    field(:content, :string)
+    field(:source, :string)
+    field(:source_id, :string)
+    field(:analysis, :map, default: %{})
+    field(:embeddings, {:array, :float})
+    field(:tags, {:array, :string}, default: [])
+    field(:status, :string, default: "pending")
 
-    belongs_to :tenant, Cybernetic.Schemas.Storage.Tenant
+    belongs_to(:tenant, Cybernetic.Schemas.Storage.Tenant)
 
     timestamps(type: :utc_datetime_usec)
   end

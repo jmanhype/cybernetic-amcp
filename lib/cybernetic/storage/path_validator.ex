@@ -218,8 +218,8 @@ defmodule Cybernetic.Storage.PathValidator do
     valid? =
       Enum.all?(components, fn component ->
         # Check component length
+        # Check for valid characters
         String.length(component) <= @max_component_length and
-          # Check for valid characters
           String.match?(component, ~r/^[a-zA-Z0-9._-]+$/)
       end)
 

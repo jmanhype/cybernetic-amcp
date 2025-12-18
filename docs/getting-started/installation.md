@@ -133,6 +133,12 @@ REDIS_URL=redis://localhost:6379
 # JWT Configuration
 JWT_SECRET=your_secret_key_here
 
+# Additional Security (required in production)
+PASSWORD_SALT=your_password_salt_here
+CYBERNETIC_HMAC_SECRET=your_hmac_secret_here
+SECRET_KEY_BASE=your_phoenix_secret_key_base_here
+CYBERNETIC_SYSTEM_API_KEY=cyb_your_system_api_key_here
+
 # Telemetry Configuration
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 ```

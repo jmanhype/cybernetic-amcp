@@ -11,12 +11,16 @@ defmodule Cybernetic.Capabilities.ValidationTest do
 
     test "fails when field missing" do
       attrs = %{name: "test"}
-      assert {:error, {:missing_field, :desc}} = Validation.validate_required(attrs, [:name, :desc])
+
+      assert {:error, {:missing_field, :desc}} =
+               Validation.validate_required(attrs, [:name, :desc])
     end
 
     test "fails when field is nil" do
       attrs = %{name: "test", desc: nil}
-      assert {:error, {:missing_field, :desc}} = Validation.validate_required(attrs, [:name, :desc])
+
+      assert {:error, {:missing_field, :desc}} =
+               Validation.validate_required(attrs, [:name, :desc])
     end
   end
 

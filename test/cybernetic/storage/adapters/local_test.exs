@@ -47,7 +47,10 @@ defmodule Cybernetic.Storage.Adapters.LocalTest do
 
     test "stores metadata" do
       metadata = %{"custom" => "value"}
-      assert {:ok, artifact} = Local.put(@test_tenant, "file.txt", @test_content, metadata: metadata)
+
+      assert {:ok, artifact} =
+               Local.put(@test_tenant, "file.txt", @test_content, metadata: metadata)
+
       assert artifact.metadata == metadata
     end
 

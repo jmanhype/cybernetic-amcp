@@ -260,23 +260,23 @@ defmodule Cybernetic.VSM.System4.Providers.Together do
 
   defp make_request_with_retry(url, json, headers, options, retries_left) when retries_left > 0 do
     case HTTPoison.post(url, json, headers, options) do
-      {:ok, %{status: 200, body: body}} ->
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
         case Jason.decode(body) do
           {:ok, response} -> {:ok, response}
           {:error, reason} -> {:error, {:json_decode_error, reason}}
         end
 
-      {:ok, %{status: 429} = response} ->
+      {:ok, %HTTPoison.Response{status_code: 429} = response} ->
         Logger.warning("Rate limited by Together API, retrying...")
         :timer.sleep(get_retry_delay(response))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
 
-      {:ok, %{status: status, body: _body}} when status >= 500 ->
+      {:ok, %HTTPoison.Response{status_code: status}} when status >= 500 ->
         Logger.warning("Server error #{status}, retrying... (#{retries_left} retries left)")
         :timer.sleep(exponential_backoff(4 - retries_left))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
 
-      {:ok, %{status: status, body: body}} ->
+      {:ok, %HTTPoison.Response{status_code: status, body: body}} ->
         Logger.error("Together API error: #{status} - #{body}")
         {:error, {:http_error, status, parse_error_body(body)}}
 

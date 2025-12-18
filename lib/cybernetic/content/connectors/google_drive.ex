@@ -295,7 +295,8 @@ defmodule Cybernetic.Content.Connectors.GoogleDrive do
     params = %{
       q: query,
       pageSize: state.page_size,
-      fields: "nextPageToken,files(id,name,mimeType,size,modifiedTime,createdTime,webViewLink,trashed,parents)",
+      fields:
+        "nextPageToken,files(id,name,mimeType,size,modifiedTime,createdTime,webViewLink,trashed,parents)",
       supportsAllDrives: state.include_shared_drives,
       includeItemsFromAllDrives: state.include_shared_drives
     }
@@ -378,7 +379,8 @@ defmodule Cybernetic.Content.Connectors.GoogleDrive do
     params = %{
       pageToken: page_token,
       pageSize: state.page_size,
-      fields: "nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,size,modifiedTime,createdTime,webViewLink,trashed,parents))",
+      fields:
+        "nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,size,modifiedTime,createdTime,webViewLink,trashed,parents))",
       supportsAllDrives: state.include_shared_drives,
       includeItemsFromAllDrives: state.include_shared_drives
     }
@@ -460,12 +462,13 @@ defmodule Cybernetic.Content.Connectors.GoogleDrive do
     else
       opts = [
         content_type: item.content_type,
-        metadata: Map.merge(item.metadata, %{
-          source: "google_drive",
-          source_id: item.id,
-          title: item.title,
-          url: item.url
-        })
+        metadata:
+          Map.merge(item.metadata, %{
+            source: "google_drive",
+            source_id: item.id,
+            title: item.title,
+            url: item.url
+          })
       ]
 
       # Check if container already exists with same content hash
@@ -479,7 +482,12 @@ defmodule Cybernetic.Content.Connectors.GoogleDrive do
 
         {:error, :not_found} ->
           # Create new container
-          case Cybernetic.Content.SemanticContainer.create(container_server, content, tenant_id, opts) do
+          case Cybernetic.Content.SemanticContainer.create(
+                 container_server,
+                 content,
+                 tenant_id,
+                 opts
+               ) do
             {:ok, _container} -> {:ok, :created}
             {:error, reason} -> {:error, reason}
           end

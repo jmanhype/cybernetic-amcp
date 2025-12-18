@@ -107,6 +107,7 @@ defmodule Cybernetic.Capabilities.MCPRouterTest do
         url: "http://localhost:3000",
         tools: ["tool_a", "tool_b"]
       })
+
       MCPRouter.register_server(%{
         name: "server2",
         url: "http://localhost:3001",

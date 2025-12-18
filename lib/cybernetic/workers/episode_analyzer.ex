@@ -99,6 +99,7 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
 
           {:error, :rate_limited} ->
             backoff = calculate_backoff(attempt)
+
             Logger.info("Rate limited, snoozing",
               episode_id: episode_id,
               backoff_seconds: backoff
@@ -548,7 +549,7 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
     max_backoff = 300
     jitter = :rand.uniform(10)
 
-    min(base * :math.pow(2, attempt - 1) |> round(), max_backoff) + jitter
+    min((base * :math.pow(2, attempt - 1)) |> round(), max_backoff) + jitter
   end
 
   # Telemetry

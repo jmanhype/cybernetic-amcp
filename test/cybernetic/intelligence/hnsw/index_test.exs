@@ -18,11 +18,13 @@ defmodule Cybernetic.Intelligence.HNSW.IndexTest do
     end
 
     test "validates vector values are numbers" do
-      assert {:error, :invalid_vector_values} = Index.insert("doc", ["a", "b", "c", "d"], server: :test_hnsw)
+      assert {:error, :invalid_vector_values} =
+               Index.insert("doc", ["a", "b", "c", "d"], server: :test_hnsw)
     end
 
     test "validates vector is a list" do
-      assert {:error, :invalid_vector_type} = Index.insert("doc", "not_a_list", server: :test_hnsw)
+      assert {:error, :invalid_vector_type} =
+               Index.insert("doc", "not_a_list", server: :test_hnsw)
     end
   end
 
@@ -44,7 +46,8 @@ defmodule Cybernetic.Intelligence.HNSW.IndexTest do
     test "filters invalid vectors" do
       items = [
         {"valid", [0.1, 0.2, 0.3, 0.4]},
-        {"invalid", [0.1, 0.2]}  # Wrong dimensions
+        # Wrong dimensions
+        {"invalid", [0.1, 0.2]}
       ]
 
       assert :ok = Index.insert_batch(items, server: :test_hnsw)
@@ -70,7 +73,8 @@ defmodule Cybernetic.Intelligence.HNSW.IndexTest do
       {:ok, results} = Index.search([0.0, 0.0, 0.0, 0.0], k: 2, server: :test_hnsw)
 
       assert length(results) == 2
-      assert hd(results).id == "a"  # Exact match
+      # Exact match
+      assert hd(results).id == "a"
       assert hd(results).distance == 0.0
     end
 
@@ -202,10 +206,11 @@ defmodule Cybernetic.Intelligence.HNSW.IndexTest do
       path = Path.join(tmp_dir, "wrong_dims.bin")
 
       # Create index with different dimensions
-      {:ok, _pid} = start_supervised(
-        {Index, [name: :other_hnsw, dimensions: 8]},
-        id: :other_hnsw
-      )
+      {:ok, _pid} =
+        start_supervised(
+          {Index, [name: :other_hnsw, dimensions: 8]},
+          id: :other_hnsw
+        )
 
       :ok = Index.insert("o1", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8], server: :other_hnsw)
       :ok = Index.save(path, server: :other_hnsw)

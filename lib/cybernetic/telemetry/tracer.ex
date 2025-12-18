@@ -16,6 +16,7 @@ defmodule Cybernetic.Telemetry.Tracer do
 
     # Set resource attributes
     env = Application.get_env(:cybernetic, :environment, :prod)
+
     _resource_attributes = %{
       "service.name" => "cybernetic",
       "service.version" => "0.1.0",

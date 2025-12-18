@@ -109,7 +109,7 @@ defmodule Cybernetic.Storage.Adapters.Memory do
   @impl Cybernetic.Storage.Adapter
   @spec stream(String.t(), String.t(), keyword()) ::
           {:ok, Enumerable.t()} | {:error, atom()}
-  def stream(tenant_id, path, opts \\ []) do
+  def stream(tenant_id, path, opts) do
     case get(tenant_id, path) do
       {:ok, content} ->
         chunk_size = Keyword.get(opts, :chunk_size, 65_536)
@@ -177,7 +177,8 @@ defmodule Cybernetic.Storage.Adapters.Memory do
     with {:ok, key} <- build_key(tenant_id, path) do
       case :ets.lookup(@table, key) do
         [{^key, artifact}] ->
-          {:ok, Map.take(artifact, [:path, :size, :content_type, :etag, :last_modified, :metadata])}
+          {:ok,
+           Map.take(artifact, [:path, :size, :content_type, :etag, :last_modified, :metadata])}
 
         [] ->
           {:error, :not_found}

@@ -20,20 +20,24 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSetTest do
     end
 
     test "rejects values exceeding max size" do
-      {:ok, _pid} = start_supervised(
-        {BeliefSet, [name: :small_beliefs, max_value_size: 10]},
-        id: :small_beliefs
-      )
+      {:ok, _pid} =
+        start_supervised(
+          {BeliefSet, [name: :small_beliefs, max_value_size: 10]},
+          id: :small_beliefs
+        )
 
       large_value = String.duplicate("x", 100)
-      assert {:error, :value_too_large} = BeliefSet.add("key", large_value, server: :small_beliefs)
+
+      assert {:error, :value_too_large} =
+               BeliefSet.add("key", large_value, server: :small_beliefs)
     end
 
     test "respects max_beliefs limit" do
-      {:ok, _pid} = start_supervised(
-        {BeliefSet, [name: :limited_beliefs, max_beliefs: 2]},
-        id: :limited_beliefs
-      )
+      {:ok, _pid} =
+        start_supervised(
+          {BeliefSet, [name: :limited_beliefs, max_beliefs: 2]},
+          id: :limited_beliefs
+        )
 
       :ok = BeliefSet.add("k1", "v1", server: :limited_beliefs)
       :ok = BeliefSet.add("k2", "v2", server: :limited_beliefs)
@@ -110,21 +114,27 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSetTest do
 
   describe "get_delta/2" do
     test "returns changes since version" do
-      :ok = BeliefSet.add("d1", "v1", server: :test_beliefs)  # version 1
-      :ok = BeliefSet.add("d2", "v2", server: :test_beliefs)  # version 2
-      :ok = BeliefSet.add("d3", "v3", server: :test_beliefs)  # version 3
+      # version 1
+      :ok = BeliefSet.add("d1", "v1", server: :test_beliefs)
+      # version 2
+      :ok = BeliefSet.add("d2", "v2", server: :test_beliefs)
+      # version 3
+      :ok = BeliefSet.add("d3", "v3", server: :test_beliefs)
 
       {:ok, delta} = BeliefSet.get_delta(1, server: :test_beliefs)
 
       assert delta.node_id == "test_node"
       assert delta.from_version == 1
       assert delta.to_version == 3
-      assert length(delta.entries) == 2  # d2 and d3
+      # d2 and d3
+      assert length(delta.entries) == 2
     end
 
     test "includes removed entries in delta" do
-      :ok = BeliefSet.add("will_remove", "val", server: :test_beliefs)  # v1
-      :ok = BeliefSet.remove("will_remove", server: :test_beliefs)  # v2
+      # v1
+      :ok = BeliefSet.add("will_remove", "val", server: :test_beliefs)
+      # v2
+      :ok = BeliefSet.remove("will_remove", server: :test_beliefs)
 
       {:ok, delta} = BeliefSet.get_delta(0, server: :test_beliefs)
 
@@ -163,7 +173,8 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSetTest do
 
     test "resolves conflicts with LWW" do
       # Add local belief
-      :ok = BeliefSet.add("conflict", "local", server: :test_beliefs)  # added_at: 1
+      # added_at: 1
+      :ok = BeliefSet.add("conflict", "local", server: :test_beliefs)
 
       # Merge remote with higher version
       remote_delta = %{
@@ -175,7 +186,8 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSetTest do
             id: "conflict",
             value: "remote",
             added_by: "remote",
-            added_at: 5,  # Higher version wins
+            # Higher version wins
+            added_at: 5,
             added_timestamp: System.system_time(:millisecond),
             tombstone: false,
             removed_at: nil,
@@ -188,7 +200,8 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSetTest do
       :ok = BeliefSet.merge_delta(remote_delta, server: :test_beliefs)
 
       {:ok, value} = BeliefSet.get("conflict", server: :test_beliefs)
-      assert value == "remote"  # Remote wins due to higher version
+      # Remote wins due to higher version
+      assert value == "remote"
     end
   end
 

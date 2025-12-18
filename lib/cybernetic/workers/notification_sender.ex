@@ -330,7 +330,7 @@ defmodule Cybernetic.Workers.NotificationSender do
 
   defp calculate_backoff(attempt) do
     # Exponential backoff: 30s, 60s, 120s, 240s, 480s
-    min(30 * :math.pow(2, attempt - 1) |> round(), 480)
+    min((30 * :math.pow(2, attempt - 1)) |> round(), 480)
   end
 
   # Logging

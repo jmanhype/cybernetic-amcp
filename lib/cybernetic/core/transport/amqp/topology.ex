@@ -155,7 +155,10 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
         end
 
       {:error, reason} ->
-        Logger.warning("Failed to get AMQP channel for topology setup after retries: #{inspect(reason)}")
+        Logger.warning(
+          "Failed to get AMQP channel for topology setup after retries: #{inspect(reason)}"
+        )
+
         # Schedule a delayed retry instead of failing
         Process.send_after(self(), :retry_setup, 5_000)
         {:ok, %{channel: nil}}

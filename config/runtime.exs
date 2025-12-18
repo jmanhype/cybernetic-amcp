@@ -27,12 +27,14 @@ end
 if config_env() == :prod do
   config :cybernetic, Oban,
     plugins: [
-      {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},  # 7 days
+      # 7 days
+      {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
       {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
-      {Oban.Plugins.Cron, crontab: [
-        {"0 * * * *", Cybernetic.Workers.HealthCheck, queue: :default},
-        {"*/5 * * * *", Cybernetic.Workers.MetricsCollector, queue: :default}
-      ]}
+      {Oban.Plugins.Cron,
+       crontab: [
+         {"0 * * * *", Cybernetic.Workers.HealthCheck, queue: :default},
+         {"*/5 * * * *", Cybernetic.Workers.MetricsCollector, queue: :default}
+       ]}
     ],
     queues: [
       default: 20,
@@ -118,6 +120,11 @@ config :cybernetic, :security,
   bloom_size: 100_000,
   bloom_error_rate: 0.001
 
+# Telegram configuration (optional)
+config :cybernetic, :telegram,
+  bot_token: {:system, "TELEGRAM_BOT_TOKEN"},
+  webhook_secret: {:system, "TELEGRAM_WEBHOOK_SECRET"}
+
 # P0 Security: Phoenix secret_key_base from environment
 secret_key_base =
   case {config_env(), System.get_env("SECRET_KEY_BASE")} do
@@ -135,8 +142,17 @@ secret_key_base =
       "dev-only-secret-key-base-that-is-at-least-64-characters-long-for-testing"
   end
 
-config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
-  secret_key_base: secret_key_base
+config :cybernetic, Cybernetic.Edge.Gateway.Endpoint, secret_key_base: secret_key_base
+
+# In production releases, start the Phoenix server by default.
+# Phoenix's default skeleton uses `PHX_SERVER=true`; here we opt-in for prod.
+if config_env() == :prod do
+  port = String.to_integer(System.get_env("PORT") || "4000")
+
+  config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
+    server: true,
+    http: [ip: {0, 0, 0, 0}, port: port]
+end
 
 # NonceBloom specific config
 config :cybernetic, Cybernetic.Core.Security.NonceBloom,
@@ -165,8 +181,7 @@ llm_stack =
     other -> raise "Invalid LLM_STACK value: #{inspect(other)}"
   end
 
-config :cybernetic, :llm_stack,
-  stack: llm_stack
+config :cybernetic, :llm_stack, stack: llm_stack
 
 # Provider-specific configurations
 config :cybernetic, Cybernetic.VSM.System4.Providers.Anthropic,

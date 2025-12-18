@@ -211,7 +211,9 @@ defmodule Cybernetic.Workers.TelegramDispatcher do
   # Policy checking
 
   @spec check_command_policy(String.t(), integer()) :: :allow | :deny
-  defp check_command_policy(command, user_id) when is_binary(command) and is_integer(user_id), do: :allow
+  defp check_command_policy(command, user_id) when is_binary(command) and is_integer(user_id),
+    do: :allow
+
   defp check_command_policy(_command, _user_id), do: :deny
 
   # Telegram API helpers
@@ -314,7 +316,8 @@ defmodule Cybernetic.Workers.TelegramDispatcher do
     backend = Application.get_env(:cybernetic, :episode_store_backend)
 
     cond do
-      is_atom(backend) and Code.ensure_loaded?(backend) and function_exported?(backend, :list_recent, 0) ->
+      is_atom(backend) and Code.ensure_loaded?(backend) and
+          function_exported?(backend, :list_recent, 0) ->
         apply(backend, :list_recent, [])
 
       true ->

@@ -541,7 +541,7 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
       {current, distance_comps} =
         if state.max_layer > 0 do
           Enum.reduce(state.max_layer..1//-1, {entry_node, distance_comps}, fn layer,
-                                                                              {curr, comps} ->
+                                                                               {curr, comps} ->
             {nearest, new_comps} = search_layer_greedy(state, query, curr, layer)
             {nearest, comps + new_comps}
           end)
@@ -630,7 +630,16 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
     {results_state, comps}
   end
 
-  defp search_layer_loop(state, query, layer, ef, [{c_dist, c_id} | rest], visited, results_state, comps) do
+  defp search_layer_loop(
+         state,
+         query,
+         layer,
+         ef,
+         [{c_dist, c_id} | rest],
+         visited,
+         results_state,
+         comps
+       ) do
     {_results, _count, furthest_dist} = results_state
 
     if c_dist > furthest_dist do
@@ -640,7 +649,8 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
       neighbors = if node, do: Map.get(node.neighbors, layer, []), else: []
 
       {new_candidates, new_visited, new_results_state, new_comps} =
-        Enum.reduce(neighbors, {rest, visited, results_state, 0}, fn n_id, {cands, vis, res_state, c} ->
+        Enum.reduce(neighbors, {rest, visited, results_state, 0}, fn n_id,
+                                                                     {cands, vis, res_state, c} ->
           if MapSet.member?(vis, n_id) do
             {cands, vis, res_state, c}
           else

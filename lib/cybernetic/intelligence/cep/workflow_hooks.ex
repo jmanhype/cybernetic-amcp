@@ -446,11 +446,13 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
     String.contains?(actual, substr)
   end
 
-  defp matches_value?(actual, {:starts_with, prefix}) when is_binary(actual) and is_binary(prefix) do
+  defp matches_value?(actual, {:starts_with, prefix})
+       when is_binary(actual) and is_binary(prefix) do
     String.starts_with?(actual, prefix)
   end
 
-  defp matches_value?(actual, {:ends_with, suffix}) when is_binary(actual) and is_binary(suffix) do
+  defp matches_value?(actual, {:ends_with, suffix})
+       when is_binary(actual) and is_binary(suffix) do
     String.ends_with?(actual, suffix)
   end
 
@@ -541,7 +543,9 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   @spec get_window_ms(hook() | nil) :: pos_integer()
   defp get_window_ms(nil), do: @default_window_ms
   defp get_window_ms(%{threshold: nil}), do: @default_window_ms
-  defp get_window_ms(%{threshold: threshold}), do: Map.get(threshold, :window_ms, @default_window_ms)
+
+  defp get_window_ms(%{threshold: threshold}),
+    do: Map.get(threshold, :window_ms, @default_window_ms)
 
   @spec execute_action(action(), map(), hook()) :: :ok
   defp execute_action({:workflow, workflow_name}, event, hook) do

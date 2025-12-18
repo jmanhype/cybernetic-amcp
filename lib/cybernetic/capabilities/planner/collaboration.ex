@@ -43,7 +43,8 @@ defmodule Cybernetic.Capabilities.Planner.Collaboration do
     plan_complete: "planner.complete"
   }
 
-  @type plan_state :: :pending | :planning | :ready | :executing | :complete | :failed | :cancelled
+  @type plan_state ::
+          :pending | :planning | :ready | :executing | :complete | :failed | :cancelled
 
   @type plan :: %{
           id: String.t(),

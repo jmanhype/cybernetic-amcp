@@ -123,7 +123,10 @@ defmodule Cybernetic.Storage.Error do
   def wrap(:enoent, opts), do: new(:not_found, opts)
   def wrap(:eacces, opts), do: new(:permission_denied, opts)
   def wrap(:enospc, opts), do: new(:quota_exceeded, opts)
-  def wrap(:eisdir, opts), do: new(:invalid_path, Keyword.put(opts, :message, "Path is a directory"))
+
+  def wrap(:eisdir, opts),
+    do: new(:invalid_path, Keyword.put(opts, :message, "Path is a directory"))
+
   def wrap(:enotdir, opts), do: new(:invalid_path, Keyword.put(opts, :message, "Not a directory"))
   def wrap(:timeout, opts), do: new(:timeout, opts)
 

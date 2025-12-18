@@ -21,7 +21,8 @@ defmodule Cybernetic.PromEx do
       # Standard plugins
       Plugins.Application,
       Plugins.Beam,
-      {Plugins.Phoenix, router: Cybernetic.Edge.Gateway.Router, endpoint: Cybernetic.Edge.Gateway.Endpoint},
+      {Plugins.Phoenix,
+       router: Cybernetic.Edge.Gateway.Router, endpoint: Cybernetic.Edge.Gateway.Endpoint},
       {Plugins.Ecto, repos: [Cybernetic.Repo]},
       {Plugins.Oban, oban_supervisors: [Oban]}
     ]

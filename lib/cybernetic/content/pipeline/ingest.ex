@@ -54,8 +54,10 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   # Configuration
   @max_concurrent 10
   @fetch_timeout 30_000
-  @max_content_size 52_428_800  # 50MB
-  @job_ttl_ms :timer.hours(24)  # P1: Jobs cleaned up after 24 hours
+  # 50MB
+  @max_content_size 52_428_800
+  # P1: Jobs cleaned up after 24 hours
+  @job_ttl_ms :timer.hours(24)
   @cleanup_interval :timer.minutes(15)
   @supported_content_types ~w(
     text/plain text/html text/markdown text/csv
@@ -248,6 +250,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
           # P1 Fix: Capture GenServer pid before spawning task
           server = self()
+
           Task.start(fn ->
             result = run_pipeline(job.source, job.tenant_id, job.options, new_state)
             send(server, {:job_completed, job_id, result})
@@ -433,9 +436,26 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   end
 
   @blocked_hosts ["localhost", "127.0.0.1", "0.0.0.0", "::1", "169.254.169.254"]
-  @blocked_prefixes ["10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.",
-                     "172.21.", "172.22.", "172.23.", "172.24.", "172.25.", "172.26.",
-                     "172.27.", "172.28.", "172.29.", "172.30.", "172.31.", "192.168."]
+  @blocked_prefixes [
+    "10.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
+    "192.168."
+  ]
 
   @spec blocked_host?(String.t()) :: boolean()
   defp blocked_host?(host) do
@@ -454,7 +474,8 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   end
 
   # Stage 2: Normalize
-  @max_html_size 10_485_760  # P2: 10MB limit for HTML processing to prevent ReDoS
+  # P2: 10MB limit for HTML processing to prevent ReDoS
+  @max_html_size 10_485_760
 
   @spec stage_normalize(binary(), String.t()) :: {:ok, binary()} | {:error, term()}
   defp stage_normalize(content, content_type) do

@@ -8,8 +8,10 @@ defmodule Cybernetic.Capabilities.Validation do
 
   @max_name_length 128
   @max_description_length 4096
-  @max_context_size 1_048_576  # 1MB
-  @max_args_size 65_536  # 64KB
+  # 1MB
+  @max_context_size 1_048_576
+  # 64KB
+  @max_args_size 65_536
   @allowed_name_chars ~r/^[a-zA-Z0-9_\-\.]+$/
 
   @type validation_error ::
@@ -150,6 +152,7 @@ defmodule Cybernetic.Capabilities.Validation do
       when scheme in ["http", "https"] and is_binary(host) and host != "" ->
         # Block localhost/internal IPs in production
         env = Application.get_env(:cybernetic, :environment, :prod)
+
         if internal_url?(host) and env == :prod do
           {:error, :invalid_url}
         else

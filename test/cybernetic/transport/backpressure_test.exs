@@ -80,7 +80,9 @@ defmodule Cybernetic.Transport.BackpressureTest do
       end
 
       {:producer_consumer, state} = Transformer.init(transform: transform)
-      {:noreply, transformed, _new_state} = Transformer.handle_events([:event1, :event2], self(), state)
+
+      {:noreply, transformed, _new_state} =
+        Transformer.handle_events([:event1, :event2], self(), state)
 
       assert transformed == [{:transformed, :event1}, {:transformed, :event2}]
     end
@@ -92,7 +94,9 @@ defmodule Cybernetic.Transport.BackpressureTest do
       end
 
       {:producer_consumer, state} = Transformer.init(transform: transform)
-      {:noreply, transformed, _new_state} = Transformer.handle_events([:keep, :drop, :keep], self(), state)
+
+      {:noreply, transformed, _new_state} =
+        Transformer.handle_events([:keep, :drop, :keep], self(), state)
 
       assert transformed == [:kept, :kept]
     end

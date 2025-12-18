@@ -155,6 +155,7 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
         # P0 Fix: Capture registry pid before spawning task
         # (self() inside Task refers to Task's own pid, not registry)
         registry_pid = self()
+
         Task.start(fn ->
           result = invoke_handler(tool, params, context)
           send(registry_pid, {:invocation_complete, invocation_id, result})

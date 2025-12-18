@@ -29,7 +29,8 @@ defmodule Cybernetic.Storage.Adapters.S3 do
 
   alias Cybernetic.Storage.PathValidator
 
-  @default_chunk_size 5 * 1024 * 1024  # 5MB for S3 multipart
+  # 5MB for S3 multipart
+  @default_chunk_size 5 * 1024 * 1024
 
   @impl true
   @spec put(String.t(), String.t(), binary(), keyword()) ::
@@ -100,7 +101,7 @@ defmodule Cybernetic.Storage.Adapters.S3 do
   @impl true
   @spec stream(String.t(), String.t(), keyword()) ::
           {:ok, Enumerable.t()} | {:error, atom()}
-  def stream(tenant_id, path, opts \\ []) do
+  def stream(tenant_id, path, opts) do
     with {:ok, key} <- build_key(tenant_id, path),
          {:ok, stat} <- stat(tenant_id, path) do
       chunk_size = Keyword.get(opts, :chunk_size, @default_chunk_size)

@@ -134,6 +134,7 @@ defmodule Cybernetic.Health.Monitor do
     try do
       config = Application.get_env(:cybernetic, :amqp, [])
       url = config[:url] || "amqp://cybernetic:changeme@localhost:5672"
+
       case AMQP.Connection.open(url) do
         {:ok, conn} ->
           AMQP.Connection.close(conn)

@@ -106,6 +106,7 @@ defmodule Cybernetic.Capabilities.Planner.CollaborationTest do
         steps: [%{action: "low_priority"}],
         priority: 1
       })
+
       Collaboration.submit_contribution(plan_id, %{
         system: :s4,
         steps: [%{action: "high_priority"}],

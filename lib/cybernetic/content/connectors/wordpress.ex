@@ -303,13 +303,14 @@ defmodule Cybernetic.Content.Connectors.WordPress do
 
     opts = [
       content_type: item.content_type,
-      metadata: Map.merge(item.metadata, %{
-        source: "wordpress",
-        source_id: item.id,
-        title: item.title,
-        url: item.url,
-        author: item.author
-      })
+      metadata:
+        Map.merge(item.metadata, %{
+          source: "wordpress",
+          source_id: item.id,
+          title: item.title,
+          url: item.url,
+          author: item.author
+        })
     ]
 
     # Check if container already exists with same content hash
@@ -323,7 +324,12 @@ defmodule Cybernetic.Content.Connectors.WordPress do
 
       {:error, :not_found} ->
         # Create new container
-        case Cybernetic.Content.SemanticContainer.create(container_server, content, tenant_id, opts) do
+        case Cybernetic.Content.SemanticContainer.create(
+               container_server,
+               content,
+               tenant_id,
+               opts
+             ) do
           {:ok, _container} -> {:ok, :created}
           {:error, reason} -> {:error, reason}
         end

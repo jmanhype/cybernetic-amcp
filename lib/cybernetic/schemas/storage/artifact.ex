@@ -43,16 +43,16 @@ defmodule Cybernetic.Schemas.Storage.Artifact do
   @storage_backends ~w(local s3 memory)
 
   schema "artifacts" do
-    field :path, :string
-    field :filename, :string
-    field :content_type, :string
-    field :size, :integer
-    field :checksum, :string
-    field :storage_backend, :string, default: "local"
-    field :metadata, :map, default: %{}
-    field :expires_at, :utc_datetime_usec
+    field(:path, :string)
+    field(:filename, :string)
+    field(:content_type, :string)
+    field(:size, :integer)
+    field(:checksum, :string)
+    field(:storage_backend, :string, default: "local")
+    field(:metadata, :map, default: %{})
+    field(:expires_at, :utc_datetime_usec)
 
-    belongs_to :tenant, Cybernetic.Schemas.Storage.Tenant
+    belongs_to(:tenant, Cybernetic.Schemas.Storage.Tenant)
 
     timestamps(type: :utc_datetime_usec)
   end

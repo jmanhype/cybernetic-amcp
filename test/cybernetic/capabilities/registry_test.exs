@@ -50,9 +50,14 @@ defmodule Cybernetic.Capabilities.RegistryTest do
     end
 
     test "rejects missing required fields" do
-      assert {:error, {:missing_field, :name}} = Registry.register(%{description: "x", provider: M})
-      assert {:error, {:missing_field, :description}} = Registry.register(%{name: "x", provider: M})
-      assert {:error, {:missing_field, :provider}} = Registry.register(%{name: "x", description: "y"})
+      assert {:error, {:missing_field, :name}} =
+               Registry.register(%{description: "x", provider: M})
+
+      assert {:error, {:missing_field, :description}} =
+               Registry.register(%{name: "x", provider: M})
+
+      assert {:error, {:missing_field, :provider}} =
+               Registry.register(%{name: "x", description: "y"})
     end
 
     test "rejects non-atom provider" do
@@ -119,20 +124,24 @@ defmodule Cybernetic.Capabilities.RegistryTest do
 
   describe "discover/2" do
     test "discovers capabilities matching query" do
-      {:ok, _} = Registry.register(%{
-        name: "code_analyzer",
-        description: "Analyzes code for bugs and quality issues",
-        provider: CodeMod
-      })
-      {:ok, _} = Registry.register(%{
-        name: "text_summarizer",
-        description: "Summarizes long text documents",
-        provider: TextMod
-      })
+      {:ok, _} =
+        Registry.register(%{
+          name: "code_analyzer",
+          description: "Analyzes code for bugs and quality issues",
+          provider: CodeMod
+        })
+
+      {:ok, _} =
+        Registry.register(%{
+          name: "text_summarizer",
+          description: "Summarizes long text documents",
+          provider: TextMod
+        })
 
       # Should find code analyzer
       {:ok, results} = Registry.discover("analyze code for bugs")
-      assert length(results) >= 0  # May find matches via keyword fallback
+      # May find matches via keyword fallback
+      assert length(results) >= 0
     end
 
     test "respects limit option" do

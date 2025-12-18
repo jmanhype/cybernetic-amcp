@@ -55,10 +55,13 @@ defmodule Cybernetic.Content.SemanticContainer do
   ]
 
   # Configuration
-  @max_content_size 104_857_600  # 100MB
-  @max_metadata_size 65_536  # 64KB
+  # 100MB
+  @max_content_size 104_857_600
+  # 64KB
+  @max_metadata_size 65_536
   @max_capabilities 100
-  @embedding_dimensions 1536  # OpenAI ada-002 default
+  # OpenAI ada-002 default
+  @embedding_dimensions 1536
   @cleanup_interval :timer.minutes(5)
 
   @telemetry [:cybernetic, :content, :container]

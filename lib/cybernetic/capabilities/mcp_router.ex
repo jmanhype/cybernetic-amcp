@@ -302,7 +302,8 @@ defmodule Cybernetic.Capabilities.MCPRouter do
         name: config[:name],
         url: config[:url],
         tools: config[:tools],
-        auth: auth_ref,  # Only stores reference, not actual token
+        # Only stores reference, not actual token
+        auth: auth_ref,
         metadata: config[:metadata] || %{}
       }
 

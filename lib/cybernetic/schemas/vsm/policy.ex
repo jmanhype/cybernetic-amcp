@@ -48,15 +48,15 @@ defmodule Cybernetic.Schemas.VSM.Policy do
   @foreign_key_type :binary_id
 
   schema "policies" do
-    field :name, :string
-    field :description, :string
-    field :rules, :map, default: %{}
-    field :priority, :integer, default: 0
-    field :active, :boolean, default: true
-    field :effective_from, :utc_datetime_usec
-    field :effective_until, :utc_datetime_usec
+    field(:name, :string)
+    field(:description, :string)
+    field(:rules, :map, default: %{})
+    field(:priority, :integer, default: 0)
+    field(:active, :boolean, default: true)
+    field(:effective_from, :utc_datetime_usec)
+    field(:effective_until, :utc_datetime_usec)
 
-    belongs_to :tenant, Cybernetic.Schemas.Storage.Tenant
+    belongs_to(:tenant, Cybernetic.Schemas.Storage.Tenant)
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -111,7 +111,8 @@ defmodule Cybernetic.Schemas.VSM.Policy do
     effective_from = get_field(changeset, :effective_from)
     effective_until = get_field(changeset, :effective_until)
 
-    if effective_from && effective_until && DateTime.compare(effective_from, effective_until) == :gt do
+    if effective_from && effective_until &&
+         DateTime.compare(effective_from, effective_until) == :gt do
       add_error(changeset, :effective_until, "must be after effective_from")
     else
       changeset

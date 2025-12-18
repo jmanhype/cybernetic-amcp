@@ -20,10 +20,11 @@ config :cybernetic, Oban,
   plugins: [
     Oban.Plugins.Pruner,
     {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
-    {Oban.Plugins.Cron, crontab: [
-      # Health check every hour
-      {"0 * * * *", Cybernetic.Workers.HealthCheck, queue: :default}
-    ]}
+    {Oban.Plugins.Cron,
+     crontab: [
+       # Health check every hour
+       {"0 * * * *", Cybernetic.Workers.HealthCheck, queue: :default}
+     ]}
   ],
   queues: [
     default: 10,

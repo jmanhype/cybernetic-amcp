@@ -122,6 +122,7 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
           stream_loop(conn, state)
         after
           unregister_connection(tenant_id)
+
           emit_telemetry(:connection_closed, %{count: 1, events_sent: state.event_count}, %{
             tenant_id: tenant_id,
             duration_ms: System.monotonic_time(:millisecond) - started_at

@@ -32,7 +32,10 @@ defmodule Cybernetic.Edge.Gateway.Plugs.RateLimiter do
       if env == :prod do
         conn
         |> put_resp_content_type("application/json")
-        |> send_resp(503, Jason.encode!(%{error: "service_unavailable", message: "Rate limiter unavailable"}))
+        |> send_resp(
+          503,
+          Jason.encode!(%{error: "service_unavailable", message: "Rate limiter unavailable"})
+        )
         |> halt()
       else
         # Dev/test: allow request if rate limiter is unavailable

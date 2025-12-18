@@ -5,12 +5,13 @@ defmodule Cybernetic.Workers.TelegramDispatcherTest do
 
   describe "perform/1 with commands" do
     test "handles /start command" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "command" => "/start",
-        "text" => "/start",
-        "user" => %{"id" => 123, "first_name" => "Test"}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "command" => "/start",
+          "text" => "/start",
+          "user" => %{"id" => 123, "first_name" => "Test"}
+        })
 
       result = TelegramDispatcher.perform(job)
       # Will fail at actual Telegram API call
@@ -18,60 +19,65 @@ defmodule Cybernetic.Workers.TelegramDispatcherTest do
     end
 
     test "handles /help command" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "command" => "/help",
-        "text" => "/help",
-        "user" => %{"id" => 123, "first_name" => "Test"}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "command" => "/help",
+          "text" => "/help",
+          "user" => %{"id" => 123, "first_name" => "Test"}
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
     end
 
     test "handles /status command" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "command" => "/status",
-        "text" => "/status",
-        "user" => %{"id" => 123, "first_name" => "Test"}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "command" => "/status",
+          "text" => "/status",
+          "user" => %{"id" => 123, "first_name" => "Test"}
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
     end
 
     test "handles /episodes command" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "command" => "/episodes",
-        "text" => "/episodes",
-        "user" => %{"id" => 123, "first_name" => "Test"}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "command" => "/episodes",
+          "text" => "/episodes",
+          "user" => %{"id" => 123, "first_name" => "Test"}
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
     end
 
     test "handles /policies command" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "command" => "/policies",
-        "text" => "/policies",
-        "user" => %{"id" => 123, "first_name" => "Test"}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "command" => "/policies",
+          "text" => "/policies",
+          "user" => %{"id" => 123, "first_name" => "Test"}
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
     end
 
     test "handles unknown command" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "command" => "/unknown",
-        "text" => "/unknown",
-        "user" => %{"id" => 123, "first_name" => "Test"}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "command" => "/unknown",
+          "text" => "/unknown",
+          "user" => %{"id" => 123, "first_name" => "Test"}
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
@@ -80,28 +86,30 @@ defmodule Cybernetic.Workers.TelegramDispatcherTest do
 
   describe "perform/1 with callback queries" do
     test "handles callback query" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "callback_query" => %{
-          "id" => "callback-123",
-          "data" => "episode:view:123"
-        },
-        "user" => %{"id" => 123, "first_name" => "Test"}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "callback_query" => %{
+            "id" => "callback-123",
+            "data" => "episode:view:123"
+          },
+          "user" => %{"id" => 123, "first_name" => "Test"}
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
     end
 
     test "handles callback with pagination" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "callback_query" => %{
-          "id" => "callback-456",
-          "data" => "episodes:page:2"
-        },
-        "user" => %{"id" => 123, "first_name" => "Test"}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "callback_query" => %{
+            "id" => "callback-456",
+            "data" => "episodes:page:2"
+          },
+          "user" => %{"id" => 123, "first_name" => "Test"}
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
@@ -110,10 +118,11 @@ defmodule Cybernetic.Workers.TelegramDispatcherTest do
 
   describe "perform/1 error handling" do
     test "handles missing chat_id" do
-      job = build_job(%{
-        "command" => "/start",
-        "text" => "/start"
-      })
+      job =
+        build_job(%{
+          "command" => "/start",
+          "text" => "/start"
+        })
 
       result =
         try do
@@ -126,20 +135,22 @@ defmodule Cybernetic.Workers.TelegramDispatcherTest do
     end
 
     test "handles missing command and callback" do
-      job = build_job(%{
-        "chat_id" => 123456789,
-        "user" => %{"id" => 123}
-      })
+      job =
+        build_job(%{
+          "chat_id" => 123_456_789,
+          "user" => %{"id" => 123}
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
     end
 
     test "handles invalid chat_id type" do
-      job = build_job(%{
-        "chat_id" => "not-a-number",
-        "command" => "/start"
-      })
+      job =
+        build_job(%{
+          "chat_id" => "not-a-number",
+          "command" => "/start"
+        })
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)
@@ -148,14 +159,15 @@ defmodule Cybernetic.Workers.TelegramDispatcherTest do
 
   describe "retry behavior" do
     test "handles multiple attempts" do
-      job = build_job(
-        %{
-          "chat_id" => 123456789,
-          "command" => "/start",
-          "text" => "/start"
-        },
-        attempt: 3
-      )
+      job =
+        build_job(
+          %{
+            "chat_id" => 123_456_789,
+            "command" => "/start",
+            "text" => "/start"
+          },
+          attempt: 3
+        )
 
       result = TelegramDispatcher.perform(job)
       assert result == :ok or match?({:error, _}, result)

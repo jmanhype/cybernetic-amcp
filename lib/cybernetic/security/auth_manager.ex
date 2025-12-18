@@ -434,6 +434,7 @@ defmodule Cybernetic.Security.AuthManager do
 
     # If no users configured, create default users for test environment
     env = Application.get_env(:cybernetic, :environment, :prod)
+
     users =
       if map_size(users) == 0 and env in [:dev, :test] do
         %{
@@ -485,7 +486,9 @@ defmodule Cybernetic.Security.AuthManager do
     # In production, use proper JWT library like Joken
     # For now, simple encoded JSON with signature
     payload = Jason.encode!(claims)
-    signature = :crypto.mac(:hmac, :sha256, get_jwt_secret(), payload) |> Base.encode64(padding: false)
+
+    signature =
+      :crypto.mac(:hmac, :sha256, get_jwt_secret(), payload) |> Base.encode64(padding: false)
 
     Base.encode64(payload, padding: false) <> "." <> signature
   end
@@ -547,6 +550,7 @@ defmodule Cybernetic.Security.AuthManager do
 
   # P0 Security: Constant-time string comparison to prevent timing attacks
   defp secure_compare(a, b) when byte_size(a) != byte_size(b), do: false
+
   defp secure_compare(a, b) do
     # XOR all bytes and accumulate - timing is constant regardless of where mismatch occurs
     a_bytes = :binary.bin_to_list(a)
@@ -570,8 +574,14 @@ defmodule Cybernetic.Security.AuthManager do
   defp check_permission(permissions, resource, action) do
     # Resource-specific permission checking
     # Format: "resource:action"
-    specific_permission = :"#{resource}:#{action}"
-    specific_permission in permissions
+    permission_atom =
+      try do
+        String.to_existing_atom("#{resource}:#{action}")
+      rescue
+        ArgumentError -> nil
+      end
+
+    permission_atom != nil and permission_atom in permissions
   end
 
   defp check_rate_limit(username, state) do

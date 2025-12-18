@@ -48,7 +48,8 @@ defmodule Cybernetic.Storage do
   @type error :: Cybernetic.Storage.Adapter.error_reason()
 
   @default_adapter Cybernetic.Storage.Adapters.Local
-  @streaming_threshold 1_048_576  # 1MB
+  # 1MB
+  @streaming_threshold 1_048_576
 
   @doc """
   Get the configured storage adapter module.
