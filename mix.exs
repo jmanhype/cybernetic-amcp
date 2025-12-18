@@ -70,7 +70,14 @@ defmodule Cybernetic.MixProject do
       {:httpoison, "~> 2.2"},
 
       # Database
-      {:ecto, "~> 3.10"},
+      {:ecto_sql, "~> 3.11"},
+      {:postgrex, "~> 0.18"},
+
+      # Background Jobs
+      {:oban, "~> 2.17"},
+
+      # Metrics
+      {:prom_ex, "~> 1.9"},
 
       # Redis client
       {:redix, "~> 1.2"},

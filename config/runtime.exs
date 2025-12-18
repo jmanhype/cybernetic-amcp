@@ -1,5 +1,48 @@
 import Config
 
+# Database Configuration
+# Supports DATABASE_URL or individual components
+database_url = System.get_env("DATABASE_URL")
+
+if database_url do
+  config :cybernetic, Cybernetic.Repo,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+    queue_target: String.to_integer(System.get_env("ECTO_QUEUE_TARGET") || "50"),
+    queue_interval: String.to_integer(System.get_env("ECTO_QUEUE_INTERVAL") || "1000"),
+    timeout: String.to_integer(System.get_env("ECTO_TIMEOUT") || "30000"),
+    ssl: System.get_env("DATABASE_SSL") == "true"
+else
+  config :cybernetic, Cybernetic.Repo,
+    username: System.get_env("PGUSER") || "cybernetic",
+    password: System.get_env("PGPASSWORD") || "cybernetic",
+    hostname: System.get_env("PGHOST") || "localhost",
+    database: System.get_env("PGDATABASE") || "cybernetic_#{config_env()}",
+    port: String.to_integer(System.get_env("PGPORT") || "5432"),
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+    timeout: String.to_integer(System.get_env("ECTO_TIMEOUT") || "30000")
+end
+
+# Oban production configuration
+if config_env() == :prod do
+  config :cybernetic, Oban,
+    plugins: [
+      {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},  # 7 days
+      {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
+      {Oban.Plugins.Cron, crontab: [
+        {"0 * * * *", Cybernetic.Workers.HealthCheck, queue: :default},
+        {"*/5 * * * *", Cybernetic.Workers.MetricsCollector, queue: :default}
+      ]}
+    ],
+    queues: [
+      default: 20,
+      critical: 50,
+      analysis: 10,
+      notifications: 10,
+      storage: 5
+    ]
+end
+
 # Transport Configuration for VSM message passing
 # Use AMQP transport in production, can be overridden in test.exs
 config :cybernetic, :transport, Cybernetic.Transport.AMQP

@@ -21,6 +21,13 @@ defmodule Cybernetic.Application do
 
       children =
         [
+          # Database - must start first
+          Cybernetic.Repo,
+          # Background job processor
+          {Oban, Application.fetch_env!(:cybernetic, Oban)},
+          # PromEx metrics
+          Cybernetic.PromEx,
+          # Cluster discovery
           {Cluster.Supervisor,
            [
              Application.get_env(:libcluster, :topologies, []),

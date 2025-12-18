@@ -2,7 +2,43 @@ import Config
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id]
+  metadata: [:request_id, :tenant_id, :trace_id]
+
+# Ecto Repo configuration
+config :cybernetic, Cybernetic.Repo,
+  migration_primary_key: [name: :id, type: :binary_id],
+  migration_timestamps: [type: :utc_datetime_usec],
+  priv: "priv/repo"
+
+config :cybernetic,
+  ecto_repos: [Cybernetic.Repo]
+
+# Oban Background Job Queue
+config :cybernetic, Oban,
+  engine: Oban.Engines.Basic,
+  repo: Cybernetic.Repo,
+  plugins: [
+    Oban.Plugins.Pruner,
+    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
+    {Oban.Plugins.Cron, crontab: [
+      # Health check every hour
+      {"0 * * * *", Cybernetic.Workers.HealthCheck, queue: :default}
+    ]}
+  ],
+  queues: [
+    default: 10,
+    critical: 20,
+    analysis: 5,
+    notifications: 5,
+    storage: 3
+  ]
+
+# PromEx metrics configuration
+config :cybernetic, Cybernetic.PromEx,
+  disabled: false,
+  manual_metrics_start_delay: :no_delay,
+  drop_metrics_groups: [],
+  grafana: :disabled
 
 config :libcluster,
   topologies: [

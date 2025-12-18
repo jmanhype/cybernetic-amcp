@@ -18,3 +18,18 @@ config :cybernetic,
 
 # Disable AMQP during tests
 config :cybernetic, :amqp, enabled: false
+
+# Configure Ecto for async tests with SQL sandbox
+config :cybernetic, Cybernetic.Repo,
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: 10,
+  ownership_timeout: 60_000
+
+# Disable Oban in test (use Oban.Testing)
+config :cybernetic, Oban,
+  testing: :inline,
+  queues: false,
+  plugins: false
+
+# Disable PromEx in test
+config :cybernetic, Cybernetic.PromEx, disabled: true
