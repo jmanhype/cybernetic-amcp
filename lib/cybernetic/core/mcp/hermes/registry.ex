@@ -28,7 +28,8 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   end
 
   def init(_opts) do
-    :ets.new(@registry_table, [:named_table, :public, :set, read_concurrency: true])
+    # P1 Fix: Use :protected - only GenServer writes, clients can read
+    :ets.new(@registry_table, [:named_table, :protected, :set, {:read_concurrency, true}])
 
     # Register builtin tools after init
     Process.send_after(self(), :register_builtin_tools, 100)
@@ -279,7 +280,11 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
       :ets.insert(@registry_table, {name, tool})
     end)
 
-    Logger.info("Registered #{length(tools)} builtin MCP tools")
+    tools_count = length(tools)
+    Logger.info("Registered #{tools_count} builtin MCP tools")
+
+    # P1 Fix: Return count for telemetry metric (was returning :ok from Logger.info)
+    tools_count
   end
 
   defp invoke_handler(%Tool{handler: {module, function}}, params, context) do

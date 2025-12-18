@@ -3,6 +3,11 @@ defmodule Cybernetic.MCP.HermesClientTest do
   use ExUnit.Case, async: false
   alias Cybernetic.MCP.HermesClient
 
+  setup_all do
+    Code.ensure_loaded!(HermesClient)
+    :ok
+  end
+
   describe "Plugin behavior" do
     test "implements Plugin behavior correctly" do
       metadata = HermesClient.metadata()

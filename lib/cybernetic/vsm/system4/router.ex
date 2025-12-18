@@ -56,16 +56,34 @@ defmodule Cybernetic.VSM.System4.Router do
     end
   end
 
-  # Ollama first for local development (no API keys needed)
-  defp select_chain_by_kind(:policy_review), do: [:ollama, :anthropic]
-  defp select_chain_by_kind(:code_gen), do: [:ollama, :openai, :together, :anthropic]
-  defp select_chain_by_kind(:root_cause), do: [:ollama, :anthropic, :together, :openai]
-  defp select_chain_by_kind(:anomaly_detection), do: [:ollama, :together, :anthropic]
-  defp select_chain_by_kind(:compliance_check), do: [:ollama, :anthropic]
-  defp select_chain_by_kind(:optimization), do: [:ollama, :openai, :together, :anthropic]
-  defp select_chain_by_kind(:prediction), do: [:ollama, :together, :anthropic, :openai]
-  defp select_chain_by_kind(:classification), do: [:ollama, :together, :openai]
-  defp select_chain_by_kind(_), do: default_chain()
+  defp select_chain_by_kind(kind) do
+    chain = base_chain_by_kind(kind)
+
+    if prefer_local_ollama_first?() do
+      [:ollama | Enum.reject(chain, &(&1 == :ollama))]
+    else
+      chain
+    end
+  end
+
+  # Provider order is tuned for typical production quality/cost tradeoffs.
+  # When developing locally, `prefer_local_ollama_first?/0` can place Ollama first.
+  defp base_chain_by_kind(:policy_review), do: [:anthropic, :ollama]
+  defp base_chain_by_kind(:code_gen), do: [:openai, :together, :anthropic]
+  defp base_chain_by_kind(:root_cause), do: [:anthropic, :together, :openai]
+  defp base_chain_by_kind(:anomaly_detection), do: [:together, :anthropic, :ollama]
+  defp base_chain_by_kind(:compliance_check), do: [:anthropic, :ollama]
+  defp base_chain_by_kind(:optimization), do: [:openai, :together, :anthropic, :ollama]
+  defp base_chain_by_kind(:prediction), do: [:together, :anthropic, :openai, :ollama]
+  defp base_chain_by_kind(:classification), do: [:together, :openai, :ollama]
+  defp base_chain_by_kind(_), do: default_chain()
+
+  defp prefer_local_ollama_first? do
+    env = Application.get_env(:cybernetic, :environment, :prod)
+
+    Application.get_env(:cybernetic, :s4, [])
+    |> Keyword.get(:prefer_local_ollama_first, env == :dev)
+  end
 
   @doc """
   Get default provider chain from configuration.

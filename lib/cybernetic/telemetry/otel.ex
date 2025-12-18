@@ -80,6 +80,13 @@ defmodule Cybernetic.Telemetry.OTEL do
     :otel_propagator_text_map.extract(headers_map)
   end
 
+  # P0 Security: Whitelist of known OTEL propagation headers to prevent atom DoS
+  @otel_header_whitelist %{
+    "traceparent" => :traceparent,
+    "tracestate" => :tracestate,
+    "baggage" => :baggage
+  }
+
   @doc """
   Inject trace context into AMQP headers
   """
@@ -87,10 +94,12 @@ defmodule Cybernetic.Telemetry.OTEL do
     ctx_map = %{}
     updated_map = :otel_propagator_text_map.inject(ctx_map)
 
-    # Convert back to AMQP header format
+    # Convert back to AMQP header format using whitelist
     amqp_headers =
-      Enum.map(updated_map, fn {k, v} ->
-        {String.to_atom(k), :longstr, to_string(v)}
+      updated_map
+      |> Enum.filter(fn {k, _v} -> Map.has_key?(@otel_header_whitelist, k) end)
+      |> Enum.map(fn {k, v} ->
+        {Map.fetch!(@otel_header_whitelist, k), :longstr, to_string(v)}
       end)
 
     headers ++ amqp_headers

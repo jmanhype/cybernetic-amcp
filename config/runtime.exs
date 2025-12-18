@@ -94,13 +94,49 @@ config :cybernetic, :goldrush,
   enable_telemetry: true
 
 # Security configuration
+# P0 Security: HMAC secret must be consistent across nodes/restarts
+hmac_secret =
+  case {config_env(), System.get_env("CYBERNETIC_HMAC_SECRET")} do
+    {:prod, nil} ->
+      raise "CYBERNETIC_HMAC_SECRET is required in production"
+
+    {:prod, ""} ->
+      raise "CYBERNETIC_HMAC_SECRET cannot be empty in production"
+
+    {_, secret} when is_binary(secret) ->
+      secret
+
+    {env, _} when env in [:dev, :test] ->
+      # Only use random fallback in dev/test - NOT for production
+      :crypto.strong_rand_bytes(32) |> Base.encode64()
+  end
+
 config :cybernetic, :security,
-  hmac_secret:
-    System.get_env("CYBERNETIC_HMAC_SECRET") || :crypto.strong_rand_bytes(32) |> Base.encode64(),
+  hmac_secret: hmac_secret,
   # 5 minutes
   nonce_ttl: 300_000,
   bloom_size: 100_000,
   bloom_error_rate: 0.001
+
+# P0 Security: Phoenix secret_key_base from environment
+secret_key_base =
+  case {config_env(), System.get_env("SECRET_KEY_BASE")} do
+    {:prod, nil} ->
+      raise "SECRET_KEY_BASE is required in production (min 64 chars)"
+
+    {:prod, secret} when byte_size(secret) < 64 ->
+      raise "SECRET_KEY_BASE must be at least 64 characters in production"
+
+    {_, secret} when is_binary(secret) and byte_size(secret) >= 64 ->
+      secret
+
+    {env, _} when env in [:dev, :test] ->
+      # Dev/test fallback - never use in production
+      "dev-only-secret-key-base-that-is-at-least-64-characters-long-for-testing"
+  end
+
+config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
+  secret_key_base: secret_key_base
 
 # NonceBloom specific config
 config :cybernetic, Cybernetic.Core.Security.NonceBloom,

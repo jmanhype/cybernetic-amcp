@@ -77,7 +77,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
   end
 
   describe "fact emission" do
-    test "emits aggregated facts periodically", %{pid: pid} do
+    test "emits aggregated facts periodically", %{pid: _pid} do
       # Attach listener for facts
       ref = make_ref()
       parent = self()
@@ -134,7 +134,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       # Insert old and recent entries with proper structure
       :ets.insert(
         :cyb_agg_window,
-        {old_time,
+        {{old_time, make_ref()},
          %{
            at: old_time,
            source: [:test, :old],
@@ -146,7 +146,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
 
       :ets.insert(
         :cyb_agg_window,
-        {recent_time,
+        {{recent_time, make_ref()},
          %{
            at: recent_time,
            source: [:test, :recent],
@@ -158,7 +158,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
 
       :ets.insert(
         :cyb_agg_window,
-        {now,
+        {{now, make_ref()},
          %{
            at: now,
            source: [:test, :current],
@@ -180,7 +180,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       end
 
       entries = :ets.tab2list(:cyb_agg_window)
-      timestamps = Enum.map(entries, fn {ts, _} -> ts end)
+      timestamps = Enum.map(entries, fn {{ts, _ref}, _} -> ts end)
 
       refute old_time in timestamps
       assert recent_time in timestamps
