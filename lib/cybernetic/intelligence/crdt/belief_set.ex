@@ -365,14 +365,19 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     now_ms = System.system_time(:millisecond)
 
     # Remove old tombstones based on actual timestamp
-    {new_beliefs, removed_count} =
-      Enum.reduce(state.beliefs, {%{}, 0}, fn {id, entry}, {acc, count} ->
+    {new_beliefs, removed_ids, removed_count} =
+      Enum.reduce(state.beliefs, {%{}, [], 0}, fn {id, entry}, {acc, ids, count} ->
         if entry.tombstone and tombstone_age_ms(entry, now_ms) > @tombstone_ttl do
-          {acc, count + 1}
+          {acc, [id | ids], count + 1}
         else
-          {Map.put(acc, id, entry), count}
+          {Map.put(acc, id, entry), ids, count}
         end
       end)
+
+    # Clean up version_index entries for removed beliefs
+    if removed_count > 0 do
+      cleanup_version_index(state.version_index, removed_ids)
+    end
 
     new_stats =
       if removed_count > 0 do
@@ -388,6 +393,25 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     schedule_gc()
 
     {:noreply, %{state | beliefs: new_beliefs, stats: new_stats}}
+  end
+
+  # Remove version_index entries for garbage-collected beliefs
+  @spec cleanup_version_index(:ets.tid(), [belief_id()]) :: :ok
+  defp cleanup_version_index(version_index, removed_ids) do
+    removed_set = MapSet.new(removed_ids)
+
+    # Scan version_index and delete entries for removed IDs
+    :ets.foldl(
+      fn {version, id}, acc ->
+        if MapSet.member?(removed_set, id) do
+          :ets.delete(version_index, version)
+        end
+
+        acc
+      end,
+      :ok,
+      version_index
+    )
   end
 
   @impl true

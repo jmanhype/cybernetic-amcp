@@ -607,6 +607,9 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
     end
   end
 
+  # Results are tracked as {list, count, furthest_dist} to avoid O(n) operations
+  @type results_state :: {[{distance(), node_id()}], non_neg_integer(), distance()}
+
   @spec search_layer(map(), vector(), hnsw_node(), non_neg_integer(), pos_integer()) ::
           {[{distance(), node_id()}], non_neg_integer()}
   defp search_layer(state, query, entry, layer, ef) do
@@ -614,52 +617,53 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
 
     candidates = [{entry_dist, entry.id}]
     visited = MapSet.new([entry.id])
-    results = [{entry_dist, entry.id}]
+    # Track {results_list, count, furthest_dist} for O(1) access
+    results_state = {[{entry_dist, entry.id}], 1, entry_dist}
 
-    {final_results, total_comps} =
-      search_layer_loop(state, query, layer, ef, candidates, visited, results, 1)
+    {{final_results, _count, _furthest}, total_comps} =
+      search_layer_loop(state, query, layer, ef, candidates, visited, results_state, 1)
 
     {Enum.sort_by(final_results, fn {dist, _} -> dist end), total_comps}
   end
 
-  defp search_layer_loop(_state, _query, _layer, _ef, [], _visited, results, comps) do
-    {results, comps}
+  defp search_layer_loop(_state, _query, _layer, _ef, [], _visited, results_state, comps) do
+    {results_state, comps}
   end
 
-  defp search_layer_loop(state, query, layer, ef, [{c_dist, c_id} | rest], visited, results, comps) do
-    # Get furthest distance from results (last element since sorted ascending)
-    furthest_dist = get_furthest_dist(results)
+  defp search_layer_loop(state, query, layer, ef, [{c_dist, c_id} | rest], visited, results_state, comps) do
+    {_results, _count, furthest_dist} = results_state
 
     if c_dist > furthest_dist do
-      {results, comps}
+      {results_state, comps}
     else
       node = get_node(state, c_id)
       neighbors = if node, do: Map.get(node.neighbors, layer, []), else: []
 
-      {new_candidates, new_visited, new_results, new_comps} =
-        Enum.reduce(neighbors, {rest, visited, results, 0}, fn n_id, {cands, vis, res, c} ->
+      {new_candidates, new_visited, new_results_state, new_comps} =
+        Enum.reduce(neighbors, {rest, visited, results_state, 0}, fn n_id, {cands, vis, res_state, c} ->
           if MapSet.member?(vis, n_id) do
-            {cands, vis, res, c}
+            {cands, vis, res_state, c}
           else
             neighbor = get_node(state, n_id)
 
             if neighbor do
               dist = euclidean_distance(query, neighbor.vector)
               new_vis = MapSet.put(vis, n_id)
+              {res, res_count, res_furthest} = res_state
 
               # Use bounded insert instead of full sort
-              new_res =
-                if length(res) < ef or dist < furthest_dist do
-                  bounded_insert({dist, n_id}, res, ef)
+              new_res_state =
+                if res_count < ef or dist < res_furthest do
+                  bounded_insert({dist, n_id}, res_state, ef)
                 else
-                  res
+                  res_state
                 end
 
               new_cands = insert_sorted([{dist, n_id}], cands)
 
-              {new_cands, new_vis, new_res, c + 1}
+              {new_cands, new_vis, new_res_state, c + 1}
             else
-              {cands, vis, res, c}
+              {cands, vis, res_state, c}
             end
           end
         end)
@@ -671,28 +675,27 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
         ef,
         new_candidates,
         new_visited,
-        new_results,
+        new_results_state,
         comps + new_comps
       )
     end
   end
 
-  # O(1) get furthest distance (last element of sorted list)
-  @spec get_furthest_dist([{distance(), node_id()}]) :: distance()
-  defp get_furthest_dist([]), do: :infinity
-  defp get_furthest_dist(results), do: results |> List.last() |> elem(0)
-
-  # O(n) bounded insert maintaining sorted order, drops furthest if over limit
-  @spec bounded_insert({distance(), node_id()}, [{distance(), node_id()}], pos_integer()) ::
-          [{distance(), node_id()}]
-  defp bounded_insert(item, list, max_size) do
+  # O(n) bounded insert maintaining sorted order, returns {list, count, furthest}
+  @spec bounded_insert({distance(), node_id()}, results_state(), pos_integer()) :: results_state()
+  defp bounded_insert(item, {list, count, _furthest}, max_size) do
     inserted = insert_one_sorted(item, list)
+    new_count = count + 1
 
-    if length(inserted) > max_size do
-      # Drop the last (furthest) element
-      Enum.take(inserted, max_size)
+    if new_count > max_size do
+      # Drop the last (furthest) element, update furthest from new last
+      trimmed = Enum.take(inserted, max_size)
+      {last_dist, _} = List.last(trimmed)
+      {trimmed, max_size, last_dist}
     else
-      inserted
+      # New furthest is either old furthest or new item (whichever is larger)
+      {new_furthest_dist, _} = List.last(inserted)
+      {inserted, new_count, new_furthest_dist}
     end
   end
 
