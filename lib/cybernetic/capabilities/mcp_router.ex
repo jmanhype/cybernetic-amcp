@@ -34,6 +34,11 @@ defmodule Cybernetic.Capabilities.MCPRouter do
 
   require Logger
 
+  alias Cybernetic.Capabilities.Validation
+
+  # Token storage - maps server_name -> encrypted token ref
+  @token_table :mcp_router_tokens
+
   @type server_config :: %{
           name: String.t(),
           url: String.t(),
@@ -102,6 +107,9 @@ defmodule Cybernetic.Capabilities.MCPRouter do
   @impl true
   def init(opts) do
     Logger.info("MCP Router starting")
+
+    # Create ETS table for secure token storage (not in GenServer state)
+    :ets.new(@token_table, [:named_table, :private, :set])
 
     state = %{
       servers: %{},
@@ -178,10 +186,14 @@ defmodule Cybernetic.Capabilities.MCPRouter do
     client_id = Keyword.get(opts, :client_id, "default")
     timeout = Keyword.get(opts, :timeout, state.default_timeout)
 
-    with {:ok, server_name} <- find_server_for_tool(tool_name, state),
+    # Sanitize tool name to prevent path traversal
+    sanitized_tool = Validation.sanitize_name(tool_name)
+
+    with :ok <- Validation.validate_args_size(args),
+         {:ok, server_name} <- find_server_for_tool(sanitized_tool, state),
          {:ok, server} <- get_server(server_name, state),
          :ok <- check_rate_limit(client_id, state) do
-      result = dispatch_tool_call(server, tool_name, args, timeout)
+      result = dispatch_tool_call(server, sanitized_tool, args, timeout)
 
       {new_stats, success} =
         case result do
@@ -279,14 +291,18 @@ defmodule Cybernetic.Capabilities.MCPRouter do
 
   @spec validate_server_config(map()) :: {:ok, server_config()} | {:error, term()}
   defp validate_server_config(config) do
-    with :ok <- validate_required_fields(config, [:name, :url, :tools]),
-         :ok <- validate_url(config[:url]),
-         :ok <- validate_tools(config[:tools]) do
+    with :ok <- Validation.validate_required(config, [:name, :url, :tools]),
+         :ok <- Validation.validate_name(config[:name]),
+         :ok <- Validation.validate_url(config[:url]),
+         :ok <- Validation.validate_tools(config[:tools]) do
+      # Store auth tokens securely in ETS (not in GenServer state)
+      auth_ref = store_auth_securely(config[:name], config[:auth])
+
       server = %{
         name: config[:name],
         url: config[:url],
         tools: config[:tools],
-        auth: config[:auth],
+        auth: auth_ref,  # Only stores reference, not actual token
         metadata: config[:metadata] || %{}
       }
 
@@ -294,30 +310,29 @@ defmodule Cybernetic.Capabilities.MCPRouter do
     end
   end
 
-  @spec validate_required_fields(map(), [atom()]) :: :ok | {:error, {:missing_field, atom()}}
-  defp validate_required_fields(config, fields) do
-    Enum.reduce_while(fields, :ok, fn field, _acc ->
-      if Map.has_key?(config, field) and config[field] != nil do
-        {:cont, :ok}
-      else
-        {:halt, {:error, {:missing_field, field}}}
-      end
-    end)
+  @spec store_auth_securely(String.t(), map() | nil) :: :none | {:ref, String.t()}
+  defp store_auth_securely(_name, nil), do: :none
+
+  defp store_auth_securely(name, auth) when is_map(auth) do
+    # Store in private ETS table, return reference
+    ref = "auth_#{name}_#{:erlang.unique_integer([:positive])}"
+    :ets.insert(@token_table, {ref, auth})
+    {:ref, ref}
   end
 
-  @spec validate_url(term()) :: :ok | {:error, :invalid_url}
-  defp validate_url(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{scheme: scheme} when scheme in ["http", "https"] -> :ok
-      _ -> {:error, :invalid_url}
+  defp store_auth_securely(_name, _), do: :none
+
+  @spec get_auth(server_config()) :: map() | nil
+  defp get_auth(%{auth: :none}), do: nil
+
+  defp get_auth(%{auth: {:ref, ref}}) do
+    case :ets.lookup(@token_table, ref) do
+      [{^ref, auth}] -> auth
+      [] -> nil
     end
   end
 
-  defp validate_url(_), do: {:error, :invalid_url}
-
-  @spec validate_tools(term()) :: :ok | {:error, :invalid_tools}
-  defp validate_tools(tools) when is_list(tools) and length(tools) > 0, do: :ok
-  defp validate_tools(_), do: {:error, :invalid_tools}
+  defp get_auth(_), do: nil
 
   @spec find_server_for_tool(String.t(), map()) :: {:ok, String.t()} | {:error, :tool_not_found}
   defp find_server_for_tool(tool_name, state) do
@@ -355,8 +370,11 @@ defmodule Cybernetic.Capabilities.MCPRouter do
   defp dispatch_tool_call(server, tool_name, args, timeout) do
     url = "#{server.url}/tools/#{tool_name}"
 
+    # Retrieve auth from secure storage
+    auth = get_auth(server)
+
     headers =
-      case server.auth do
+      case auth do
         %{type: "bearer", token: token} ->
           [{"authorization", "Bearer #{token}"}]
 

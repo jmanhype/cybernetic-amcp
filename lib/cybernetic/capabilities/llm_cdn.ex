@@ -47,6 +47,7 @@ defmodule Cybernetic.Capabilities.LLMCDN do
   @dedup_window_ms 5_000
   @default_ttl :timer.hours(24)
   @max_cache_size 10_000
+  @max_concurrent_requests 50
 
   @telemetry [:cybernetic, :capabilities, :llm_cdn]
 
@@ -120,11 +121,13 @@ defmodule Cybernetic.Capabilities.LLMCDN do
       ttl: Keyword.get(opts, :cache_ttl, @default_ttl),
       dedup_window: Keyword.get(opts, :dedup_window_ms, @dedup_window_ms),
       max_size: Keyword.get(opts, :max_cache_size, @max_cache_size),
+      max_concurrent: Keyword.get(opts, :max_concurrent_requests, @max_concurrent_requests),
       stats: %{
         hits: 0,
         misses: 0,
         deduped: 0,
-        evictions: 0
+        evictions: 0,
+        rejected: 0
       }
     }
 
@@ -170,6 +173,12 @@ defmodule Cybernetic.Capabilities.LLMCDN do
         emit_telemetry(:complete, start_time, %{cache: :deduped})
         {:noreply, new_state}
 
+      # Check concurrent limit before initiating new request
+      map_size(state.in_flight) >= state.max_concurrent ->
+        new_state = update_in(state, [:stats, :rejected], &(&1 + 1))
+        emit_telemetry(:complete, start_time, %{cache: :rejected})
+        {:reply, {:error, :too_many_requests}, new_state}
+
       true ->
         # Cache miss, initiate request
         handle_cache_miss(params, opts, fp, from, state, start_time)
@@ -206,6 +215,12 @@ defmodule Cybernetic.Capabilities.LLMCDN do
 
         new_state = update_in(%{state | in_flight: new_in_flight}, [:stats, :deduped], &(&1 + 1))
         {:noreply, new_state}
+
+      # Check concurrent limit
+      map_size(state.in_flight) >= state.max_concurrent ->
+        new_state = update_in(state, [:stats, :rejected], &(&1 + 1))
+        emit_telemetry(:embed, start_time, %{cache: :rejected})
+        {:reply, {:error, :too_many_requests}, new_state}
 
       true ->
         handle_embed_miss(input, opts, fp, from, state, start_time)

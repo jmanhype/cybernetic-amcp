@@ -31,7 +31,8 @@ defmodule Cybernetic.Capabilities.MCPRouterTest do
       }
 
       assert {:ok, server} = MCPRouter.register_server(config)
-      assert server.auth.type == "bearer"
+      # Auth is now stored securely, only reference is in server config
+      assert {:ref, _ref_id} = server.auth
     end
 
     test "registers server with metadata" do

@@ -33,7 +33,7 @@ defmodule Cybernetic.Capabilities.Registry do
 
   require Logger
 
-  alias Cybernetic.Config
+  alias Cybernetic.Capabilities.Validation
 
   @type capability :: %{
           id: String.t(),
@@ -165,7 +165,7 @@ defmodule Cybernetic.Capabilities.Registry do
           {:reply, {:ok, capability}, new_state}
         end
 
-      {:error, reason} = error ->
+      {:error, _reason} = error ->
         {:reply, error, state}
     end
   end
@@ -306,8 +306,11 @@ defmodule Cybernetic.Capabilities.Registry do
 
   @spec build_capability(map()) :: {:ok, capability()} | {:error, term()}
   defp build_capability(attrs) do
-    with :ok <- validate_required(attrs, [:name, :description, :provider]),
-         :ok <- validate_provider(attrs[:provider]) do
+    with :ok <- Validation.validate_required(attrs, [:name, :description, :provider]),
+         :ok <- Validation.validate_name(attrs[:name]),
+         :ok <- Validation.validate_description(attrs[:description]),
+         :ok <- Validation.validate_provider(attrs[:provider]),
+         :ok <- validate_metadata_size(attrs[:metadata]) do
       capability = %{
         id: generate_id(),
         name: attrs[:name],
@@ -325,20 +328,17 @@ defmodule Cybernetic.Capabilities.Registry do
     end
   end
 
-  @spec validate_required(map(), [atom()]) :: :ok | {:error, {:missing_field, atom()}}
-  defp validate_required(attrs, fields) do
-    Enum.reduce_while(fields, :ok, fn field, _acc ->
-      if Map.has_key?(attrs, field) and attrs[field] != nil do
-        {:cont, :ok}
-      else
-        {:halt, {:error, {:missing_field, field}}}
-      end
-    end)
+  @spec validate_metadata_size(term()) :: :ok | {:error, :metadata_too_large}
+  defp validate_metadata_size(nil), do: :ok
+
+  defp validate_metadata_size(metadata) when is_map(metadata) do
+    case Validation.validate_context_size(metadata) do
+      :ok -> :ok
+      {:error, :context_too_large} -> {:error, :metadata_too_large}
+    end
   end
 
-  @spec validate_provider(term()) :: :ok | {:error, :invalid_provider}
-  defp validate_provider(provider) when is_atom(provider), do: :ok
-  defp validate_provider(_), do: {:error, :invalid_provider}
+  defp validate_metadata_size(_), do: :ok
 
   @spec generate_id() :: String.t()
   defp generate_id do

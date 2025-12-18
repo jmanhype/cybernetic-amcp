@@ -33,6 +33,8 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
 
   require Logger
 
+  alias Cybernetic.Capabilities.Validation
+
   @type handoff_state ::
           :initiated | :accepted | :executing | :completed | :rolled_back | :failed
 
@@ -138,7 +140,8 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
     start_time = System.monotonic_time(:millisecond)
 
     with :ok <- validate_system(from),
-         :ok <- validate_system(to) do
+         :ok <- validate_system(to),
+         :ok <- Validation.validate_context_size(context) do
       {trace_id, span_id} = generate_trace_ids()
 
       handoff = %{
@@ -348,7 +351,10 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
   def handle_info(:check_timeouts, state) do
     now = DateTime.utc_now()
     timeout_threshold = DateTime.add(now, -state.timeout_ms, :millisecond)
+    retention_period = :timer.hours(24)
+    retention_threshold = DateTime.add(now, -retention_period, :millisecond)
 
+    # Mark timed-out active handoffs as failed
     timed_out =
       state.handoffs
       |> Enum.filter(fn {_id, h} ->
@@ -357,7 +363,7 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
       end)
       |> Enum.map(fn {id, _h} -> id end)
 
-    new_handoffs =
+    handoffs_after_timeout =
       Enum.reduce(timed_out, state.handoffs, fn id, acc ->
         handoff = Map.get(acc, id)
 
@@ -369,6 +375,18 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
         })
       end)
 
+    # Actually delete old completed/failed/rolled_back handoffs (>24h)
+    deletable_ids =
+      handoffs_after_timeout
+      |> Enum.filter(fn {_id, h} ->
+        h.state in [:completed, :failed, :rolled_back] and
+          h.completed_at != nil and
+          DateTime.compare(h.completed_at, retention_threshold) == :lt
+      end)
+      |> Enum.map(fn {id, _h} -> id end)
+
+    new_handoffs = Map.drop(handoffs_after_timeout, deletable_ids)
+
     new_stats =
       if length(timed_out) > 0 do
         Logger.warning("Handoffs timed out", count: length(timed_out))
@@ -376,6 +394,13 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
       else
         state.stats
       end
+
+    if length(deletable_ids) > 0 do
+      Logger.info("Handoff cleanup",
+        deleted: length(deletable_ids),
+        remaining: map_size(new_handoffs)
+      )
+    end
 
     schedule_timeout_check()
 

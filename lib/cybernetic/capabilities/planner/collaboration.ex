@@ -333,7 +333,10 @@ defmodule Cybernetic.Capabilities.Planner.Collaboration do
   @impl true
   def handle_info(:cleanup, state) do
     now = DateTime.utc_now()
+    retention_period = :timer.hours(24)
+    retention_threshold = DateTime.add(now, -retention_period, :millisecond)
 
+    # Mark timed-out pending/planning plans as failed
     expired_ids =
       state.plans
       |> Enum.filter(fn {_id, plan} ->
@@ -342,14 +345,29 @@ defmodule Cybernetic.Capabilities.Planner.Collaboration do
       end)
       |> Enum.map(fn {id, _plan} -> id end)
 
-    new_plans =
+    plans_after_timeout =
       Enum.reduce(expired_ids, state.plans, fn id, acc ->
         plan = Map.get(acc, id)
         Map.put(acc, id, %{plan | state: :failed})
       end)
 
-    if length(expired_ids) > 0 do
-      Logger.info("Cleaned up expired plans", count: length(expired_ids))
+    # Actually delete old completed/failed/cancelled plans (>24h)
+    deletable_ids =
+      plans_after_timeout
+      |> Enum.filter(fn {_id, plan} ->
+        plan.state in [:complete, :failed, :cancelled] &&
+          DateTime.compare(plan.updated_at, retention_threshold) == :lt
+      end)
+      |> Enum.map(fn {id, _plan} -> id end)
+
+    new_plans = Map.drop(plans_after_timeout, deletable_ids)
+
+    if length(expired_ids) > 0 or length(deletable_ids) > 0 do
+      Logger.info("Plan cleanup",
+        expired: length(expired_ids),
+        deleted: length(deletable_ids),
+        remaining: map_size(new_plans)
+      )
     end
 
     schedule_cleanup()
@@ -393,12 +411,32 @@ defmodule Cybernetic.Capabilities.Planner.Collaboration do
     try do
       PubSub.broadcast(pubsub_module(), topic, {:planner_event, topic, payload})
     rescue
-      _e ->
-        # PubSub not running (e.g., in tests)
+      e ->
+        Logger.warning("PubSub broadcast failed",
+          topic: topic,
+          error: Exception.message(e)
+        )
+
+        :telemetry.execute(
+          @telemetry ++ [:broadcast_failed],
+          %{count: 1},
+          %{topic: topic, error: :exception}
+        )
+
         :ok
     catch
-      :exit, _ ->
-        # PubSub process not available
+      :exit, reason ->
+        Logger.warning("PubSub not available",
+          topic: topic,
+          reason: inspect(reason)
+        )
+
+        :telemetry.execute(
+          @telemetry ++ [:broadcast_failed],
+          %{count: 1},
+          %{topic: topic, error: :exit}
+        )
+
         :ok
     end
   end
