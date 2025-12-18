@@ -151,7 +151,8 @@ defmodule Cybernetic.Capabilities.Validation do
       %URI{scheme: scheme, host: host}
       when scheme in ["http", "https"] and is_binary(host) and host != "" ->
         # Block localhost/internal IPs in production
-        if internal_url?(host) and Mix.env() == :prod do
+        env = Application.get_env(:cybernetic, :environment, :prod)
+        if internal_url?(host) and env == :prod do
           {:error, :invalid_url}
         else
           :ok

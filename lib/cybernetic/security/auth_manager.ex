@@ -29,11 +29,16 @@ defmodule Cybernetic.Security.AuthManager do
         }
 
   # JWT configuration
-  @jwt_secret System.get_env("JWT_SECRET", "dev-secret-change-in-production")
+  # P0 Fix: Read JWT secret at runtime, not compile time
   # @jwt_algorithm :HS256  # Not used yet
   # 1 hour
   @jwt_ttl_seconds 3600
   # @refresh_ttl_seconds 86400 # 24 hours  # Not used yet
+
+  # P0 Security: Get JWT secret at runtime from environment
+  defp get_jwt_secret do
+    System.get_env("JWT_SECRET", "dev-secret-change-in-production")
+  end
 
   # Role definitions with permissions
   @role_permissions %{
@@ -53,10 +58,11 @@ defmodule Cybernetic.Security.AuthManager do
 
   @impl true
   def init(_opts) do
-    # Initialize ETS tables for session and API key storage
-    :ets.new(:auth_sessions, [:set, :public, :named_table])
-    :ets.new(:api_keys, [:set, :public, :named_table])
-    :ets.new(:refresh_tokens, [:set, :public, :named_table])
+    # P0 Security: Use :protected instead of :public to restrict ETS access
+    # Only the owning process (this GenServer) can write; other processes can read
+    :ets.new(:auth_sessions, [:set, :protected, :named_table, {:read_concurrency, true}])
+    :ets.new(:api_keys, [:set, :protected, :named_table, {:read_concurrency, true}])
+    :ets.new(:refresh_tokens, [:set, :protected, :named_table, {:read_concurrency, true}])
 
     # Load API keys from config/env
     load_api_keys()
@@ -427,8 +433,9 @@ defmodule Cybernetic.Security.AuthManager do
     users = get_configured_users()
 
     # If no users configured, create default users for test environment
+    env = Application.get_env(:cybernetic, :environment, :prod)
     users =
-      if map_size(users) == 0 and Mix.env() in [:dev, :test] do
+      if map_size(users) == 0 and env in [:dev, :test] do
         %{
           "admin" => %{
             id: "user_admin",
@@ -478,7 +485,7 @@ defmodule Cybernetic.Security.AuthManager do
     # In production, use proper JWT library like Joken
     # For now, simple encoded JSON with signature
     payload = Jason.encode!(claims)
-    signature = :crypto.mac(:hmac, :sha256, @jwt_secret, payload) |> Base.encode64(padding: false)
+    signature = :crypto.mac(:hmac, :sha256, get_jwt_secret(), payload) |> Base.encode64(padding: false)
 
     Base.encode64(payload, padding: false) <> "." <> signature
   end
@@ -533,9 +540,23 @@ defmodule Cybernetic.Security.AuthManager do
   end
 
   defp verify_password(password, hash) do
-    # Constant time comparison to prevent timing attacks
+    # P0 Security: Use constant-time comparison to prevent timing attacks
     computed_hash = hash_password(password)
-    computed_hash == hash
+    secure_compare(computed_hash, hash)
+  end
+
+  # P0 Security: Constant-time string comparison to prevent timing attacks
+  defp secure_compare(a, b) when byte_size(a) != byte_size(b), do: false
+  defp secure_compare(a, b) do
+    # XOR all bytes and accumulate - timing is constant regardless of where mismatch occurs
+    a_bytes = :binary.bin_to_list(a)
+    b_bytes = :binary.bin_to_list(b)
+
+    result =
+      Enum.zip(a_bytes, b_bytes)
+      |> Enum.reduce(0, fn {x, y}, acc -> Bitwise.bor(acc, Bitwise.bxor(x, y)) end)
+
+    result == 0
   end
 
   defp expand_permissions(roles) do

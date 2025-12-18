@@ -12,6 +12,9 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
   end
 
   def init(_opts) do
+    # P1 Fix: Trap exits so spawn_link'd polling tasks don't crash the GenServer
+    Process.flag(:trap_exit, true)
+
     bot_token = System.get_env("TELEGRAM_BOT_TOKEN")
 
     state = %{

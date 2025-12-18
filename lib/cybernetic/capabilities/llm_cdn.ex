@@ -403,10 +403,10 @@ defmodule Cybernetic.Capabilities.LLMCDN do
 
   @spec call_llm_complete(map()) :: {:ok, term()} | {:error, term()}
   defp call_llm_complete(params) do
-    # Use ReqLLM if available with chat/1 function, otherwise placeholder
+    # P2 Fix: Use apply/3 to avoid compile warnings for optional dependency
     try do
       if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :chat, 1) do
-        ReqLLM.chat(params)
+        apply(ReqLLM, :chat, [params])
       else
         # Placeholder response for testing
         {:ok,
@@ -430,9 +430,10 @@ defmodule Cybernetic.Capabilities.LLMCDN do
 
   @spec call_llm_embed(term()) :: {:ok, term()} | {:error, term()}
   defp call_llm_embed(input) do
+    # P2 Fix: Use apply/3 to avoid compile warnings for optional dependency
     try do
       if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :embeddings, 1) do
-        ReqLLM.embeddings(%{input: input})
+        apply(ReqLLM, :embeddings, [%{input: input}])
       else
         # Placeholder for testing - generate pseudo-embeddings
         embedding =

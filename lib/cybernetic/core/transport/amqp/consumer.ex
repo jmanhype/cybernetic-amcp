@@ -14,6 +14,15 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   @queue "cyb.consumer"
   @prefetch_count Application.compile_env(:cybernetic, :amqp_prefetch, 50)
 
+  # P0 Security: Whitelist of valid VSM system identifiers to prevent atom exhaustion
+  @vsm_system_whitelist %{
+    "1" => Cybernetic.VSM.System1,
+    "2" => Cybernetic.VSM.System2,
+    "3" => Cybernetic.VSM.System3,
+    "4" => Cybernetic.VSM.System4,
+    "5" => Cybernetic.VSM.System5
+  }
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -136,14 +145,20 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
   end
 
   defp process_by_type(%{"type" => "vsm." <> system} = message, meta) do
-    # Route to appropriate VSM system
-    vsm_module = String.to_atom("Elixir.Cybernetic.Apps.VSM.System#{String.upcase(system)}")
+    # P0 Security: Use whitelist to prevent atom exhaustion from untrusted input
+    case Map.fetch(@vsm_system_whitelist, system) do
+      {:ok, vsm_module} ->
+        if Code.ensure_loaded?(vsm_module) and
+             function_exported?(vsm_module, :handle_message, 2) do
+          apply(vsm_module, :handle_message, [message, meta])
+        else
+          Logger.warning("VSM system #{system} module not available")
+          {:error, :module_not_available}
+        end
 
-    if Code.ensure_loaded?(vsm_module) do
-      apply(vsm_module, :handle_message, [message, meta])
-    else
-      Logger.warning("Unknown VSM system: #{system}")
-      {:error, :unknown_system}
+      :error ->
+        Logger.warning("Unknown VSM system: #{system} (not in whitelist)")
+        {:error, :unknown_system}
     end
   end
 

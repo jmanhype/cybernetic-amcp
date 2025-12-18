@@ -153,10 +153,12 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
 
         new_state = put_in(state.invocations[invocation_id], invocation)
 
-        # Spawn task to handle invocation
+        # P0 Fix: Capture registry pid before spawning task
+        # (self() inside Task refers to Task's own pid, not registry)
+        registry_pid = self()
         Task.start(fn ->
           result = invoke_handler(tool, params, context)
-          send(self(), {:invocation_complete, invocation_id, result})
+          send(registry_pid, {:invocation_complete, invocation_id, result})
         end)
 
         {:reply, {:ok, invocation_id}, new_state}

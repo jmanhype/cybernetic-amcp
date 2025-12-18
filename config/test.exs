@@ -14,7 +14,8 @@ end
 # Configure to use InMemory transport during tests
 config :cybernetic,
   transport: Cybernetic.Transport.InMemory,
-  test_mode: true
+  test_mode: true,
+  environment: :test
 
 # Disable AMQP during tests
 config :cybernetic, :amqp, enabled: false

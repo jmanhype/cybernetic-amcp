@@ -111,7 +111,9 @@ defmodule Cybernetic.Application do
 
   # Configuration validation
   defp validate_configuration do
-    case Mix.env() do
+    env = Application.get_env(:cybernetic, :environment, :prod)
+
+    case env do
       env when env in [:test, :dev] ->
         # In dev/test, just warn about missing production variables
         if System.get_env("JWT_SECRET") == "dev-secret-change-in-production" do

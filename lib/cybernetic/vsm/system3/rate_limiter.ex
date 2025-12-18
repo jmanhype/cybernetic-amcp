@@ -148,8 +148,9 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   defp do_request_tokens(budget_key, resource_type, priority, state) do
     case Map.get(state.budgets, budget_key) do
       nil ->
-        # No budget configured, allow by default
-        {:ok, state}
+        # P1 Fix: Deny by default when no budget configured (fail-closed)
+        Logger.warning("Rate limiter: Unknown budget #{inspect(budget_key)}, denying request")
+        {{:error, :unknown_budget}, state}
 
       budget ->
         case check_budget_limits(budget, resource_type, priority) do
@@ -244,7 +245,10 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
         # 50 requests per 10 minutes
         s5_policy: %{limit: 50, window_ms: 600_000},
         # 200 requests per minute
-        mcp_tools: %{limit: 200, window_ms: 60_000}
+        mcp_tools: %{limit: 200, window_ms: 60_000},
+        # P1 Fix: Add api_gateway budget (used by edge gateway plugs)
+        # 1000 requests per minute per client
+        api_gateway: %{limit: 1000, window_ms: 60_000}
       }
     }
 

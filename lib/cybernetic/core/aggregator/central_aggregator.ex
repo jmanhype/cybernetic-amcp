@@ -23,10 +23,11 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
   @impl true
   def init(_opts) do
-    # Ensure table exists or create it
+    # P1 Fix: Use :ordered_set for efficient pruning by timestamp
+    # Key is {timestamp, unique_ref} to prevent collision when multiple events arrive in same ms
     case :ets.whereis(@table) do
       :undefined ->
-        :ets.new(@table, [:set, :public, :named_table, read_concurrency: true])
+        :ets.new(@table, [:ordered_set, :public, :named_table, read_concurrency: true])
 
       _ ->
         # Table already exists, clear it
@@ -79,7 +80,8 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
         Logger.warning("CentralAggregator: ETS table #{@table} not found during handle_source")
 
       _ ->
-        :ets.insert(@table, {entry.at, entry})
+        # P1 Fix: Use compound key {timestamp, unique_ref} to prevent collision
+        :ets.insert(@table, {{entry.at, make_ref()}, entry})
     end
   end
 
@@ -108,10 +110,10 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
       _ ->
         cutoff = now_ms() - @window_ms
-        # Simple approach: delete all entries older than cutoff
-        # In production, use ordered_set with efficient range deletion
-        all_keys = :ets.select(@table, [{{:"$1", :_}, [{:<, :"$1", cutoff}], [:"$1"]}])
-        Enum.each(all_keys, &:ets.delete(@table, &1))
+        # P1 Fix: Use ordered_set efficient range deletion with compound key {timestamp, ref}
+        # Match spec: key is {timestamp, ref}, select where timestamp < cutoff
+        match_spec = [{{{:"$1", :_}, :_}, [{:<, :"$1", cutoff}], [true]}]
+        :ets.select_delete(@table, match_spec)
     end
   end
 

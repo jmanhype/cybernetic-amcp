@@ -15,10 +15,11 @@ defmodule Cybernetic.Telemetry.Tracer do
     Application.put_env(:opentelemetry, :traces_exporter, :otlp)
 
     # Set resource attributes
+    env = Application.get_env(:cybernetic, :environment, :prod)
     _resource_attributes = %{
       "service.name" => "cybernetic",
       "service.version" => "0.1.0",
-      "deployment.environment" => Mix.env() |> to_string()
+      "deployment.environment" => to_string(env)
     }
 
     :otel_resource_env_var.parse("service.name=cybernetic,service.version=0.1.0")
