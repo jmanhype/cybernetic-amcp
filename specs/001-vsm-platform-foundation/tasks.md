@@ -9,29 +9,30 @@
 ## Progress
 
 - Started: 2025-12-17
-- Last session: 2025-12-17
-- Current phase: Task Generation
-- Velocity: TBD
+- Last session: 2025-12-18
+- Current phase: Implementation (Phase 5+)
+- Velocity: 36 tasks completed in first session
+- Commit: 5646188d
 
 ---
 
 ## Phase 1: Setup & Configuration
 
 ### T001: Create Ecto Repo Module
-- [ ] [T001] [P] Create `lib/cybernetic/repo.ex` with Ecto.Repo
+- [x] [T001] [P] Create `lib/cybernetic/repo.ex` with Ecto.Repo
 - **File**: `lib/cybernetic/repo.ex`
 - **DoD**: Repo module compiles, config references it
 - **Verify**: `mix compile` succeeds
 
 ### T002: Add Database Configuration
-- [ ] [T002] Create database config in `config/config.exs` and `config/runtime.exs`
+- [x] [T002] Create database config in `config/config.exs` and `config/runtime.exs`
 - **File**: `config/config.exs`, `config/runtime.exs`
 - **DoD**: DATABASE_URL parsed, pool configured, query timeout set (30s default)
 - **Verify**: `mix ecto.create` works with DATABASE_URL
 - **Blocks**: T010-T016 (migrations need DB config)
 
 ### T003: Add Oban Configuration
-- [ ] [T003] Add Oban to deps and configure queues
+- [x] [T003] Add Oban to deps and configure queues
 - **File**: `mix.exs`, `config/config.exs`
 - **DoD**: Oban starts with configured queues
 - **Verify**: `Oban.config()` returns expected queues
@@ -41,43 +42,43 @@
 ## Phase 2: Database Migrations (P0 - MVP)
 
 ### T010: Create Tenants Migration
-- [ ] [T010] [P] [US1] Create `priv/repo/migrations/*_create_tenants.exs`
+- [x] [T010] [P] [US1] Create `priv/repo/migrations/*_create_tenants.exs`
 - **File**: `priv/repo/migrations/20251217000001_create_tenants.exs`
 - **DoD**: Tenants table with id, name, slug, settings, timestamps
 - **Verify**: `mix ecto.migrate` creates table
 
 ### T011: Create System States Migration
-- [ ] [T011] [P] [US1] Create migration for VSM system states
+- [x] [T011] [P] [US1] Create migration for VSM system states
 - **File**: `priv/repo/migrations/20251217000002_create_system_states.exs`
 - **DoD**: system_states table with tenant_id FK, system (1-5), state jsonb
 - **Verify**: Migration runs, FK constraint works
 
 ### T012: Create Episodes Migration
-- [ ] [T012] [P] [US1] Create migration for S4 episodes
+- [x] [T012] [P] [US1] Create migration for S4 episodes
 - **File**: `priv/repo/migrations/20251217000003_create_episodes.exs`
 - **DoD**: episodes table with tenant_id FK, title, content, analysis jsonb
 - **Verify**: Migration runs, indexes created
 
 ### T013: Create Policies Migration
-- [ ] [T013] [P] [US1] Create migration for S5 policies
+- [x] [T013] [P] [US1] Create migration for S5 policies
 - **File**: `priv/repo/migrations/20251217000004_create_policies.exs`
 - **DoD**: policies table with tenant_id FK, name, rules jsonb, active boolean
 - **Verify**: Migration runs
 
 ### T014: Create Artifacts Migration
-- [ ] [T014] [P] [US1] Create migration for storage artifacts
+- [x] [T014] [P] [US1] Create migration for storage artifacts
 - **File**: `priv/repo/migrations/20251217000005_create_artifacts.exs`
 - **DoD**: artifacts table with tenant_id, path, content_type, size, metadata
 - **Verify**: Migration runs
 
 ### T015: Create Oban Tables Migration
-- [ ] [T015] [US1] Run Oban migration generator
+- [x] [T015] [US1] Run Oban migration generator
 - **Command**: `mix ecto.gen.migration add_oban_tables`
 - **DoD**: Oban tables created
 - **Verify**: `Oban.start_link/1` succeeds
 
 ### T016: Enable Row-Level Security
-- [ ] [T016] [US1] Create RLS policies migration
+- [x] [T016] [US1] Create RLS policies migration
 - **File**: `priv/repo/migrations/20251217000007_enable_row_level_security.exs`
 - **DoD**: RLS enabled on tenant-scoped tables with policies
 - **Verify**: Cross-tenant queries blocked
@@ -87,31 +88,31 @@
 ## Phase 3: Ecto Schemas (P0 - MVP)
 
 ### T020: Create Tenant Schema
-- [ ] [T020] [P] [US1] Create `lib/cybernetic/schemas/storage/tenant.ex`
+- [x] [T020] [P] [US1] Create `lib/cybernetic/schemas/storage/tenant.ex`
 - **File**: `lib/cybernetic/schemas/storage/tenant.ex`
 - **DoD**: Schema with changeset, validation
 - **Verify**: Unit tests pass
 
 ### T021: Create SystemState Schema
-- [ ] [T021] [P] [US1] Create `lib/cybernetic/schemas/vsm/system_state.ex`
+- [x] [T021] [P] [US1] Create `lib/cybernetic/schemas/vsm/system_state.ex`
 - **File**: `lib/cybernetic/schemas/vsm/system_state.ex`
 - **DoD**: Schema with tenant belongs_to, system enum
 - **Verify**: Unit tests pass
 
 ### T022: Create Episode Schema
-- [ ] [T022] [P] [US1] Create `lib/cybernetic/schemas/vsm/episode.ex`
+- [x] [T022] [P] [US1] Create `lib/cybernetic/schemas/vsm/episode.ex`
 - **File**: `lib/cybernetic/schemas/vsm/episode.ex`
 - **DoD**: Schema with tenant belongs_to, content/analysis
 - **Verify**: Unit tests pass
 
 ### T023: Create Policy Schema
-- [ ] [T023] [P] [US1] Create `lib/cybernetic/schemas/vsm/policy.ex`
+- [x] [T023] [P] [US1] Create `lib/cybernetic/schemas/vsm/policy.ex`
 - **File**: `lib/cybernetic/schemas/vsm/policy.ex`
 - **DoD**: Schema with tenant belongs_to, rules jsonb
 - **Verify**: Unit tests pass
 
 ### T024: Create Artifact Schema
-- [ ] [T024] [P] [US1] Create `lib/cybernetic/schemas/storage/artifact.ex`
+- [x] [T024] [P] [US1] Create `lib/cybernetic/schemas/storage/artifact.ex`
 - **File**: `lib/cybernetic/schemas/storage/artifact.ex`
 - **DoD**: Schema with tenant belongs_to, path, metadata
 - **Verify**: Unit tests pass
@@ -121,43 +122,43 @@
 ## Phase 4: Docker Compose (P0 - MVP)
 
 ### T030: Create Base Docker Compose
-- [ ] [T030] [US2] Create `docker/docker-compose.yml`
+- [x] [T030] [US2] Create `docker/docker-compose.yml`
 - **File**: `docker/docker-compose.yml`
 - **DoD**: Services defined: app, db, redis, rabbitmq
 - **Verify**: `docker compose config` validates
 
 ### T031: Create Dockerfile
-- [ ] [T031] [US2] Create multi-stage `Dockerfile`
+- [x] [T031] [US2] Create multi-stage `Dockerfile`
 - **File**: `Dockerfile`
 - **DoD**: Build and runtime stages, mix release
 - **Verify**: `docker build .` succeeds
 
 ### T032: Create Entrypoint Script
-- [ ] [T032] [US2] Create `docker/scripts/entrypoint.sh`
+- [x] [T032] [US2] Create `docker/scripts/entrypoint.sh`
 - **File**: `docker/scripts/entrypoint.sh`
 - **DoD**: Runs migrations, starts app
 - **Verify**: Script runs in container
 
 ### T033: Create Health Check Script
-- [ ] [T033] [US2] Create `docker/scripts/healthcheck.sh`
+- [x] [T033] [US2] Create `docker/scripts/healthcheck.sh`
 - **File**: `docker/scripts/healthcheck.sh`
 - **DoD**: Checks /health endpoint
 - **Verify**: Health check passes
 
 ### T034: Create Environment Template
-- [ ] [T034] [US2] Create `docker/.env.example`
+- [x] [T034] [US2] Create `docker/.env.example`
 - **File**: `docker/.env.example`
 - **DoD**: All required env vars documented
 - **Verify**: Compose starts with .env
 
 ### T035: Create Dev Compose Override
-- [ ] [T035] [P] [US2] Create `docker/docker-compose.dev.yml`
+- [x] [T035] [P] [US2] Create `docker/docker-compose.dev.yml`
 - **File**: `docker/docker-compose.dev.yml`
 - **DoD**: Mounts source, enables hot reload
 - **Verify**: Code changes reflect immediately
 
 ### T036: Create Prod Compose Override
-- [ ] [T036] [P] [US2] Create `docker/docker-compose.prod.yml`
+- [x] [T036] [P] [US2] Create `docker/docker-compose.prod.yml`
 - **File**: `docker/docker-compose.prod.yml`
 - **DoD**: Optimized settings, resource limits
 - **Verify**: Production config valid
