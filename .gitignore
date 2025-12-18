@@ -32,7 +32,7 @@ Thumbs.db
 
 # AI Assistant files
 .claude/hooks/logs/
-**/.claude/
+.claude/settings.local.json
 .vincent/
 
 # Logs
