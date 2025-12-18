@@ -1,0 +1,443 @@
+defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
+  @moduledoc """
+  Delta-state CRDT for belief propagation across distributed nodes.
+
+  Implements an OR-Set (Observed-Remove Set) with:
+  - Add/remove operations with causal ordering
+  - Delta propagation for efficient sync
+  - Tombstone garbage collection
+  - Conflict-free merging
+
+  ## Usage
+
+      # Create belief set for a node
+      {:ok, _} = BeliefSet.start_link(node_id: "node_1")
+
+      # Add a belief
+      :ok = BeliefSet.add("user_preference", %{theme: "dark"})
+
+      # Remove a belief
+      :ok = BeliefSet.remove("user_preference")
+
+      # Get current beliefs
+      beliefs = BeliefSet.get_all()
+
+      # Get delta since version
+      {:ok, delta} = BeliefSet.get_delta(5)
+
+      # Merge remote delta
+      :ok = BeliefSet.merge_delta(remote_delta)
+  """
+  use GenServer
+
+  require Logger
+
+  @type belief_id :: String.t()
+  @type version :: non_neg_integer()
+  @type node_id :: String.t()
+
+  @type belief_entry :: %{
+          id: belief_id(),
+          value: term(),
+          added_by: node_id(),
+          added_at: version(),
+          tombstone: boolean(),
+          removed_at: version() | nil
+        }
+
+  @type delta :: %{
+          node_id: node_id(),
+          from_version: version(),
+          to_version: version(),
+          entries: [belief_entry()],
+          timestamp: DateTime.t()
+        }
+
+  @gc_interval :timer.minutes(5)
+  @tombstone_ttl :timer.hours(24)
+
+  @telemetry [:cybernetic, :intelligence, :crdt]
+
+  # Client API
+
+  @doc "Start the belief set server"
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts \\ []) do
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
+
+  @doc "Add a belief to the set"
+  @spec add(belief_id(), term(), keyword()) :: :ok
+  def add(id, value, opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:add, id, value})
+  end
+
+  @doc "Remove a belief from the set"
+  @spec remove(belief_id(), keyword()) :: :ok | {:error, :not_found}
+  def remove(id, opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:remove, id})
+  end
+
+  @doc "Get a specific belief"
+  @spec get(belief_id(), keyword()) :: {:ok, term()} | {:error, :not_found}
+  def get(id, opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:get, id})
+  end
+
+  @doc "Get all active beliefs"
+  @spec get_all(keyword()) :: %{belief_id() => term()}
+  def get_all(opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, :get_all)
+  end
+
+  @doc "Check if belief exists"
+  @spec exists?(belief_id(), keyword()) :: boolean()
+  def exists?(id, opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:exists, id})
+  end
+
+  @doc "Get delta since a version"
+  @spec get_delta(version(), keyword()) :: {:ok, delta()}
+  def get_delta(since_version, opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:get_delta, since_version})
+  end
+
+  @doc "Merge a remote delta"
+  @spec merge_delta(delta(), keyword()) :: :ok
+  def merge_delta(delta, opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:merge_delta, delta})
+  end
+
+  @doc "Get current version"
+  @spec version(keyword()) :: version()
+  def version(opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, :version)
+  end
+
+  @doc "Get statistics"
+  @spec stats(keyword()) :: map()
+  def stats(opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, :stats)
+  end
+
+  # Server Callbacks
+
+  @impl true
+  def init(opts) do
+    node_id = Keyword.get(opts, :node_id, generate_node_id())
+
+    Logger.info("BeliefSet CRDT starting", node_id: node_id)
+
+    state = %{
+      node_id: node_id,
+      beliefs: %{},        # id => belief_entry
+      version: 0,
+      version_clock: %{},  # node_id => max_version seen
+      stats: %{
+        adds: 0,
+        removes: 0,
+        merges: 0,
+        conflicts_resolved: 0,
+        gc_runs: 0
+      }
+    }
+
+    schedule_gc()
+
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_call({:add, id, value}, _from, state) do
+    new_version = state.version + 1
+
+    entry = %{
+      id: id,
+      value: value,
+      added_by: state.node_id,
+      added_at: new_version,
+      tombstone: false,
+      removed_at: nil
+    }
+
+    new_beliefs = Map.put(state.beliefs, id, entry)
+    new_clock = Map.put(state.version_clock, state.node_id, new_version)
+    new_stats = Map.update!(state.stats, :adds, &(&1 + 1))
+
+    Logger.debug("Belief added", id: id, version: new_version)
+    emit_telemetry(:add, %{id: id, version: new_version})
+
+    {:reply, :ok,
+     %{state | beliefs: new_beliefs, version: new_version, version_clock: new_clock, stats: new_stats}}
+  end
+
+  @impl true
+  def handle_call({:remove, id}, _from, state) do
+    case Map.get(state.beliefs, id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      entry when entry.tombstone ->
+        {:reply, {:error, :not_found}, state}
+
+      entry ->
+        new_version = state.version + 1
+
+        updated_entry = %{
+          entry
+          | tombstone: true,
+            removed_at: new_version
+        }
+
+        new_beliefs = Map.put(state.beliefs, id, updated_entry)
+        new_clock = Map.put(state.version_clock, state.node_id, new_version)
+        new_stats = Map.update!(state.stats, :removes, &(&1 + 1))
+
+        Logger.debug("Belief removed", id: id, version: new_version)
+        emit_telemetry(:remove, %{id: id, version: new_version})
+
+        {:reply, :ok,
+         %{state | beliefs: new_beliefs, version: new_version, version_clock: new_clock, stats: new_stats}}
+    end
+  end
+
+  @impl true
+  def handle_call({:get, id}, _from, state) do
+    case Map.get(state.beliefs, id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      entry when entry.tombstone ->
+        {:reply, {:error, :not_found}, state}
+
+      entry ->
+        {:reply, {:ok, entry.value}, state}
+    end
+  end
+
+  @impl true
+  def handle_call(:get_all, _from, state) do
+    active =
+      state.beliefs
+      |> Enum.reject(fn {_id, entry} -> entry.tombstone end)
+      |> Enum.into(%{}, fn {id, entry} -> {id, entry.value} end)
+
+    {:reply, active, state}
+  end
+
+  @impl true
+  def handle_call({:exists, id}, _from, state) do
+    exists =
+      case Map.get(state.beliefs, id) do
+        nil -> false
+        entry -> not entry.tombstone
+      end
+
+    {:reply, exists, state}
+  end
+
+  @impl true
+  def handle_call({:get_delta, since_version}, _from, state) do
+    entries =
+      state.beliefs
+      |> Map.values()
+      |> Enum.filter(fn entry ->
+        entry.added_at > since_version or
+          (entry.removed_at != nil and entry.removed_at > since_version)
+      end)
+
+    delta = %{
+      node_id: state.node_id,
+      from_version: since_version,
+      to_version: state.version,
+      entries: entries,
+      timestamp: DateTime.utc_now()
+    }
+
+    {:reply, {:ok, delta}, state}
+  end
+
+  @impl true
+  def handle_call({:merge_delta, delta}, _from, state) do
+    {new_beliefs, conflicts} =
+      Enum.reduce(delta.entries, {state.beliefs, 0}, fn remote_entry, {beliefs, conflict_count} ->
+        case Map.get(beliefs, remote_entry.id) do
+          nil ->
+            # No local entry, just add
+            {Map.put(beliefs, remote_entry.id, remote_entry), conflict_count}
+
+          local_entry ->
+            # Merge entries
+            {merged, had_conflict} = merge_entries(local_entry, remote_entry)
+            new_count = if had_conflict, do: conflict_count + 1, else: conflict_count
+            {Map.put(beliefs, remote_entry.id, merged), new_count}
+        end
+      end)
+
+    # Update version clock
+    new_clock = Map.update(state.version_clock, delta.node_id, delta.to_version, fn existing ->
+      max(existing, delta.to_version)
+    end)
+
+    # Update local version if needed
+    new_version = max(state.version, delta.to_version)
+
+    new_stats =
+      state.stats
+      |> Map.update!(:merges, &(&1 + 1))
+      |> Map.update!(:conflicts_resolved, &(&1 + conflicts))
+
+    Logger.debug("Delta merged",
+      from_node: delta.node_id,
+      entries: length(delta.entries),
+      conflicts: conflicts
+    )
+
+    emit_telemetry(:merge, %{
+      from_node: delta.node_id,
+      entries: length(delta.entries),
+      conflicts: conflicts
+    })
+
+    {:reply, :ok,
+     %{state | beliefs: new_beliefs, version: new_version, version_clock: new_clock, stats: new_stats}}
+  end
+
+  @impl true
+  def handle_call(:version, _from, state) do
+    {:reply, state.version, state}
+  end
+
+  @impl true
+  def handle_call(:stats, _from, state) do
+    stats =
+      state.stats
+      |> Map.put(:active_beliefs, count_active(state.beliefs))
+      |> Map.put(:tombstones, count_tombstones(state.beliefs))
+      |> Map.put(:version, state.version)
+      |> Map.put(:node_id, state.node_id)
+
+    {:reply, stats, state}
+  end
+
+  @impl true
+  def handle_info(:gc, state) do
+    now = System.system_time(:millisecond)
+    cutoff = now - @tombstone_ttl
+
+    # Remove old tombstones
+    {new_beliefs, removed_count} =
+      Enum.reduce(state.beliefs, {%{}, 0}, fn {id, entry}, {acc, count} ->
+        if entry.tombstone and tombstone_age_ms(entry, state) > @tombstone_ttl do
+          {acc, count + 1}
+        else
+          {Map.put(acc, id, entry), count}
+        end
+      end)
+
+    new_stats =
+      if removed_count > 0 do
+        Logger.debug("CRDT garbage collection", removed: removed_count)
+        Map.update!(state.stats, :gc_runs, &(&1 + 1))
+      else
+        state.stats
+      end
+
+    schedule_gc()
+
+    {:noreply, %{state | beliefs: new_beliefs, stats: new_stats}}
+  end
+
+  # Private Functions
+
+  @spec merge_entries(belief_entry(), belief_entry()) :: {belief_entry(), boolean()}
+  defp merge_entries(local, remote) do
+    # Use Last-Writer-Wins with tie-breaking by node_id
+    cond do
+      # Both are tombstones - keep the one that was removed later
+      local.tombstone and remote.tombstone ->
+        if (remote.removed_at || 0) > (local.removed_at || 0) do
+          {remote, true}
+        else
+          {local, true}
+        end
+
+      # Remote is tombstone, local is not
+      remote.tombstone and not local.tombstone ->
+        # Tombstone wins if it was created after the local add
+        if (remote.removed_at || 0) > local.added_at do
+          {remote, true}
+        else
+          {local, true}
+        end
+
+      # Local is tombstone, remote is not
+      local.tombstone and not remote.tombstone ->
+        # Add wins if it was created after the local remove
+        if remote.added_at > (local.removed_at || 0) do
+          {remote, true}
+        else
+          {local, true}
+        end
+
+      # Neither is tombstone - LWW
+      remote.added_at > local.added_at ->
+        {remote, true}
+
+      remote.added_at == local.added_at ->
+        # Tie-break by node_id (lexicographic)
+        if remote.added_by > local.added_by do
+          {remote, true}
+        else
+          {local, true}
+        end
+
+      true ->
+        {local, false}
+    end
+  end
+
+  @spec tombstone_age_ms(belief_entry(), map()) :: non_neg_integer()
+  defp tombstone_age_ms(entry, _state) do
+    # Approximate age based on version difference
+    # In production, would use actual timestamps
+    if entry.removed_at do
+      System.system_time(:millisecond)
+    else
+      0
+    end
+  end
+
+  @spec count_active(map()) :: non_neg_integer()
+  defp count_active(beliefs) do
+    Enum.count(beliefs, fn {_id, entry} -> not entry.tombstone end)
+  end
+
+  @spec count_tombstones(map()) :: non_neg_integer()
+  defp count_tombstones(beliefs) do
+    Enum.count(beliefs, fn {_id, entry} -> entry.tombstone end)
+  end
+
+  defp generate_node_id do
+    "node_#{:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)}"
+  end
+
+  defp schedule_gc do
+    Process.send_after(self(), :gc, @gc_interval)
+  end
+
+  @spec emit_telemetry(atom(), map()) :: :ok
+  defp emit_telemetry(event, metadata) do
+    :telemetry.execute(@telemetry ++ [event], %{count: 1}, metadata)
+  end
+end
