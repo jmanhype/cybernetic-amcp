@@ -9,7 +9,8 @@ defmodule Cybernetic.Capabilities.Validation do
   @max_name_length 128
   @max_description_length 4096
   @max_context_size 1_048_576  # 1MB
-  @max_tool_name_length 64
+  # Reserved for future use - tool names should have stricter limits
+  @_max_tool_name_length 64
   @max_args_size 65_536  # 64KB
   @allowed_name_chars ~r/^[a-zA-Z0-9_\-\.]+$/
 

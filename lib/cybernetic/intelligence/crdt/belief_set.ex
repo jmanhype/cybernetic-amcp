@@ -283,22 +283,21 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
   end
 
   # Get belief IDs changed since a version using ETS ordered_set range query
+  # O(log n + k) where k = number of entries since version
   @spec get_ids_since_version(:ets.tid(), version()) :: [belief_id()]
   defp get_ids_since_version(version_index, since_version) do
-    # ETS ordered_set allows efficient range queries
-    # Start from the version after since_version
-    get_ids_from_key(version_index, since_version + 1, [])
+    # :ets.next(table, key) returns first key STRICTLY GREATER than key
+    # So next(table, since_version) gives us the first key > since_version
+    collect_ids_from(version_index, :ets.next(version_index, since_version), [])
   end
 
-  defp get_ids_from_key(table, key, acc) do
-    case :ets.next(table, key - 1) do
-      :"$end_of_table" ->
-        Enum.reverse(acc)
+  # Tail-recursive collector: iterate through ordered_set keys
+  @spec collect_ids_from(:ets.tid(), term(), [belief_id()]) :: [belief_id()]
+  defp collect_ids_from(_table, :"$end_of_table", acc), do: Enum.reverse(acc)
 
-      next_key when next_key > key - 1 ->
-        [{^next_key, id}] = :ets.lookup(table, next_key)
-        get_ids_from_key(table, next_key + 1, [id | acc])
-    end
+  defp collect_ids_from(table, current_key, acc) do
+    [{^current_key, id}] = :ets.lookup(table, current_key)
+    collect_ids_from(table, :ets.next(table, current_key), [id | acc])
   end
 
   @impl true

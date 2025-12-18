@@ -681,29 +681,38 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
     end
   end
 
-  # O(n) bounded insert maintaining sorted order, returns {list, count, furthest}
+  # Bounded insert maintaining sorted order, returns {list, count, furthest}
+  # Uses single-pass take_with_last to avoid O(n) List.last calls
   @spec bounded_insert({distance(), node_id()}, results_state(), pos_integer()) :: results_state()
-  defp bounded_insert(item, {list, count, _furthest}, max_size) do
+  defp bounded_insert({item_dist, _} = item, {list, count, old_furthest}, max_size) do
     inserted = insert_one_sorted(item, list)
     new_count = count + 1
 
     if new_count > max_size do
-      # Drop the last (furthest) element, update furthest from new last
-      trimmed = Enum.take(inserted, max_size)
-      {last_dist, _} = List.last(trimmed)
-      {trimmed, max_size, last_dist}
+      # Need to trim: use single-pass to get trimmed list AND new furthest
+      {trimmed, {new_furthest_dist, _}} = take_with_last(inserted, max_size)
+      {trimmed, max_size, new_furthest_dist}
     else
-      # New furthest is either old furthest or new item (whichever is larger)
-      {new_furthest_dist, _} = List.last(inserted)
-      {inserted, new_count, new_furthest_dist}
+      # No trim needed: furthest is max of old furthest and new item (list is sorted ascending)
+      new_furthest = max(old_furthest, item_dist)
+      {inserted, new_count, new_furthest}
     end
   end
 
+  # Single-pass take that also returns the last element taken - O(n) total instead of O(2n)
+  @spec take_with_last([{distance(), node_id()}], pos_integer()) ::
+          {[{distance(), node_id()}], {distance(), node_id()}}
+  defp take_with_last(list, n), do: take_with_last(list, n, [], nil)
+
+  defp take_with_last(_, 0, acc, last), do: {Enum.reverse(acc), last}
+  defp take_with_last([], _, acc, last), do: {Enum.reverse(acc), last}
+  defp take_with_last([h | t], n, acc, _last), do: take_with_last(t, n - 1, [h | acc], h)
+
   @spec select_neighbors([{distance(), node_id()}], pos_integer()) :: [node_id()]
   defp select_neighbors(candidates, m) do
-    # candidates are {dist, id} tuples from search_layer
+    # candidates from search_layer are already sorted ascending by distance
+    # Just take the m closest and extract IDs
     candidates
-    |> Enum.sort_by(fn {dist, _id} -> dist end)
     |> Enum.take(m)
     |> Enum.map(fn {_dist, id} -> id end)
   end

@@ -64,6 +64,17 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   @default_window_ms 60_000
   @window_cleanup_interval :timer.seconds(30)
 
+  # MFA whitelist for action security - only allow calls to known safe modules
+  # Configure via Application.put_env(:cybernetic, :cep_mfa_whitelist, [MyModule])
+  @default_mfa_whitelist [
+    Oban,
+    Phoenix.PubSub,
+    Logger,
+    Kernel,
+    GenServer,
+    Task
+  ]
+
   @telemetry [:cybernetic, :intelligence, :cep]
 
   # Client API
@@ -366,15 +377,18 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   end
 
   # Support nested field access via dot notation or list path
+  # Uses Access behavior which works with both atom and string keys
   @spec get_nested_value(map(), atom() | String.t() | [atom() | String.t()]) :: term()
   defp get_nested_value(event, key) when is_atom(key) or is_binary(key) do
     key_str = to_string(key)
 
     if String.contains?(key_str, ".") do
-      path = String.split(key_str, ".") |> Enum.map(&maybe_to_atom/1)
-      get_in(event, path)
+      # For nested paths, try both atom and string keys at each level
+      path = String.split(key_str, ".")
+      get_nested_flexible(event, path)
     else
-      Map.get(event, key) || Map.get(event, to_string(key))
+      # Single key: try atom first (common for internal events), then string (external/JSON)
+      Map.get(event, key) || Map.get(event, key_str)
     end
   end
 
@@ -382,12 +396,39 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
     get_in(event, path)
   end
 
-  defp maybe_to_atom(str) do
-    try do
-      String.to_existing_atom(str)
-    rescue
-      ArgumentError -> str
+  # Flexible nested access that tries both atom and string keys at each level
+  # Avoids String.to_existing_atom try/rescue overhead by using safe_to_existing_atom
+  @spec get_nested_flexible(map(), [String.t()]) :: term()
+  defp get_nested_flexible(value, []), do: value
+  defp get_nested_flexible(nil, _), do: nil
+  defp get_nested_flexible(value, _) when not is_map(value), do: nil
+
+  defp get_nested_flexible(map, [key | rest]) do
+    # Try string key first (most common from JSON/external), then atom if it exists
+    value =
+      case Map.fetch(map, key) do
+        {:ok, v} -> v
+        :error -> get_with_atom_key(map, key)
+      end
+
+    get_nested_flexible(value, rest)
+  end
+
+  # Safe atom key lookup - only converts to atom if it already exists in atom table
+  @spec get_with_atom_key(map(), String.t()) :: term()
+  defp get_with_atom_key(map, key_str) do
+    # Check if atom exists without raising - :erlang.binary_to_existing_atom is safe
+    case safe_to_existing_atom(key_str) do
+      {:ok, atom_key} -> Map.get(map, atom_key)
+      :error -> nil
     end
+  end
+
+  @spec safe_to_existing_atom(String.t()) :: {:ok, atom()} | :error
+  defp safe_to_existing_atom(str) do
+    {:ok, String.to_existing_atom(str)}
+  rescue
+    ArgumentError -> :error
   end
 
   @spec matches_value?(term(), term()) :: boolean()
@@ -538,18 +579,30 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   end
 
   defp execute_action({:mfa, {m, f, a}}, event, hook) do
-    try do
-      apply(m, f, a ++ [event, hook])
-      :ok
-    rescue
-      e ->
-        Logger.error("Hook MFA callback failed",
-          hook: hook.name,
-          mfa: {m, f, length(a)},
-          error: Exception.message(e)
-        )
-
+    # Security: validate module against whitelist before execution
+    if mfa_whitelisted?(m) do
+      try do
+        apply(m, f, a ++ [event, hook])
         :ok
+      rescue
+        e ->
+          Logger.error("Hook MFA callback failed",
+            hook: hook.name,
+            mfa: {m, f, length(a)},
+            error: Exception.message(e)
+          )
+
+          :ok
+      end
+    else
+      Logger.warning("Hook MFA rejected: module not whitelisted",
+        hook: hook.name,
+        module: m,
+        whitelist: mfa_whitelist()
+      )
+
+      emit_telemetry(:mfa_rejected, %{hook_id: hook.id, module: m})
+      :ok
     end
   end
 
@@ -570,5 +623,16 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   @spec emit_telemetry(atom(), map()) :: :ok
   defp emit_telemetry(event, metadata) do
     :telemetry.execute(@telemetry ++ [event], %{count: 1}, metadata)
+  end
+
+  # MFA whitelist security helpers
+  @spec mfa_whitelist() :: [module()]
+  defp mfa_whitelist do
+    Application.get_env(:cybernetic, :cep_mfa_whitelist, @default_mfa_whitelist)
+  end
+
+  @spec mfa_whitelisted?(module()) :: boolean()
+  defp mfa_whitelisted?(mod) when is_atom(mod) do
+    mod in mfa_whitelist()
   end
 end

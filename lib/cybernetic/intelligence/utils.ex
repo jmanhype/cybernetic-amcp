@@ -42,8 +42,11 @@ defmodule Cybernetic.Intelligence.Utils do
 
   @doc "Truncate a list to max size, keeping most recent (head)"
   @spec truncate_list(list(), non_neg_integer()) :: list()
-  def truncate_list(list, max_size) when length(list) <= max_size, do: list
-  def truncate_list(list, max_size), do: Enum.take(list, max_size)
+  def truncate_list(list, max_size) do
+    # Enum.take handles empty lists and returns at most max_size elements
+    # This avoids O(n) length() call - Enum.take stops early when it has enough
+    Enum.take(list, max_size)
+  end
 
   @doc "Safe division avoiding divide by zero"
   @spec safe_div(number(), number(), number()) :: number()
