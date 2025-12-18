@@ -6,7 +6,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
   - Content-addressable storage (SHA256 hash keys)
   - Bloom filter for O(1) membership testing (~1% false positive rate)
   - TTL-based expiration
-  - LRU eviction when capacity exceeded
+  - O(1) LRU eviction via ETS ordered_set
   - Telemetry instrumentation
 
   ## Usage
@@ -36,6 +36,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
           hash: binary(),
           created_at: DateTime.t(),
           accessed_at: DateTime.t(),
+          access_counter: non_neg_integer(),
           ttl: non_neg_integer(),
           hits: non_neg_integer()
         }
@@ -49,6 +50,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
   @default_ttl :timer.hours(24)
   @default_max_size 10_000
   @default_max_memory 100 * 1024 * 1024  # 100MB
+  @default_max_content_size 10 * 1024 * 1024  # 10MB per item
 
   @telemetry [:cybernetic, :intelligence, :cache]
 
@@ -106,7 +108,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
     GenServer.call(server, {:delete, key})
   end
 
-  @doc "Clear all entries"
+  @doc "Clear all entries (note: Bloom filter reset creates brief FP spike)"
   @spec clear(keyword()) :: :ok
   def clear(opts \\ []) do
     server = Keyword.get(opts, :server, __MODULE__)
@@ -126,19 +128,26 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
   def init(opts) do
     Logger.info("Deterministic Cache starting")
 
+    # Create ETS table for O(1) LRU tracking: {access_counter, key}
+    lru_table = :ets.new(:cache_lru, [:ordered_set, :private])
+
     state = %{
       cache: %{},
       bloom: :atomics.new(@bloom_size, signed: false),
-      access_order: [],  # LRU tracking: [oldest | ... | newest]
+      bloom_generation: 0,  # Track Bloom filter resets
+      lru_table: lru_table,
+      access_counter: 0,    # Monotonic counter for LRU ordering
       max_size: Keyword.get(opts, :max_size, @default_max_size),
       max_memory: Keyword.get(opts, :max_memory, @default_max_memory),
+      max_content_size: Keyword.get(opts, :max_content_size, @default_max_content_size),
       current_memory: 0,
       stats: %{
         hits: 0,
         misses: 0,
         bloom_false_positives: 0,
         evictions: 0,
-        puts: 0
+        puts: 0,
+        rejected_size: 0
       }
     }
 
@@ -150,51 +159,14 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @impl true
   def handle_call({:put, content, content_type, ttl}, _from, state) do
-    start_time = System.monotonic_time(:millisecond)
+    content_size = byte_size(content)
 
-    # Generate content-addressable key
-    hash = :crypto.hash(:sha256, content)
-    key = Base.encode16(hash, case: :lower)
-
-    # Check if already exists
-    if Map.has_key?(state.cache, key) do
-      # Update access time for LRU
-      new_state = update_access_time(state, key)
-      emit_telemetry(:put, start_time, %{status: :exists, key: key})
-      {:reply, {:ok, key}, new_state}
+    # Validate content size
+    if content_size > state.max_content_size do
+      new_stats = Map.update!(state.stats, :rejected_size, &(&1 + 1))
+      {:reply, {:error, :content_too_large}, %{state | stats: new_stats}}
     else
-      now = DateTime.utc_now()
-      size = byte_size(content)
-
-      entry = %{
-        key: key,
-        content: content,
-        content_type: content_type,
-        size: size,
-        hash: hash,
-        created_at: now,
-        accessed_at: now,
-        ttl: ttl,
-        hits: 0
-      }
-
-      # Add to bloom filter
-      new_bloom = add_to_bloom(state.bloom, key)
-
-      # Evict if needed
-      state_after_eviction = maybe_evict(state, size)
-
-      new_state = %{
-        state_after_eviction
-        | cache: Map.put(state_after_eviction.cache, key, entry),
-          bloom: new_bloom,
-          access_order: state_after_eviction.access_order ++ [key],
-          current_memory: state_after_eviction.current_memory + size,
-          stats: Map.update!(state_after_eviction.stats, :puts, &(&1 + 1))
-      }
-
-      emit_telemetry(:put, start_time, %{status: :created, key: key, size: size})
-      {:reply, {:ok, key}, new_state}
+      do_put(content, content_type, ttl, content_size, state)
     end
   end
 
@@ -209,17 +181,14 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
         {:reply, {:error, :not_found}, %{state | stats: new_stats}}
 
       entry ->
-        # Check TTL
         if expired?(entry) do
           new_state = remove_entry(state, key)
           emit_telemetry(:get, start_time, %{status: :expired, key: key})
           {:reply, {:error, :not_found}, new_state}
         else
-          new_state =
-            state
-            |> update_access_time(key)
-            |> update_in([:cache, key, :hits], &(&1 + 1))
-            |> update_in([:stats, :hits], &(&1 + 1))
+          {new_state, _new_counter} = update_access_time(state, key, entry)
+          new_state = update_in(new_state, [:cache, key, :hits], &(&1 + 1))
+          new_state = update_in(new_state, [:stats, :hits], &(&1 + 1))
 
           emit_telemetry(:get, start_time, %{status: :hit, key: key})
           {:reply, {:ok, entry.content}, new_state}
@@ -238,7 +207,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
           new_state = remove_entry(state, key)
           {:reply, {:error, :not_found}, new_state}
         else
-          new_state = update_access_time(state, key)
+          {new_state, _} = update_access_time(state, key, entry)
           {:reply, {:ok, entry}, new_state}
         end
     end
@@ -246,7 +215,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @impl true
   def handle_call({:probably_exists, key}, _from, state) do
-    result = bloom_contains?(state.bloom, key)
+    result = bloom_contains?(state.bloom, key, state.bloom_generation)
 
     # Track false positives for stats
     new_state =
@@ -283,14 +252,22 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @impl true
   def handle_call(:clear, _from, state) do
+    # Clear ETS LRU table
+    :ets.delete_all_objects(state.lru_table)
+
+    # Increment Bloom generation to invalidate old entries
+    new_generation = state.bloom_generation + 1
+
     new_state = %{
       state
       | cache: %{},
         bloom: :atomics.new(@bloom_size, signed: false),
-        access_order: [],
+        bloom_generation: new_generation,
+        access_counter: 0,
         current_memory: 0
     }
 
+    Logger.debug("Cache cleared, Bloom generation: #{new_generation}")
     {:reply, :ok, new_state}
   end
 
@@ -302,6 +279,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
       |> Map.put(:memory_bytes, state.current_memory)
       |> Map.put(:hit_rate, calculate_hit_rate(state.stats))
       |> Map.put(:bloom_fp_rate, calculate_bloom_fp_rate(state.stats))
+      |> Map.put(:bloom_generation, state.bloom_generation)
 
     {:reply, stats, state}
   end
@@ -311,14 +289,10 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
     now = DateTime.utc_now()
 
     # Find and remove expired entries
-    {expired_keys, _} =
-      Enum.reduce(state.cache, {[], 0}, fn {key, entry}, {keys, count} ->
-        if expired?(entry, now) do
-          {[key | keys], count + 1}
-        else
-          {keys, count}
-        end
-      end)
+    expired_keys =
+      state.cache
+      |> Enum.filter(fn {_key, entry} -> expired?(entry, now) end)
+      |> Enum.map(fn {key, _entry} -> key end)
 
     new_state =
       Enum.reduce(expired_keys, state, fn key, acc ->
@@ -334,27 +308,92 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
     {:noreply, new_state}
   end
 
+  @impl true
+  def terminate(_reason, state) do
+    # Clean up ETS table
+    :ets.delete(state.lru_table)
+    :ok
+  end
+
   # Private Functions
 
-  @spec add_to_bloom(:atomics.atomics_ref(), cache_key()) :: :atomics.atomics_ref()
-  defp add_to_bloom(bloom, key) do
+  defp do_put(content, content_type, ttl, size, state) do
+    start_time = System.monotonic_time(:millisecond)
+
+    # Generate content-addressable key
+    hash = :crypto.hash(:sha256, content)
+    key = Base.encode16(hash, case: :lower)
+
+    # Check if already exists
+    if Map.has_key?(state.cache, key) do
+      # Update access time for LRU
+      entry = Map.get(state.cache, key)
+      {new_state, _} = update_access_time(state, key, entry)
+      emit_telemetry(:put, start_time, %{status: :exists, key: key})
+      {:reply, {:ok, key}, new_state}
+    else
+      now = DateTime.utc_now()
+      new_counter = state.access_counter + 1
+
+      entry = %{
+        key: key,
+        content: content,
+        content_type: content_type,
+        size: size,
+        hash: hash,
+        created_at: now,
+        accessed_at: now,
+        access_counter: new_counter,
+        ttl: ttl,
+        hits: 0
+      }
+
+      # Add to bloom filter with generation
+      add_to_bloom(state.bloom, key, state.bloom_generation)
+
+      # Evict if needed
+      state_after_eviction = maybe_evict(state, size)
+
+      # Add to LRU table (O(log n) insert into ordered_set)
+      :ets.insert(state_after_eviction.lru_table, {new_counter, key})
+
+      new_state = %{
+        state_after_eviction
+        | cache: Map.put(state_after_eviction.cache, key, entry),
+          access_counter: new_counter,
+          current_memory: state_after_eviction.current_memory + size,
+          stats: Map.update!(state_after_eviction.stats, :puts, &(&1 + 1))
+      }
+
+      emit_telemetry(:put, start_time, %{status: :created, key: key, size: size})
+      {:reply, {:ok, key}, new_state}
+    end
+  end
+
+  @spec add_to_bloom(:atomics.atomics_ref(), cache_key(), non_neg_integer()) :: :ok
+  defp add_to_bloom(bloom, key, generation) do
+    # Include generation in hash to invalidate on clear
+    key_with_gen = "#{generation}:#{key}"
+
     for i <- 0..(@bloom_hash_count - 1) do
-      index = bloom_hash(key, i)
+      index = bloom_hash(key_with_gen, i)
       :atomics.put(bloom, index + 1, 1)
     end
 
-    bloom
+    :ok
   end
 
-  @spec bloom_contains?(:atomics.atomics_ref(), cache_key()) :: boolean()
-  defp bloom_contains?(bloom, key) do
+  @spec bloom_contains?(:atomics.atomics_ref(), cache_key(), non_neg_integer()) :: boolean()
+  defp bloom_contains?(bloom, key, generation) do
+    key_with_gen = "#{generation}:#{key}"
+
     Enum.all?(0..(@bloom_hash_count - 1), fn i ->
-      index = bloom_hash(key, i)
+      index = bloom_hash(key_with_gen, i)
       :atomics.get(bloom, index + 1) == 1
     end)
   end
 
-  @spec bloom_hash(cache_key(), non_neg_integer()) :: non_neg_integer()
+  @spec bloom_hash(String.t(), non_neg_integer()) :: non_neg_integer()
   defp bloom_hash(key, seed) do
     hash = :crypto.hash(:sha256, "#{seed}:#{key}")
     <<num::unsigned-integer-size(64), _::binary>> = hash
@@ -379,12 +418,16 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @spec evict_lru(map()) :: map()
   defp evict_lru(state) do
-    case state.access_order do
-      [] ->
+    # O(1) get oldest from ordered_set
+    case :ets.first(state.lru_table) do
+      :"$end_of_table" ->
         state
 
-      [oldest | _rest] ->
-        remove_entry(state, oldest)
+      oldest_counter ->
+        [{^oldest_counter, oldest_key}] = :ets.lookup(state.lru_table, oldest_counter)
+
+        state
+        |> remove_entry(oldest_key)
         |> update_in([:stats, :evictions], &(&1 + 1))
     end
   end
@@ -394,14 +437,16 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
     if state.current_memory + new_size <= state.max_memory do
       state
     else
-      case state.access_order do
-        [] ->
+      case :ets.first(state.lru_table) do
+        :"$end_of_table" ->
           state
 
-        [oldest | _rest] ->
+        oldest_counter ->
+          [{^oldest_counter, oldest_key}] = :ets.lookup(state.lru_table, oldest_counter)
+
           new_state =
             state
-            |> remove_entry(oldest)
+            |> remove_entry(oldest_key)
             |> update_in([:stats, :evictions], &(&1 + 1))
 
           evict_until_fits(new_state, new_size)
@@ -416,24 +461,37 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
         state
 
       entry ->
+        # Remove from LRU table
+        :ets.match_delete(state.lru_table, {entry.access_counter, key})
+
         %{
           state
           | cache: Map.delete(state.cache, key),
-            access_order: List.delete(state.access_order, key),
             current_memory: max(0, state.current_memory - entry.size)
         }
     end
   end
 
-  @spec update_access_time(map(), cache_key()) :: map()
-  defp update_access_time(state, key) do
+  @spec update_access_time(map(), cache_key(), cache_entry()) :: {map(), non_neg_integer()}
+  defp update_access_time(state, key, entry) do
     now = DateTime.utc_now()
+    new_counter = state.access_counter + 1
 
-    %{
+    # Remove old LRU entry
+    :ets.match_delete(state.lru_table, {entry.access_counter, key})
+
+    # Insert new LRU entry with updated counter
+    :ets.insert(state.lru_table, {new_counter, key})
+
+    updated_entry = %{entry | accessed_at: now, access_counter: new_counter}
+
+    new_state = %{
       state
-      | cache: update_in(state.cache, [key, :accessed_at], fn _ -> now end),
-        access_order: (List.delete(state.access_order, key) ++ [key])
+      | cache: Map.put(state.cache, key, updated_entry),
+        access_counter: new_counter
     }
+
+    {new_state, new_counter}
   end
 
   @spec expired?(cache_entry(), DateTime.t()) :: boolean()

@@ -32,6 +32,8 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
   require Logger
 
+  alias Cybernetic.Intelligence.Utils
+
   @type belief_id :: String.t()
   @type version :: non_neg_integer()
   @type node_id :: String.t()
@@ -41,8 +43,10 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
           value: term(),
           added_by: node_id(),
           added_at: version(),
+          added_timestamp: non_neg_integer(),
           tombstone: boolean(),
-          removed_at: version() | nil
+          removed_at: version() | nil,
+          removed_timestamp: non_neg_integer() | nil
         }
 
   @type delta :: %{
@@ -55,6 +59,8 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
   @gc_interval :timer.minutes(5)
   @tombstone_ttl :timer.hours(24)
+  @max_beliefs 100_000
+  @max_value_size 1024 * 1024  # 1MB per value
 
   @telemetry [:cybernetic, :intelligence, :crdt]
 
@@ -68,7 +74,7 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
   end
 
   @doc "Add a belief to the set"
-  @spec add(belief_id(), term(), keyword()) :: :ok
+  @spec add(belief_id(), term(), keyword()) :: :ok | {:error, term()}
   def add(id, value, opts \\ []) do
     server = Keyword.get(opts, :server, __MODULE__)
     GenServer.call(server, {:add, id, value})
@@ -134,21 +140,25 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
   @impl true
   def init(opts) do
-    node_id = Keyword.get(opts, :node_id, generate_node_id())
+    node_id = Keyword.get(opts, :node_id, Utils.generate_node_id())
 
     Logger.info("BeliefSet CRDT starting", node_id: node_id)
 
     state = %{
       node_id: node_id,
-      beliefs: %{},        # id => belief_entry
+      beliefs: %{},
       version: 0,
-      version_clock: %{},  # node_id => max_version seen
+      version_clock: %{},
+      max_beliefs: Keyword.get(opts, :max_beliefs, @max_beliefs),
+      max_value_size: Keyword.get(opts, :max_value_size, @max_value_size),
       stats: %{
         adds: 0,
         removes: 0,
         merges: 0,
         conflicts_resolved: 0,
-        gc_runs: 0
+        gc_runs: 0,
+        tombstones_collected: 0,
+        rejected_size: 0
       }
     }
 
@@ -159,26 +169,20 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
   @impl true
   def handle_call({:add, id, value}, _from, state) do
-    new_version = state.version + 1
+    # Validate value size
+    value_size = estimate_term_size(value)
 
-    entry = %{
-      id: id,
-      value: value,
-      added_by: state.node_id,
-      added_at: new_version,
-      tombstone: false,
-      removed_at: nil
-    }
+    cond do
+      value_size > state.max_value_size ->
+        new_stats = Map.update!(state.stats, :rejected_size, &(&1 + 1))
+        {:reply, {:error, :value_too_large}, %{state | stats: new_stats}}
 
-    new_beliefs = Map.put(state.beliefs, id, entry)
-    new_clock = Map.put(state.version_clock, state.node_id, new_version)
-    new_stats = Map.update!(state.stats, :adds, &(&1 + 1))
+      map_size(state.beliefs) >= state.max_beliefs and not Map.has_key?(state.beliefs, id) ->
+        {:reply, {:error, :max_beliefs_reached}, state}
 
-    Logger.debug("Belief added", id: id, version: new_version)
-    emit_telemetry(:add, %{id: id, version: new_version})
-
-    {:reply, :ok,
-     %{state | beliefs: new_beliefs, version: new_version, version_clock: new_clock, stats: new_stats}}
+      true ->
+        do_add(state, id, value)
+    end
   end
 
   @impl true
@@ -192,11 +196,13 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
       entry ->
         new_version = state.version + 1
+        now_ms = System.system_time(:millisecond)
 
         updated_entry = %{
           entry
           | tombstone: true,
-            removed_at: new_version
+            removed_at: new_version,
+            removed_timestamp: now_ms
         }
 
         new_beliefs = Map.put(state.beliefs, id, updated_entry)
@@ -273,23 +279,19 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
       Enum.reduce(delta.entries, {state.beliefs, 0}, fn remote_entry, {beliefs, conflict_count} ->
         case Map.get(beliefs, remote_entry.id) do
           nil ->
-            # No local entry, just add
             {Map.put(beliefs, remote_entry.id, remote_entry), conflict_count}
 
           local_entry ->
-            # Merge entries
             {merged, had_conflict} = merge_entries(local_entry, remote_entry)
             new_count = if had_conflict, do: conflict_count + 1, else: conflict_count
             {Map.put(beliefs, remote_entry.id, merged), new_count}
         end
       end)
 
-    # Update version clock
     new_clock = Map.update(state.version_clock, delta.node_id, delta.to_version, fn existing ->
       max(existing, delta.to_version)
     end)
 
-    # Update local version if needed
     new_version = max(state.version, delta.to_version)
 
     new_stats =
@@ -332,13 +334,12 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
   @impl true
   def handle_info(:gc, state) do
-    now = System.system_time(:millisecond)
-    cutoff = now - @tombstone_ttl
+    now_ms = System.system_time(:millisecond)
 
-    # Remove old tombstones
+    # Remove old tombstones based on actual timestamp
     {new_beliefs, removed_count} =
       Enum.reduce(state.beliefs, {%{}, 0}, fn {id, entry}, {acc, count} ->
-        if entry.tombstone and tombstone_age_ms(entry, state) > @tombstone_ttl do
+        if entry.tombstone and tombstone_age_ms(entry, now_ms) > @tombstone_ttl do
           {acc, count + 1}
         else
           {Map.put(acc, id, entry), count}
@@ -348,9 +349,12 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     new_stats =
       if removed_count > 0 do
         Logger.debug("CRDT garbage collection", removed: removed_count)
-        Map.update!(state.stats, :gc_runs, &(&1 + 1))
-      else
+
         state.stats
+        |> Map.update!(:gc_runs, &(&1 + 1))
+        |> Map.update!(:tombstones_collected, &(&1 + removed_count))
+      else
+        Map.update!(state.stats, :gc_runs, &(&1 + 1))
       end
 
     schedule_gc()
@@ -360,9 +364,34 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
   # Private Functions
 
+  defp do_add(state, id, value) do
+    new_version = state.version + 1
+    now_ms = System.system_time(:millisecond)
+
+    entry = %{
+      id: id,
+      value: value,
+      added_by: state.node_id,
+      added_at: new_version,
+      added_timestamp: now_ms,
+      tombstone: false,
+      removed_at: nil,
+      removed_timestamp: nil
+    }
+
+    new_beliefs = Map.put(state.beliefs, id, entry)
+    new_clock = Map.put(state.version_clock, state.node_id, new_version)
+    new_stats = Map.update!(state.stats, :adds, &(&1 + 1))
+
+    Logger.debug("Belief added", id: id, version: new_version)
+    emit_telemetry(:add, %{id: id, version: new_version})
+
+    {:reply, :ok,
+     %{state | beliefs: new_beliefs, version: new_version, version_clock: new_clock, stats: new_stats}}
+  end
+
   @spec merge_entries(belief_entry(), belief_entry()) :: {belief_entry(), boolean()}
   defp merge_entries(local, remote) do
-    # Use Last-Writer-Wins with tie-breaking by node_id
     cond do
       # Both are tombstones - keep the one that was removed later
       local.tombstone and remote.tombstone ->
@@ -374,7 +403,6 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
       # Remote is tombstone, local is not
       remote.tombstone and not local.tombstone ->
-        # Tombstone wins if it was created after the local add
         if (remote.removed_at || 0) > local.added_at do
           {remote, true}
         else
@@ -383,7 +411,6 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
       # Local is tombstone, remote is not
       local.tombstone and not remote.tombstone ->
-        # Add wins if it was created after the local remove
         if remote.added_at > (local.removed_at || 0) do
           {remote, true}
         else
@@ -407,15 +434,18 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     end
   end
 
-  @spec tombstone_age_ms(belief_entry(), map()) :: non_neg_integer()
-  defp tombstone_age_ms(entry, _state) do
-    # Approximate age based on version difference
-    # In production, would use actual timestamps
-    if entry.removed_at do
-      System.system_time(:millisecond)
-    else
-      0
+  @spec tombstone_age_ms(belief_entry(), non_neg_integer()) :: non_neg_integer()
+  defp tombstone_age_ms(entry, now_ms) do
+    # Compute actual age from timestamp
+    case entry.removed_timestamp do
+      nil -> 0
+      removed_ts when is_integer(removed_ts) -> now_ms - removed_ts
     end
+  end
+
+  @spec estimate_term_size(term()) :: non_neg_integer()
+  defp estimate_term_size(term) do
+    :erlang.external_size(term)
   end
 
   @spec count_active(map()) :: non_neg_integer()
@@ -426,10 +456,6 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
   @spec count_tombstones(map()) :: non_neg_integer()
   defp count_tombstones(beliefs) do
     Enum.count(beliefs, fn {_id, entry} -> entry.tombstone end)
-  end
-
-  defp generate_node_id do
-    "node_#{:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)}"
   end
 
   defp schedule_gc do

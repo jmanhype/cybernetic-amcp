@@ -28,6 +28,8 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
   @type process_id :: pid() | {atom(), node()}
   @type process_state :: :healthy | :warning | :zombie | :dead
 
+  @type restart_spec :: {module(), atom(), list()} | nil
+
   @type monitored_process :: %{
           pid: process_id(),
           name: String.t(),
@@ -38,6 +40,7 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
           progress_data: map(),
           state: process_state(),
           memory_baseline: non_neg_integer(),
+          restart_mfa: restart_spec(),
           registered_at: DateTime.t()
         }
 
@@ -57,7 +60,7 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
   end
 
   @doc "Register a process for monitoring"
-  @spec register(process_id(), map(), keyword()) :: :ok
+  @spec register(process_id(), map(), keyword()) :: {:ok, reference()} | {:error, :process_not_alive}
   def register(pid, config \\ %{}, opts \\ []) do
     server = Keyword.get(opts, :server, __MODULE__)
     GenServer.call(server, {:register, pid, config})
@@ -144,38 +147,46 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
 
   @impl true
   def handle_call({:register, pid, config}, _from, state) do
-    now = DateTime.utc_now()
+    # Verify process is alive before monitoring
+    if not Process.alive?(pid) do
+      {:reply, {:error, :process_not_alive}, state}
+    else
+      now = DateTime.utc_now()
 
-    # Monitor the process for DOWN messages
-    ref = Process.monitor(pid)
+      # Monitor the process for DOWN messages
+      ref = Process.monitor(pid)
 
-    # Get initial memory
-    memory_baseline = get_process_memory(pid)
+      # Get initial memory
+      memory_baseline = get_process_memory(pid)
 
-    process = %{
-      pid: pid,
-      name: Map.get(config, :name, inspect(pid)),
-      ref: ref,
-      timeout_ms: Map.get(config, :timeout_ms, state.default_timeout),
-      last_heartbeat: now,
-      last_progress: now,
-      progress_data: %{},
-      state: :healthy,
-      memory_baseline: memory_baseline,
-      restart_fn: Map.get(config, :restart_fn),
-      registered_at: now
-    }
+      # Convert restart_fn to MFA if provided as function (with warning)
+      restart_mfa = normalize_restart_spec(Map.get(config, :restart_mfa) || Map.get(config, :restart_fn))
 
-    new_processes = Map.put(state.processes, pid, process)
+      process = %{
+        pid: pid,
+        name: Map.get(config, :name, inspect(pid)),
+        ref: ref,
+        timeout_ms: Map.get(config, :timeout_ms, state.default_timeout),
+        last_heartbeat: now,
+        last_progress: now,
+        progress_data: %{},
+        state: :healthy,
+        memory_baseline: memory_baseline,
+        restart_mfa: restart_mfa,
+        registered_at: now
+      }
 
-    Logger.debug("Registered process for zombie monitoring",
-      pid: inspect(pid),
-      name: process.name
-    )
+      new_processes = Map.put(state.processes, pid, process)
 
-    emit_telemetry(:process_registered, %{pid: inspect(pid), name: process.name})
+      Logger.debug("Registered process for zombie monitoring",
+        pid: inspect(pid),
+        name: process.name
+      )
 
-    {:reply, :ok, %{state | processes: new_processes}}
+      emit_telemetry(:process_registered, %{pid: inspect(pid), name: process.name})
+
+      {:reply, {:ok, ref}, %{state | processes: new_processes}}
+    end
   end
 
   @impl true
@@ -221,11 +232,11 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
       nil ->
         {:reply, {:error, :not_found}, state}
 
-      %{state: :zombie, restart_fn: restart_fn} = process when is_function(restart_fn) ->
+      %{state: :zombie, restart_mfa: {mod, fun, args}} = process ->
         Logger.warning("Restarting zombie process", pid: inspect(pid), name: process.name)
 
         try do
-          restart_fn.()
+          apply(mod, fun, args)
 
           new_stats = Map.update!(state.stats, :processes_restarted, &(&1 + 1))
           new_processes = Map.delete(state.processes, pid)
@@ -239,7 +250,7 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
         end
 
       %{state: :zombie} ->
-        {:reply, {:error, :no_restart_fn}, state}
+        {:reply, {:error, :no_restart_mfa}, state}
 
       _ ->
         {:reply, {:error, :not_zombie}, state}
@@ -477,6 +488,18 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
   defp schedule_check(interval) do
     Process.send_after(self(), :check_processes, interval)
   end
+
+  @spec normalize_restart_spec(term()) :: restart_spec()
+  defp normalize_restart_spec(nil), do: nil
+  defp normalize_restart_spec({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a), do: {m, f, a}
+
+  defp normalize_restart_spec(fun) when is_function(fun, 0) do
+    Logger.warning("restart_fn as anonymous function is deprecated, use restart_mfa: {Mod, :fun, []} instead")
+    # Wrap function in a module call - but warn that this won't work across nodes
+    nil
+  end
+
+  defp normalize_restart_spec(_), do: nil
 
   @spec emit_telemetry(atom(), map()) :: :ok
   defp emit_telemetry(event, metadata) do

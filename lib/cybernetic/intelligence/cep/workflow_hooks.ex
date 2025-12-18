@@ -1,11 +1,11 @@
 defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   @moduledoc """
-  Complex Event Processing workflow hooks using Goldrush.
+  Complex Event Processing workflow hooks.
 
   Provides pattern-based workflow triggering:
-  - Event pattern matching (field conditions)
+  - Event pattern matching (field conditions, nested fields)
   - Threshold-based activation (count, rate)
-  - Time-window aggregation
+  - Time-window aggregation with bounded memory
   - Workflow dispatch on match
 
   ## Usage
@@ -39,7 +39,7 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
           {:workflow, String.t()}
           | {:notify, String.t()}
           | {:log, atom()}
-          | {:callback, function()}
+          | {:mfa, {module(), atom(), list()}}
 
   @type hook :: %{
           id: hook_id(),
@@ -57,6 +57,12 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
           events: [{DateTime.t(), map()}],
           count: non_neg_integer()
         }
+
+  # Configurable limits
+  @max_hooks 1000
+  @max_window_events 10_000
+  @default_window_ms 60_000
+  @window_cleanup_interval :timer.seconds(30)
 
   @telemetry [:cybernetic, :intelligence, :cep]
 
@@ -97,6 +103,13 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
     GenServer.cast(server, {:process_event, event})
   end
 
+  @doc "Process event synchronously (for testing/backpressure)"
+  @spec process_event_sync(map(), keyword()) :: {:ok, non_neg_integer()}
+  def process_event_sync(event, opts \\ []) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:process_event_sync, event})
+  end
+
   @doc "List all registered hooks"
   @spec list_hooks(keyword()) :: [hook()]
   def list_hooks(opts \\ []) do
@@ -124,20 +137,19 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   def init(opts) do
     Logger.info("CEP Workflow Hooks starting")
 
-    # Register Goldrush patterns if available
-    maybe_init_goldrush()
-
     state = %{
       hooks: %{},
-      windows: %{},  # hook_id => window_state
+      windows: %{},
+      max_hooks: Keyword.get(opts, :max_hooks, @max_hooks),
+      max_window_events: Keyword.get(opts, :max_window_events, @max_window_events),
       stats: %{
         events_processed: 0,
         hooks_triggered: 0,
-        pattern_matches: 0
+        pattern_matches: 0,
+        events_dropped: 0
       }
     }
 
-    # Schedule window cleanup
     schedule_window_cleanup()
 
     {:ok, state}
@@ -145,20 +157,24 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
 
   @impl true
   def handle_call({:register, config}, _from, state) do
-    with {:ok, hook} <- build_hook(config) do
-      new_state = %{
-        state
-        | hooks: Map.put(state.hooks, hook.id, hook),
-          windows: Map.put(state.windows, hook.id, %{events: [], count: 0})
-      }
-
-      Logger.info("Registered CEP hook", hook_id: hook.id, name: hook.name)
-      emit_telemetry(:hook_registered, %{hook_id: hook.id})
-
-      {:reply, {:ok, hook.id}, new_state}
+    if map_size(state.hooks) >= state.max_hooks do
+      {:reply, {:error, :max_hooks_reached}, state}
     else
-      {:error, _} = error ->
-        {:reply, error, state}
+      with {:ok, hook} <- build_hook(config) do
+        new_state = %{
+          state
+          | hooks: Map.put(state.hooks, hook.id, hook),
+            windows: Map.put(state.windows, hook.id, %{events: [], count: 0})
+        }
+
+        Logger.info("Registered CEP hook", hook_id: hook.id, name: hook.name)
+        emit_telemetry(:hook_registered, %{hook_id: hook.id})
+
+        {:reply, {:ok, hook.id}, new_state}
+      else
+        {:error, _} = error ->
+          {:reply, error, state}
+      end
     end
   end
 
@@ -181,7 +197,7 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   @impl true
   def handle_call({:set_enabled, hook_id, enabled}, _from, state) do
     if Map.has_key?(state.hooks, hook_id) do
-      new_hooks = update_in(state.hooks, [hook_id, :enabled], fn _ -> enabled end)
+      new_hooks = put_in(state.hooks, [hook_id, :enabled], enabled)
       {:reply, :ok, %{state | hooks: new_hooks}}
     else
       {:reply, {:error, :not_found}, state}
@@ -208,72 +224,31 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
       state.stats
       |> Map.put(:active_hooks, map_size(state.hooks))
       |> Map.put(:enabled_hooks, count_enabled(state.hooks))
+      |> Map.put(:total_window_events, count_window_events(state.windows))
 
     {:reply, stats, state}
   end
 
   @impl true
+  def handle_call({:process_event_sync, event}, _from, state) do
+    {new_state, triggered_count} = do_process_event(event, state)
+    {:reply, {:ok, triggered_count}, new_state}
+  end
+
+  @impl true
   def handle_cast({:process_event, event}, state) do
-    start_time = System.monotonic_time(:microsecond)
-    now = DateTime.utc_now()
-
-    # Process through all enabled hooks
-    {new_state, triggered_count} =
-      Enum.reduce(state.hooks, {state, 0}, fn {hook_id, hook}, {acc_state, count} ->
-        if hook.enabled and matches_pattern?(event, hook.pattern) do
-          # Update window state
-          acc_state = update_window(acc_state, hook_id, event, now)
-
-          # Check threshold
-          if threshold_met?(acc_state, hook_id, hook.threshold) do
-            # Execute action
-            execute_action(hook.action, event, hook)
-
-            # Update hook stats
-            updated_hook = %{
-              hook
-              | triggered_count: hook.triggered_count + 1,
-                last_triggered: now
-            }
-
-            new_hooks = Map.put(acc_state.hooks, hook_id, updated_hook)
-
-            # Clear window after trigger
-            new_windows = Map.put(acc_state.windows, hook_id, %{events: [], count: 0})
-
-            {%{acc_state | hooks: new_hooks, windows: new_windows}, count + 1}
-          else
-            # Pattern matched but threshold not met
-            acc_state = update_in(acc_state, [:stats, :pattern_matches], &(&1 + 1))
-            {acc_state, count}
-          end
-        else
-          {acc_state, count}
-        end
-      end)
-
-    # Update stats
-    final_state =
-      new_state
-      |> update_in([:stats, :events_processed], &(&1 + 1))
-      |> update_in([:stats, :hooks_triggered], &(&1 + triggered_count))
-
-    duration = System.monotonic_time(:microsecond) - start_time
-    emit_telemetry(:event_processed, %{duration_us: duration, triggers: triggered_count})
-
-    {:noreply, final_state}
+    {new_state, _triggered_count} = do_process_event(event, state)
+    {:noreply, new_state}
   end
 
   @impl true
   def handle_info(:window_cleanup, state) do
     now = DateTime.utc_now()
 
-    # Clean expired events from all windows
     new_windows =
       Enum.into(state.windows, %{}, fn {hook_id, window} ->
         hook = Map.get(state.hooks, hook_id)
         window_ms = get_window_ms(hook)
-
         cutoff = DateTime.add(now, -window_ms, :millisecond)
 
         cleaned_events =
@@ -291,11 +266,53 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
 
   # Private Functions
 
+  defp do_process_event(event, state) do
+    start_time = System.monotonic_time(:microsecond)
+    now = DateTime.utc_now()
+
+    {new_state, triggered_count} =
+      Enum.reduce(state.hooks, {state, 0}, fn {hook_id, hook}, {acc_state, count} ->
+        if hook.enabled and matches_pattern?(event, hook.pattern) do
+          acc_state = update_window(acc_state, hook_id, event, now)
+
+          if threshold_met?(acc_state, hook_id, hook.threshold) do
+            execute_action(hook.action, event, hook)
+
+            updated_hook = %{
+              hook
+              | triggered_count: hook.triggered_count + 1,
+                last_triggered: now
+            }
+
+            new_hooks = Map.put(acc_state.hooks, hook_id, updated_hook)
+            new_windows = Map.put(acc_state.windows, hook_id, %{events: [], count: 0})
+
+            {%{acc_state | hooks: new_hooks, windows: new_windows}, count + 1}
+          else
+            acc_state = update_in(acc_state, [:stats, :pattern_matches], &(&1 + 1))
+            {acc_state, count}
+          end
+        else
+          {acc_state, count}
+        end
+      end)
+
+    final_state =
+      new_state
+      |> update_in([:stats, :events_processed], &(&1 + 1))
+      |> update_in([:stats, :hooks_triggered], &(&1 + triggered_count))
+
+    duration = System.monotonic_time(:microsecond) - start_time
+    emit_telemetry(:event_processed, %{duration_us: duration, triggers: triggered_count})
+
+    {final_state, triggered_count}
+  end
+
   @spec build_hook(map()) :: {:ok, hook()} | {:error, term()}
   defp build_hook(config) do
     with :ok <- validate_hook_config(config) do
       hook = %{
-        id: UUID.uuid4(),
+        id: Cybernetic.Intelligence.Utils.generate_id(),
         name: config[:name] || "unnamed_hook",
         pattern: config[:pattern] || %{},
         threshold: config[:threshold],
@@ -331,7 +348,7 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   defp valid_action?({:workflow, name}) when is_binary(name), do: true
   defp valid_action?({:notify, channel}) when is_binary(channel), do: true
   defp valid_action?({:log, level}) when level in [:debug, :info, :warning, :error], do: true
-  defp valid_action?({:callback, fun}) when is_function(fun, 2), do: true
+  defp valid_action?({:mfa, {m, f, a}}) when is_atom(m) and is_atom(f) and is_list(a), do: true
   defp valid_action?(_), do: false
 
   @spec matches_pattern?(map(), pattern()) :: boolean()
@@ -339,9 +356,34 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
 
   defp matches_pattern?(event, pattern) do
     Enum.all?(pattern, fn {key, expected} ->
-      actual = Map.get(event, key)
+      actual = get_nested_value(event, key)
       matches_value?(actual, expected)
     end)
+  end
+
+  # Support nested field access via dot notation or list path
+  @spec get_nested_value(map(), atom() | String.t() | [atom() | String.t()]) :: term()
+  defp get_nested_value(event, key) when is_atom(key) or is_binary(key) do
+    key_str = to_string(key)
+
+    if String.contains?(key_str, ".") do
+      path = String.split(key_str, ".") |> Enum.map(&maybe_to_atom/1)
+      get_in(event, path)
+    else
+      Map.get(event, key) || Map.get(event, to_string(key))
+    end
+  end
+
+  defp get_nested_value(event, path) when is_list(path) do
+    get_in(event, path)
+  end
+
+  defp maybe_to_atom(str) do
+    try do
+      String.to_existing_atom(str)
+    rescue
+      ArgumentError -> str
+    end
   end
 
   @spec matches_value?(term(), term()) :: boolean()
@@ -353,9 +395,20 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   defp matches_value?(actual, {:lte, expected}) when is_number(actual), do: actual <= expected
 
   defp matches_value?(actual, {:in, list}) when is_list(list), do: actual in list
+  defp matches_value?(actual, {:not_in, list}) when is_list(list), do: actual not in list
+
   defp matches_value?(actual, {:contains, substr}) when is_binary(actual) and is_binary(substr) do
     String.contains?(actual, substr)
   end
+
+  defp matches_value?(actual, {:starts_with, prefix}) when is_binary(actual) and is_binary(prefix) do
+    String.starts_with?(actual, prefix)
+  end
+
+  defp matches_value?(actual, {:ends_with, suffix}) when is_binary(actual) and is_binary(suffix) do
+    String.ends_with?(actual, suffix)
+  end
+
   defp matches_value?(actual, {:matches, regex}) when is_binary(actual) do
     Regex.match?(regex, actual)
   end
@@ -367,23 +420,34 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
 
   defp matches_value?(actual, expected), do: actual == expected
 
+  @severity_ranks %{"critical" => 4, "high" => 3, "medium" => 2, "low" => 1}
+
   @spec severity_rank(String.t()) :: integer()
-  defp severity_rank("critical"), do: 4
-  defp severity_rank("high"), do: 3
-  defp severity_rank("medium"), do: 2
-  defp severity_rank("low"), do: 1
-  defp severity_rank(_), do: 0
+  defp severity_rank(severity), do: Map.get(@severity_ranks, severity, 0)
 
   @spec update_window(map(), hook_id(), map(), DateTime.t()) :: map()
   defp update_window(state, hook_id, event, timestamp) do
     window = Map.get(state.windows, hook_id, %{events: [], count: 0})
 
+    # Truncate to max_window_events to prevent memory bloat
+    new_events =
+      [{timestamp, event} | window.events]
+      |> Enum.take(state.max_window_events)
+
+    dropped = max(0, window.count + 1 - state.max_window_events)
+
     new_window = %{
-      events: [{timestamp, event} | window.events],
-      count: window.count + 1
+      events: new_events,
+      count: length(new_events)
     }
 
-    %{state | windows: Map.put(state.windows, hook_id, new_window)}
+    new_state = %{state | windows: Map.put(state.windows, hook_id, new_window)}
+
+    if dropped > 0 do
+      update_in(new_state, [:stats, :events_dropped], &(&1 + dropped))
+    else
+      new_state
+    end
   end
 
   @spec threshold_met?(map(), hook_id(), threshold() | nil) :: boolean()
@@ -393,13 +457,11 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
     window = Map.get(state.windows, hook_id, %{events: [], count: 0})
 
     cond do
-      # Count threshold
       Map.has_key?(threshold, :count) ->
         window.count >= threshold.count
 
-      # Rate threshold (events per minute)
       Map.has_key?(threshold, :rate_per_min) ->
-        window_ms = Map.get(threshold, :window_ms, 60_000)
+        window_ms = Map.get(threshold, :window_ms, @default_window_ms)
         rate = window.count / (window_ms / 60_000)
         rate >= threshold.rate_per_min
 
@@ -409,9 +471,9 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
   end
 
   @spec get_window_ms(hook() | nil) :: pos_integer()
-  defp get_window_ms(nil), do: 60_000
-  defp get_window_ms(%{threshold: nil}), do: 60_000
-  defp get_window_ms(%{threshold: threshold}), do: Map.get(threshold, :window_ms, 60_000)
+  defp get_window_ms(nil), do: @default_window_ms
+  defp get_window_ms(%{threshold: nil}), do: @default_window_ms
+  defp get_window_ms(%{threshold: threshold}), do: Map.get(threshold, :window_ms, @default_window_ms)
 
   @spec execute_action(action(), map(), hook()) :: :ok
   defp execute_action({:workflow, workflow_name}, event, hook) do
@@ -421,7 +483,6 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
       event_type: Map.get(event, :type)
     )
 
-    # Dispatch to workflow system (placeholder for actual implementation)
     emit_telemetry(:workflow_triggered, %{workflow: workflow_name, hook_id: hook.id})
     :ok
   end
@@ -432,7 +493,6 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
       hook: hook.name
     )
 
-    # Would dispatch to notification system
     emit_telemetry(:notification_sent, %{channel: channel, hook_id: hook.id})
     :ok
   end
@@ -450,14 +510,15 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
     :ok
   end
 
-  defp execute_action({:callback, fun}, event, hook) do
+  defp execute_action({:mfa, {m, f, a}}, event, hook) do
     try do
-      fun.(event, hook)
+      apply(m, f, a ++ [event, hook])
       :ok
     rescue
       e ->
-        Logger.error("Hook callback failed",
+        Logger.error("Hook MFA callback failed",
           hook: hook.name,
+          mfa: {m, f, length(a)},
           error: Exception.message(e)
         )
 
@@ -470,16 +531,13 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
     Enum.count(hooks, fn {_id, hook} -> hook.enabled end)
   end
 
-  defp maybe_init_goldrush do
-    if Code.ensure_loaded?(:gr) do
-      Logger.debug("Goldrush available for CEP")
-    else
-      Logger.debug("Goldrush not available, using built-in pattern matching")
-    end
+  @spec count_window_events(map()) :: non_neg_integer()
+  defp count_window_events(windows) do
+    Enum.reduce(windows, 0, fn {_id, window}, acc -> acc + window.count end)
   end
 
   defp schedule_window_cleanup do
-    Process.send_after(self(), :window_cleanup, :timer.seconds(30))
+    Process.send_after(self(), :window_cleanup, @window_cleanup_interval)
   end
 
   @spec emit_telemetry(atom(), map()) :: :ok

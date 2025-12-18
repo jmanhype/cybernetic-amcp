@@ -18,6 +18,7 @@ defmodule Cybernetic.Intelligence.Supervisor do
   alias Cybernetic.Intelligence.Zombie.Detector, as: ZombieDetector
   alias Cybernetic.Intelligence.HNSW.Index, as: HNSWIndex
   alias Cybernetic.Intelligence.CRDT.BeliefSet
+  alias Cybernetic.Intelligence.Utils
 
   @doc "Start the Intelligence supervisor"
   @spec start_link(keyword()) :: Supervisor.on_start()
@@ -63,11 +64,13 @@ defmodule Cybernetic.Intelligence.Supervisor do
       {BeliefSet,
        [
          name: BeliefSet,
-         node_id: Keyword.get(opts, :node_id, generate_node_id())
+         node_id: Keyword.get(opts, :node_id, Utils.generate_node_id())
        ]}
     ]
 
-    Supervisor.init(children, strategy: :one_for_one)
+    # Note: one_for_one is appropriate here since each component is independent
+    # HNSW data loss on crash is acceptable since it can be rebuilt or loaded from persistence
+    Supervisor.init(children, strategy: :one_for_one, max_restarts: 5, max_seconds: 60)
   end
 
   # Convenience functions
@@ -117,9 +120,5 @@ defmodule Cybernetic.Intelligence.Supervisor do
       nil -> false
       pid -> Process.alive?(pid)
     end
-  end
-
-  defp generate_node_id do
-    "node_#{Node.self()}_#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
   end
 end
