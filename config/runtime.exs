@@ -158,8 +158,15 @@ config :cybernetic, :s4,
   circuit_breaker_threshold: 5
 
 # LLM Stack Selection (req_llm_pipeline or legacy_httpoison)
+llm_stack =
+  case System.get_env("LLM_STACK", "legacy_httpoison") do
+    "req_llm_pipeline" -> :req_llm_pipeline
+    "legacy_httpoison" -> :legacy_httpoison
+    other -> raise "Invalid LLM_STACK value: #{inspect(other)}"
+  end
+
 config :cybernetic, :llm_stack,
-  stack: System.get_env("LLM_STACK", "legacy_httpoison") |> String.to_atom()
+  stack: llm_stack
 
 # Provider-specific configurations
 config :cybernetic, Cybernetic.VSM.System4.Providers.Anthropic,

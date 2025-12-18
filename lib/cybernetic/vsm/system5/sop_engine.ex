@@ -22,9 +22,11 @@ defmodule Cybernetic.VSM.System5.SOPEngine do
 
   @impl true
   def init(_opts) do
-    :ets.new(:sop_store, [:named_table, :public, read_concurrency: true])
-    :ets.new(:sop_versions, [:named_table, :public])
-    :ets.new(:sop_exec_log, [:named_table, :public])
+    # P1 Security: ETS tables are private to the SOPEngine process.
+    # All access goes through the GenServer API.
+    :ets.new(:sop_store, [:named_table, :private, read_concurrency: true])
+    :ets.new(:sop_versions, [:named_table, :private, read_concurrency: true])
+    :ets.new(:sop_exec_log, [:named_table, :private, read_concurrency: true])
     {:ok, %{}}
   end
 

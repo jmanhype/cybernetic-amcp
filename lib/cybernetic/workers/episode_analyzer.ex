@@ -196,9 +196,16 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
     end
   end
 
-  defp get_episode_from_store(_tenant_id, _episode_id) do
-    # Placeholder - would query EpisodeStore GenServer
-    {:error, :not_found}
+  defp get_episode_from_store(tenant_id, episode_id) do
+    backend = Application.get_env(:cybernetic, :episode_store_backend)
+
+    cond do
+      is_atom(backend) and Code.ensure_loaded?(backend) and function_exported?(backend, :get, 2) ->
+        apply(backend, :get, [tenant_id, episode_id])
+
+      true ->
+        {:error, :not_found}
+    end
   end
 
   # Extract and validate content from episode
@@ -448,7 +455,7 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
         receive_timeout: timeout,
         retry: false
       )
-      |> ReqLLM.attach()
+      |> maybe_attach_reqllm()
 
     case Req.post(req,
            url: "/chat/completions",
@@ -484,6 +491,14 @@ defmodule Cybernetic.Workers.EpisodeAnalyzer do
     e ->
       Logger.error("LLM call exception", error: Exception.message(e))
       {:error, :llm_error}
+  end
+
+  defp maybe_attach_reqllm(req) do
+    if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :attach, 1) do
+      apply(ReqLLM, :attach, [req])
+    else
+      req
+    end
   end
 
   defp get_model_info do

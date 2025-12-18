@@ -126,17 +126,29 @@ defmodule Cybernetic.Application do
         # In production, require proper configuration
         required_env_vars = [
           "JWT_SECRET",
-          "PASSWORD_SALT"
+          "PASSWORD_SALT",
+          "SECRET_KEY_BASE",
+          "CYBERNETIC_HMAC_SECRET"
         ]
 
         missing =
           Enum.filter(required_env_vars, fn var ->
-            case System.get_env(var) do
-              nil -> true
-              "" -> true
+            case {var, System.get_env(var)} do
+              {_var, nil} ->
+                true
+
+              {_var, ""} ->
+                true
+
               # Default not allowed in prod
-              "dev-secret-change-in-production" -> true
-              _ -> false
+              {"JWT_SECRET", "dev-secret-change-in-production"} ->
+                true
+
+              {"PASSWORD_SALT", "cybernetic_default_salt_change_in_prod"} ->
+                true
+
+              {_var, _} ->
+                false
             end
           end)
 
@@ -150,7 +162,20 @@ defmodule Cybernetic.Application do
           if String.length(jwt_secret) < 32 do
             {:error, "JWT_SECRET must be at least 32 characters in production"}
           else
-            :ok
+            # Validate Phoenix secret_key_base strength in production
+            secret_key_base = System.get_env("SECRET_KEY_BASE")
+
+            if byte_size(secret_key_base) < 64 do
+              {:error, "SECRET_KEY_BASE must be at least 64 characters in production"}
+            else
+              password_salt = System.get_env("PASSWORD_SALT")
+
+              if byte_size(password_salt) < 16 do
+                {:error, "PASSWORD_SALT must be at least 16 characters in production"}
+              else
+                :ok
+              end
+            end
           end
         end
     end

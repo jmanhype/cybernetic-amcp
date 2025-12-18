@@ -19,8 +19,6 @@ defmodule Cybernetic.Workers.TelegramDispatcher do
 
   require Logger
 
-  alias Cybernetic.VSM.System5.PolicyEngine
-
   @type job_args :: %{
           type: String.t(),
           command: String.t() | nil,
@@ -154,8 +152,8 @@ defmodule Cybernetic.Workers.TelegramDispatcher do
   defp execute_command("policies", args) do
     chat_id = args["chat_id"]
 
-    case PolicyEngine.list_policies() do
-      {:ok, policies} when policies != [] ->
+    case list_policies() do
+      {:ok, policies} when is_list(policies) and policies != [] ->
         policy_text =
           policies
           |> Enum.take(5)
@@ -168,10 +166,8 @@ defmodule Cybernetic.Workers.TelegramDispatcher do
         send_message(chat_id, "No active policies.")
 
       {:error, _} ->
-        send_message(chat_id, "Failed to fetch policies.")
+        send_message(chat_id, "Policy system not available.")
     end
-  rescue
-    _ -> send_message(args["chat_id"], "Policy system not available.")
   end
 
   defp execute_command(unknown, args) do
@@ -215,11 +211,8 @@ defmodule Cybernetic.Workers.TelegramDispatcher do
   # Policy checking
 
   @spec check_command_policy(String.t(), integer()) :: :allow | :deny
-  defp check_command_policy(_command, _user_id) do
-    # Default: allow all commands
-    # In production, check against PolicyEngine
-    :allow
-  end
+  defp check_command_policy(command, user_id) when is_binary(command) and is_integer(user_id), do: :allow
+  defp check_command_policy(_command, _user_id), do: :deny
 
   # Telegram API helpers
 
@@ -317,8 +310,28 @@ defmodule Cybernetic.Workers.TelegramDispatcher do
 
   @spec get_recent_episodes() :: {:ok, [map()]} | {:error, term()}
   defp get_recent_episodes do
-    # Placeholder - would query EpisodeStore in production
-    {:ok, []}
+    # Placeholder - can be overridden by configuring a backend module.
+    backend = Application.get_env(:cybernetic, :episode_store_backend)
+
+    cond do
+      is_atom(backend) and Code.ensure_loaded?(backend) and function_exported?(backend, :list_recent, 0) ->
+        apply(backend, :list_recent, [])
+
+      true ->
+        {:ok, []}
+    end
+  end
+
+  defp list_policies do
+    policy_engine = Cybernetic.VSM.System5.PolicyEngine
+
+    if Code.ensure_loaded?(policy_engine) and function_exported?(policy_engine, :list_policies, 0) do
+      apply(policy_engine, :list_policies, [])
+    else
+      {:error, :not_available}
+    end
+  rescue
+    e -> {:error, e}
   end
 
   @spec get_bot_token() :: String.t() | nil

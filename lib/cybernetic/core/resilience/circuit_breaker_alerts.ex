@@ -103,25 +103,31 @@ defmodule Cybernetic.Core.Resilience.CircuitBreakerAlerts do
     :telemetry.attach(
       :circuit_breaker_alerts,
       [:cyb, :circuit_breaker, :opened],
-      fn _event, measurements, metadata, _config ->
-        send(
-          __MODULE__,
-          {:circuit_breaker_event, metadata.circuit_breaker, :opened,
-           %{measurements: measurements, metadata: metadata}}
-        )
-      end,
-      nil
+      &__MODULE__.handle_circuit_breaker_opened/4,
+      __MODULE__
     )
 
     # Listen for health updates
     :telemetry.attach(
       :circuit_breaker_health_alerts,
       [:cybernetic, :health, :circuit_breakers],
-      fn _event, measurements, metadata, _config ->
-        send(__MODULE__, {:health_update, %{measurements: measurements, metadata: metadata}})
-      end,
-      nil
+      &__MODULE__.handle_circuit_breaker_health/4,
+      __MODULE__
     )
+  end
+
+  @doc false
+  def handle_circuit_breaker_opened(_event, measurements, metadata, server) do
+    send(
+      server,
+      {:circuit_breaker_event, Map.get(metadata, :circuit_breaker), :opened,
+       %{measurements: measurements, metadata: metadata}}
+    )
+  end
+
+  @doc false
+  def handle_circuit_breaker_health(_event, measurements, metadata, server) do
+    send(server, {:health_update, %{measurements: measurements, metadata: metadata}})
   end
 
   defp process_circuit_breaker_event(state, provider, event_type, data) do

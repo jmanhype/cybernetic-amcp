@@ -10,19 +10,24 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
 
   @impl true
   def load(bytes, opts) do
+    if not wasmex_available?() do
+      {:error, :wasmex_not_available}
+    else
     fuel = Keyword.get(opts, :fuel, 5_000_000)
     max_pages = Keyword.get(opts, :max_memory_pages, 64)
 
     start_time = System.monotonic_time(:microsecond)
 
-    with {:ok, store} <- Wasmex.Store.new(limits: %{fuel: fuel}),
-         {:ok, module} <- Wasmex.Module.compile(store, bytes),
+    with {:ok, store} <- apply(Wasmex.Store, :new, [[limits: %{fuel: fuel}]]),
+         {:ok, module} <- apply(Wasmex.Module, :compile, [store, bytes]),
          {:ok, imports} <- build_imports(store),
          {:ok, instance} <-
-           Wasmex.Instance.new(store, module, imports,
-             fuel: fuel,
-             memory_limits: %{max_pages: max_pages}
-           ) do
+           apply(Wasmex.Instance, :new, [
+             store,
+             module,
+             imports,
+             [fuel: fuel, memory_limits: %{max_pages: max_pages}]
+           ]) do
       load_time = System.monotonic_time(:microsecond) - start_time
       :telemetry.execute(@telemetry ++ [:loaded], %{duration_us: load_time}, %{})
 
@@ -35,15 +40,19 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
       other ->
         {:error, other}
     end
+    end
   end
 
   @impl true
   def validate(validator_state, message, opts) do
+    if not wasmex_available?() do
+      {:error, :wasmex_not_available}
+    else
     %{instance: instance, store: store, fuel_limit: fuel_limit} = validator_state
     timeout = Keyword.get(opts, :timeout_ms, 50)
 
     # Reset fuel for each validation
-    :ok = Wasmex.Store.set_fuel(store, fuel_limit)
+    :ok = apply(Wasmex.Store, :set_fuel, [store, fuel_limit])
 
     start_time = System.monotonic_time(:microsecond)
     json = Jason.encode!(message)
@@ -55,18 +64,18 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
     }
 
     result =
-      Wasmex.Instance.call_exported_function(
+      apply(Wasmex.Instance, :call_exported_function, [
         instance,
         "validate",
         [json, Jason.encode!(context)],
-        timeout: timeout
-      )
+        [timeout: timeout]
+      ])
 
     validation_time = System.monotonic_time(:microsecond) - start_time
 
     fuel_consumed =
       try do
-        fuel_limit - Wasmex.Store.fuel_remaining(store)
+        fuel_limit - apply(Wasmex.Store, :fuel_remaining, [store])
       rescue
         # If fuel tracking fails, report 0 consumption
         _ -> 0
@@ -108,10 +117,16 @@ defmodule Cybernetic.Edge.WASM.Validator.WasmexImpl do
       other ->
         {:error, {:unexpected_return, other}}
     end
+    end
   rescue
     e ->
       Logger.error("WASM validation exception: #{Exception.format(:error, e, __STACKTRACE__)}")
       {:error, {:exception, e}}
+  end
+
+  defp wasmex_available? do
+    Code.ensure_loaded?(Wasmex.Store) and Code.ensure_loaded?(Wasmex.Module) and
+      Code.ensure_loaded?(Wasmex.Instance)
   end
 
   defp build_imports(_store) do

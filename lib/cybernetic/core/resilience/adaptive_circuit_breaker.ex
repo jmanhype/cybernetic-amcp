@@ -545,11 +545,14 @@ defmodule Cybernetic.Core.Resilience.AdaptiveCircuitBreaker do
     :telemetry.attach(
       {:circuit_breaker_health, name},
       [:cybernetic, :system, :health],
-      fn _event, measurements, _metadata, _config ->
-        GenServer.cast(via_name(name), {:health_update, measurements})
-      end,
-      nil
+      &__MODULE__.handle_health_monitoring/4,
+      name
     )
+  end
+
+  @doc false
+  def handle_health_monitoring(_event, measurements, _metadata, name) do
+    GenServer.cast(via_name(name), {:health_update, measurements})
   end
 
   defp notify_s3_control(breaker_name, event, data) do

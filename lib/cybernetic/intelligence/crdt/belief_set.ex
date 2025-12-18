@@ -282,24 +282,6 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     {:reply, {:ok, delta}, state}
   end
 
-  # Get belief IDs changed since a version using ETS ordered_set range query
-  # O(log n + k) where k = number of entries since version
-  @spec get_ids_since_version(:ets.tid(), version()) :: [belief_id()]
-  defp get_ids_since_version(version_index, since_version) do
-    # :ets.next(table, key) returns first key STRICTLY GREATER than key
-    # So next(table, since_version) gives us the first key > since_version
-    collect_ids_from(version_index, :ets.next(version_index, since_version), [])
-  end
-
-  # Tail-recursive collector: iterate through ordered_set keys
-  @spec collect_ids_from(:ets.tid(), term(), [belief_id()]) :: [belief_id()]
-  defp collect_ids_from(_table, :"$end_of_table", acc), do: Enum.reverse(acc)
-
-  defp collect_ids_from(table, current_key, acc) do
-    [{^current_key, id}] = :ets.lookup(table, current_key)
-    collect_ids_from(table, :ets.next(table, current_key), [id | acc])
-  end
-
   @impl true
   def handle_call({:merge_delta, delta}, _from, state) do
     {new_beliefs, conflicts} =
@@ -357,6 +339,24 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
       |> Map.put(:node_id, state.node_id)
 
     {:reply, stats, state}
+  end
+
+  # Get belief IDs changed since a version using ETS ordered_set range query
+  # O(log n + k) where k = number of entries since version
+  @spec get_ids_since_version(:ets.tid(), version()) :: [belief_id()]
+  defp get_ids_since_version(version_index, since_version) do
+    # :ets.next(table, key) returns first key STRICTLY GREATER than key
+    # So next(table, since_version) gives us the first key > since_version
+    collect_ids_from(version_index, :ets.next(version_index, since_version), [])
+  end
+
+  # Tail-recursive collector: iterate through ordered_set keys
+  @spec collect_ids_from(:ets.tid(), term(), [belief_id()]) :: [belief_id()]
+  defp collect_ids_from(_table, :"$end_of_table", acc), do: Enum.reverse(acc)
+
+  defp collect_ids_from(table, current_key, acc) do
+    [{^current_key, id}] = :ets.lookup(table, current_key)
+    collect_ids_from(table, :ets.next(table, current_key), [id | acc])
   end
 
   @impl true

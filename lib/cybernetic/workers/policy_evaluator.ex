@@ -284,8 +284,8 @@ defmodule Cybernetic.Workers.PolicyEvaluator do
         Logger.warning("Unknown worker", worker: worker_name)
 
       module ->
-        module.new(job_args)
-        |> Oban.insert()
+        job = apply(module, :new, [job_args])
+        Oban.insert(job)
     end
   end
 

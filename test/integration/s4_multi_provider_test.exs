@@ -407,12 +407,12 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
   defp test_sop_generation(analysis, episode) do
     Logger.info("📋 Testing SOP generation from analysis...")
 
-    case SOPShim.convert_analysis_to_sops(analysis, episode) do
-      {:ok, sops} when is_list(sops) ->
-        Logger.info("✓ Generated #{length(sops)} SOPs from analysis")
+    case SOPShim.from_s4(episode, analysis) do
+      {:ok, sop_ids} when is_list(sop_ids) ->
+        Logger.info("✓ Created #{length(sop_ids)} SOPs from analysis")
 
-        for sop <- sops do
-          Logger.info("  - SOP: #{sop.title} (#{sop.category}, #{sop.priority})")
+        for sop_id <- sop_ids do
+          Logger.info("  - SOP id: #{sop_id}")
         end
 
       {:error, reason} ->
@@ -420,7 +420,7 @@ defmodule Cybernetic.Integration.S4MultiProviderTest do
     end
   end
 
-  defp apply_provider_with_circuit_breaker(provider, episode) do
+  defp apply_provider_with_circuit_breaker(provider, _episode) do
     # Simulate circuit breaker logic with timeout
     case provider do
       :anthropic ->

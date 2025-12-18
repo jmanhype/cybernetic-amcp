@@ -70,10 +70,8 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     :telemetry.attach(
       {:mcp_ready, ref},
       @ready_event,
-      fn event, measurements, metadata, _config ->
-        __MODULE__.handle_mcp_ready(event, measurements, metadata, parent)
-      end,
-      nil
+      &__MODULE__.handle_mcp_ready/4,
+      parent
     )
 
     receive do

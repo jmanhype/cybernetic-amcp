@@ -38,7 +38,7 @@ defmodule Cybernetic.Telemetry.OTEL do
     # Set resource (use newer API if available)
     try do
       if function_exported?(:opentelemetry, :set_resource, 1) do
-        :opentelemetry.set_resource(:otel_resource.create(resource))
+        apply(:opentelemetry, :set_resource, [:otel_resource.create(resource)])
       else
         # Fallback for older OpenTelemetry versions
         :ok
@@ -50,10 +50,10 @@ defmodule Cybernetic.Telemetry.OTEL do
     # Configure text map propagator for B3 and W3C (with fallback)
     try do
       if function_exported?(:otel_propagator_text_map, :set, 1) do
-        :otel_propagator_text_map.set([
+        apply(:otel_propagator_text_map, :set, [[
           :otel_propagator_b3,
           :otel_propagator_trace_context
-        ])
+        ]])
       else
         # Fallback for older OpenTelemetry versions
         :ok
@@ -82,9 +82,17 @@ defmodule Cybernetic.Telemetry.OTEL do
 
   # P0 Security: Whitelist of known OTEL propagation headers to prevent atom DoS
   @otel_header_whitelist %{
+    # W3C Trace Context
     "traceparent" => :traceparent,
     "tracestate" => :tracestate,
-    "baggage" => :baggage
+    "baggage" => :baggage,
+    # B3 (multi and single)
+    "b3" => :b3,
+    "x-b3-traceid" => :"x-b3-traceid",
+    "x-b3-spanid" => :"x-b3-spanid",
+    "x-b3-parentspanid" => :"x-b3-parentspanid",
+    "x-b3-sampled" => :"x-b3-sampled",
+    "x-b3-flags" => :"x-b3-flags"
   }
 
   @doc """

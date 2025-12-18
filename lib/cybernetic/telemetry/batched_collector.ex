@@ -209,14 +209,15 @@ defmodule Cybernetic.Telemetry.BatchedCollector do
     :telemetry.attach_many(
       handler_id,
       events,
-      &handle_telemetry_event/4,
+      &__MODULE__.handle_telemetry_event/4,
       nil
     )
 
     Logger.debug("Attached batched collector to #{length(events)} telemetry events")
   end
 
-  defp handle_telemetry_event(event_name, measurements, metadata, _config) do
+  @doc false
+  def handle_telemetry_event(event_name, measurements, metadata, _config) do
     GenServer.cast(__MODULE__, {:telemetry_event, event_name, measurements, metadata})
   end
 

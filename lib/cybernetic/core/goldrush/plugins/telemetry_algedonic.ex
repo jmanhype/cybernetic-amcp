@@ -77,7 +77,7 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     :telemetry.attach_many(
       "telemetry-algedonic",
       @telemetry_events,
-      &handle_telemetry_event/4,
+      &__MODULE__.handle_telemetry_event/4,
       nil
     )
 

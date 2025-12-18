@@ -641,16 +641,26 @@ defmodule Cybernetic.Security.AuthManager do
 
       case String.split(value, ":", parts: 2) do
         [password, roles_str] ->
-          roles = String.split(roles_str, ",") |> Enum.map(&String.to_atom/1)
+          roles =
+            roles_str
+            |> String.split(",", trim: true)
+            |> Enum.map(&String.downcase/1)
+            |> Enum.map(&parse_role/1)
+            |> Enum.reject(&is_nil/1)
 
-          user = %{
-            id: "user_#{username}",
-            username: username,
-            password_hash: hash_password(password),
-            roles: roles
-          }
+          if roles == [] do
+            Logger.warning("No valid roles configured for #{key}")
+            acc
+          else
+            user = %{
+              id: "user_#{username}",
+              username: username,
+              password_hash: hash_password(password),
+              roles: roles
+            }
 
-          Map.put(acc, username, user)
+            Map.put(acc, username, user)
+          end
 
         _ ->
           Logger.warning("Invalid user config format for #{key}")
@@ -658,6 +668,13 @@ defmodule Cybernetic.Security.AuthManager do
       end
     end)
   end
+
+  defp parse_role("admin"), do: :admin
+  defp parse_role("operator"), do: :operator
+  defp parse_role("viewer"), do: :viewer
+  defp parse_role("agent"), do: :agent
+  defp parse_role("system"), do: :system
+  defp parse_role(_), do: nil
 
   defp load_api_keys do
     # Load any pre-configured API keys from environment

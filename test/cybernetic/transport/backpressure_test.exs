@@ -79,13 +79,10 @@ defmodule Cybernetic.Transport.BackpressureTest do
         {:transformed, event}
       end
 
-      {:ok, transformer} = Transformer.start_link(transform: transform)
+      {:producer_consumer, state} = Transformer.init(transform: transform)
+      {:noreply, transformed, _new_state} = Transformer.handle_events([:event1, :event2], self(), state)
 
-      # Manually send events (normally done by GenStage)
-      send(transformer, {:"$gen_producer_consumer", {self(), make_ref()}, [:event1, :event2]})
-
-      Process.sleep(10)
-      assert Process.alive?(transformer)
+      assert transformed == [{:transformed, :event1}, {:transformed, :event2}]
     end
 
     test "filters out nil transformations" do
@@ -94,12 +91,10 @@ defmodule Cybernetic.Transport.BackpressureTest do
         :drop -> nil
       end
 
-      {:ok, transformer} = Transformer.start_link(transform: transform)
+      {:producer_consumer, state} = Transformer.init(transform: transform)
+      {:noreply, transformed, _new_state} = Transformer.handle_events([:keep, :drop, :keep], self(), state)
 
-      send(transformer, {:"$gen_producer_consumer", {self(), make_ref()}, [:keep, :drop, :keep]})
-
-      Process.sleep(10)
-      assert Process.alive?(transformer)
+      assert transformed == [:kept, :kept]
     end
   end
 
