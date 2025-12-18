@@ -1,29 +1,26 @@
 <!--
 Sync Impact Report:
-- Version: 1.0.0 → 2.0.0 (Complete rewrite for cybernetic-amcp)
-- Principles Changed:
-  - I. Beads Integration (kept, enhanced)
-  - II. TDD → II. Test-First with ExUnit (Elixir-specific)
-  - III. SOLID → III. OTP Design Principles (Elixir-specific)
-  - IV. Compliance by Design → Removed (not applicable to VSM platform)
-  - V. API Versioning → V. Message Contract Stability (AMQP-focused)
-  - VI. Observability (kept, Elixir tooling)
-  - VII. Graceful Degradation → VII. Let It Crash + Supervision (OTP)
-  - VIII. Code Quality → VIII. Elixir Quality Standards
-- Sections Added:
+- Version: 2.0.0 → 2.1.0 (Added providers and CI/CD)
+- Changes in 2.1.0:
+  - Added Groq provider (ultra-fast inference)
+  - Added OpenRouter provider (multi-model gateway)
+  - Added provider selection by task type table
+  - Expanded CI/CD with full GitHub Actions workflows
+  - Added Docker build/test job to CI
+  - Added CD workflow for staging/production deploys
+- Previous Changes (2.0.0):
+  - Complete rewrite for cybernetic-amcp
+  - Elixir/Phoenix/OTP specific principles
   - VSM Architecture (S1-S5 Systems)
   - Local-First LLM Strategy
   - AMQP Message Patterns
   - Edge Gateway Design
-- Sections Removed:
-  - Compliance Standards (SOC2/HIPAA not applicable)
-  - License Enforcement (not applicable)
 - Templates Status:
   ⚠ plan-template.md - Update Constitution Check for Elixir
   ⚠ spec-template.md - Generic, works as-is
   ⚠ tasks-template.md - Update for ExUnit patterns
 - Deferred: None
-- Created: 2025-12-17
+- Last Updated: 2025-12-18
 -->
 
 # Project Constitution: cybernetic-amcp
@@ -216,19 +213,31 @@ vsm.s5.policy.{decision}     # S5 policy broadcasts
 
 **Provider Chain (in order):**
 1. **Ollama** (local) - Primary, no API costs, privacy-preserving
-2. **OpenAI** - Fallback for complex tasks
-3. **Anthropic** - Fallback for analysis tasks
-4. **Together AI** - Fallback for bulk operations
+2. **Groq** - Ultra-fast inference, low latency
+3. **OpenRouter** - Multi-model gateway, cost optimization
+4. **OpenAI** - Fallback for complex tasks
+5. **Anthropic** - Fallback for analysis tasks
+6. **Together AI** - Fallback for bulk operations
 
 **Configuration:**
 ```elixir
 config :cybernetic, :s4,
   default_chain: [
     ollama: [model: "llama3.2:3b", timeout: 120_000],
+    groq: [model: "llama-3.3-70b-versatile", timeout: 30_000],
+    openrouter: [model: "meta-llama/llama-3.2-3b-instruct:free"],
     openai: [model: "gpt-4o-mini"],
     anthropic: [model: "claude-3-haiku"]
   ]
 ```
+
+**Provider Selection by Task Type:**
+| Task Type | Primary | Fallback | Rationale |
+|-----------|---------|----------|-----------|
+| Code generation | Ollama | Groq | Privacy, speed |
+| Episode analysis | Groq | OpenRouter | Speed critical |
+| Complex reasoning | OpenAI | Anthropic | Quality critical |
+| Bulk processing | OpenRouter | Together | Cost optimization |
 
 **Failover Rules:**
 - Timeout on local → Try next provider
@@ -395,20 +404,92 @@ end
 - **Commits:** Conventional commits (feat, fix, docs, chore, test, refactor)
 - **Merge:** Squash merge after CI passes
 
-### CI Pipeline (GitHub Actions)
+### CI/CD Pipeline (GitHub Actions)
 
+**CI Workflow** (`.github/workflows/ci.yml`):
 ```yaml
+name: CI
+on: [push, pull_request]
+
 jobs:
   test:
-    - mix deps.get
-    - mix compile --warnings-as-errors
-    - mix format --check-formatted
-    - mix credo --strict
-    - mix dialyzer
-    - mix sobelow --config
-    - mix test --cover
-    - mix coveralls.github  # ≥90% required
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+      rabbitmq:
+        image: rabbitmq:3.12-alpine
+        ports: ['5672:5672']
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '26.2'
+          elixir-version: '1.16'
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - run: mix format --check-formatted
+      - run: mix credo --strict
+      - run: mix dialyzer
+      - run: mix sobelow --config
+      - run: mix test --cover
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost/cybernetic_test
+          RABBITMQ_URL: amqp://guest:guest@localhost
+          REDIS_URL: redis://localhost:6379
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f docker/docker-compose.yml build
+      - run: docker compose -f docker/docker-compose.yml up -d
+      - run: sleep 10 && curl -f http://localhost:4000/health
+      - run: docker compose -f docker/docker-compose.yml down
 ```
+
+**CD Workflow** (`.github/workflows/deploy.yml`):
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and push Docker image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+      - name: Deploy to staging
+        if: github.ref == 'refs/heads/main'
+        run: echo "Deploy to staging environment"
+      - name: Deploy to production
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "Deploy to production environment"
+```
+
+**Required CI Gates (All MUST pass):**
+- ✅ Compilation (warnings as errors)
+- ✅ Formatting (`mix format --check-formatted`)
+- ✅ Linting (`mix credo --strict`)
+- ✅ Type checking (`mix dialyzer`)
+- ✅ Security scan (`mix sobelow`)
+- ✅ Unit tests (≥90% coverage)
+- ✅ Docker build and health check
 
 ### Local Development
 
@@ -461,4 +542,4 @@ This constitution supersedes all other development practices. When conflicts ari
 
 ---
 
-**Version**: 2.0.0 | **Ratified**: 2025-12-17 | **Last Amended**: 2025-12-17
+**Version**: 2.1.0 | **Ratified**: 2025-12-17 | **Last Amended**: 2025-12-18
