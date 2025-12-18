@@ -56,14 +56,15 @@ defmodule Cybernetic.VSM.System4.Router do
     end
   end
 
-  defp select_chain_by_kind(:policy_review), do: [:anthropic, :ollama]
-  defp select_chain_by_kind(:code_gen), do: [:openai, :together, :anthropic]
-  defp select_chain_by_kind(:root_cause), do: [:anthropic, :together, :openai]
-  defp select_chain_by_kind(:anomaly_detection), do: [:together, :anthropic, :ollama]
-  defp select_chain_by_kind(:compliance_check), do: [:anthropic, :ollama]
-  defp select_chain_by_kind(:optimization), do: [:openai, :together, :anthropic]
-  defp select_chain_by_kind(:prediction), do: [:together, :anthropic, :openai]
-  defp select_chain_by_kind(:classification), do: [:together, :openai, :ollama]
+  # Ollama first for local development (no API keys needed)
+  defp select_chain_by_kind(:policy_review), do: [:ollama, :anthropic]
+  defp select_chain_by_kind(:code_gen), do: [:ollama, :openai, :together, :anthropic]
+  defp select_chain_by_kind(:root_cause), do: [:ollama, :anthropic, :together, :openai]
+  defp select_chain_by_kind(:anomaly_detection), do: [:ollama, :together, :anthropic]
+  defp select_chain_by_kind(:compliance_check), do: [:ollama, :anthropic]
+  defp select_chain_by_kind(:optimization), do: [:ollama, :openai, :together, :anthropic]
+  defp select_chain_by_kind(:prediction), do: [:ollama, :together, :anthropic, :openai]
+  defp select_chain_by_kind(:classification), do: [:ollama, :together, :openai]
   defp select_chain_by_kind(_), do: default_chain()
 
   @doc """
@@ -71,7 +72,7 @@ defmodule Cybernetic.VSM.System4.Router do
   """
   def default_chain do
     Application.get_env(:cybernetic, :s4, [])
-    |> Keyword.get(:default_chain, [:anthropic])
+    |> Keyword.get(:default_chain, [:ollama])
     |> Enum.map(fn
       {provider, _config} -> provider
       provider when is_atom(provider) -> provider
@@ -306,6 +307,7 @@ defmodule Cybernetic.VSM.System4.Router do
     )
   end
 
+  defp format_result({:ok, _, _}), do: :success
   defp format_result({:ok, _}), do: :success
   defp format_result({:error, reason}), do: reason
 end

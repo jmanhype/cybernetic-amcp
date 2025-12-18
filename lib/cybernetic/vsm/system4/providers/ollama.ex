@@ -11,7 +11,7 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
   require Logger
   require OpenTelemetry.Tracer
 
-  @default_model "deepseek-r1:7b"
+  @default_model "llama3.2:1b"
   @default_endpoint "http://localhost:11434"
   @default_max_tokens 4096
   @default_temperature 0.1
@@ -104,14 +104,14 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
     options = [timeout: 5_000, recv_timeout: 5_000]
 
     case HTTPoison.get(url, [], options) do
-      {:ok, %{status_code: 200, body: body}} ->
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
         case Jason.decode(body) do
           {:ok, %{"models" => models}} when is_list(models) -> :ok
           {:ok, _} -> {:error, :no_models_available}
           {:error, _} -> {:error, :invalid_response}
         end
 
-      {:ok, %{status_code: _}} ->
+      {:ok, %HTTPoison.Response{status_code: _}} ->
         {:error, :server_unavailable}
 
       {:error, %HTTPoison.Error{reason: :econnrefused}} ->
@@ -256,13 +256,13 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
 
   defp make_request_with_retry(url, json, headers, options, retries_left) when retries_left > 0 do
     case HTTPoison.post(url, json, headers, options) do
-      {:ok, %{status: 200, body: body}} ->
+      {:ok, %{status_code: 200, body: body}} ->
         case Jason.decode(body) do
           {:ok, response} -> {:ok, response}
           {:error, reason} -> {:error, {:json_decode_error, reason}}
         end
 
-      {:ok, %{status: status, body: _body}} when status >= 500 ->
+      {:ok, %{status_code: status, body: _body}} when status >= 500 ->
         Logger.warning(
           "Ollama server error #{status}, retrying... (#{retries_left} retries left)"
         )
@@ -270,7 +270,7 @@ defmodule Cybernetic.VSM.System4.Providers.Ollama do
         :timer.sleep(exponential_backoff(3 - retries_left))
         make_request_with_retry(url, json, headers, options, retries_left - 1)
 
-      {:ok, %{status: status, body: body}} ->
+      {:ok, %{status_code: status, body: body}} ->
         Logger.error("Ollama API error: #{status} - #{body}")
         {:error, {:http_error, status, body}}
 
