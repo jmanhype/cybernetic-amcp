@@ -156,7 +156,7 @@ defmodule Cybernetic.Capabilities.Registry do
             state
             | capabilities: Map.put(state.capabilities, capability.id, capability),
               name_index: Map.put(state.name_index, capability.name, capability.id),
-              stats: update_in(state.stats.registrations, &(&1 + 1))
+              stats: Map.update!(state.stats, :registrations, &(&1 + 1))
           }
 
           emit_telemetry(:register, start_time, %{name: capability.name})
@@ -247,7 +247,7 @@ defmodule Cybernetic.Capabilities.Registry do
           {:ok, matches}
       end
 
-    new_stats = update_in(state.stats.discoveries, &(&1 + 1))
+    new_stats = Map.update!(state.stats, :discoveries, &(&1 + 1))
     emit_telemetry(:discover, start_time, %{query: query, results: length(elem(result, 1))})
 
     {:reply, result, %{state | stats: new_stats}}
@@ -272,7 +272,7 @@ defmodule Cybernetic.Capabilities.Registry do
       |> Enum.take(limit)
       |> Enum.map(fn {cap, _sim} -> cap end)
 
-    new_stats = update_in(state.stats.matches, &(&1 + 1))
+    new_stats = Map.update!(state.stats, :matches, &(&1 + 1))
     emit_telemetry(:match, start_time, %{results: length(matches)})
 
     {:reply, {:ok, matches}, %{state | stats: new_stats}}

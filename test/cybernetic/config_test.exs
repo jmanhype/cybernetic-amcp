@@ -1,7 +1,14 @@
 defmodule Cybernetic.ConfigTest do
-  use ExUnit.Case, async: true
+  # NOTE: async: false to prevent config pollution between tests
+  use ExUnit.Case, async: false
 
   alias Cybernetic.Config
+
+  setup do
+    # Clear any custom SSE config before each test
+    Application.delete_env(:cybernetic, :sse)
+    :ok
+  end
 
   describe "SSE configuration" do
     test "sse_heartbeat_interval/0 returns default" do

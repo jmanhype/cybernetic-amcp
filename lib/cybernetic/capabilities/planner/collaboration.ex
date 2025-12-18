@@ -390,7 +390,17 @@ defmodule Cybernetic.Capabilities.Planner.Collaboration do
 
   @spec broadcast_event(String.t(), map()) :: :ok
   defp broadcast_event(topic, payload) do
-    PubSub.broadcast(pubsub_module(), topic, {:planner_event, topic, payload})
+    try do
+      PubSub.broadcast(pubsub_module(), topic, {:planner_event, topic, payload})
+    rescue
+      _e ->
+        # PubSub not running (e.g., in tests)
+        :ok
+    catch
+      :exit, _ ->
+        # PubSub process not available
+        :ok
+    end
   end
 
   @spec plan_topic(String.t() | :all) :: String.t()

@@ -186,15 +186,15 @@ defmodule Cybernetic.Capabilities.MCPRouter do
       {new_stats, success} =
         case result do
           {:ok, _} ->
-            {update_in(state.stats.successes, &(&1 + 1)), true}
+            {Map.update!(state.stats, :successes, &(&1 + 1)), true}
 
           {:error, _} ->
-            {update_in(state.stats.failures, &(&1 + 1)), false}
+            {Map.update!(state.stats, :failures, &(&1 + 1)), false}
         end
 
       new_state = %{
         state
-        | stats: update_in(new_stats.calls, &(&1 + 1)),
+        | stats: Map.update!(new_stats, :calls, &(&1 + 1)),
           rate_limits: increment_rate_limit(state.rate_limits, client_id)
       }
 

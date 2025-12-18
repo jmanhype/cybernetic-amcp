@@ -388,9 +388,9 @@ defmodule Cybernetic.Capabilities.LLMCDN do
 
   @spec call_llm_complete(map()) :: {:ok, term()} | {:error, term()}
   defp call_llm_complete(params) do
-    # Use ReqLLM if available, otherwise placeholder
+    # Use ReqLLM if available with chat/1 function, otherwise placeholder
     try do
-      if Code.ensure_loaded?(ReqLLM) do
+      if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :chat, 1) do
         ReqLLM.chat(params)
       else
         # Placeholder response for testing
@@ -416,7 +416,7 @@ defmodule Cybernetic.Capabilities.LLMCDN do
   @spec call_llm_embed(term()) :: {:ok, term()} | {:error, term()}
   defp call_llm_embed(input) do
     try do
-      if Code.ensure_loaded?(ReqLLM) do
+      if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :embeddings, 1) do
         ReqLLM.embeddings(%{input: input})
       else
         # Placeholder for testing - generate pseudo-embeddings

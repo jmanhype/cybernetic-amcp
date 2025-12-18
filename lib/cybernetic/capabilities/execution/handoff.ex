@@ -159,7 +159,7 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
       new_state = %{
         state
         | handoffs: Map.put(state.handoffs, handoff.id, handoff),
-          stats: update_in(state.stats.initiated, &(&1 + 1))
+          stats: Map.update!(state.stats, :initiated, &(&1 + 1))
       }
 
       emit_telemetry(:initiate, start_time, %{
@@ -245,7 +245,7 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
         new_state = %{
           state
           | handoffs: Map.put(state.handoffs, handoff_id, updated),
-            stats: update_in(state.stats.completed, &(&1 + 1))
+            stats: Map.update!(state.stats, :completed, &(&1 + 1))
         }
 
         emit_telemetry(:complete, start_time, %{handoff_id: handoff_id})
@@ -282,7 +282,7 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
         new_state = %{
           state
           | handoffs: Map.put(state.handoffs, handoff_id, updated),
-            stats: update_in(state.stats.rolled_back, &(&1 + 1))
+            stats: Map.update!(state.stats, :rolled_back, &(&1 + 1))
         }
 
         emit_telemetry(:rollback, start_time, %{
@@ -372,7 +372,7 @@ defmodule Cybernetic.Capabilities.Execution.Handoff do
     new_stats =
       if length(timed_out) > 0 do
         Logger.warning("Handoffs timed out", count: length(timed_out))
-        update_in(state.stats.failed, &(&1 + length(timed_out)))
+        Map.update!(state.stats, :failed, &(&1 + length(timed_out)))
       else
         state.stats
       end
