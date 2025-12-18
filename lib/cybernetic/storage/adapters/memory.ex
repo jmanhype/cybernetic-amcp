@@ -201,8 +201,7 @@ defmodule Cybernetic.Storage.Adapters.Memory do
 
   @impl GenServer
   def handle_call({:clear, tenant_id}, _from, state) do
-    pattern = {:"#{tenant_id}/$1", :_}
-
+    # Clear all entries for a tenant
     :ets.tab2list(@table)
     |> Enum.filter(fn {key, _} -> String.starts_with?(key, "#{tenant_id}/") end)
     |> Enum.each(fn {key, _} -> :ets.delete(@table, key) end)

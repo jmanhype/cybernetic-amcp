@@ -468,10 +468,31 @@ defmodule Cybernetic.Content.Connectors.GoogleDrive do
         })
       ]
 
-      case Cybernetic.Content.SemanticContainer.create(container_server, content, tenant_id, opts) do
-        {:ok, _container} -> {:ok, :created}
-        {:error, reason} -> {:error, reason}
+      # Check if container already exists with same content hash
+      content_hash = compute_content_hash(content)
+      container_id = "#{tenant_id}:#{String.slice(content_hash, 0, 16)}"
+
+      case Cybernetic.Content.SemanticContainer.get(container_server, container_id) do
+        {:ok, _existing} ->
+          # Content already exists with same hash - consider it updated
+          {:ok, :updated}
+
+        {:error, :not_found} ->
+          # Create new container
+          case Cybernetic.Content.SemanticContainer.create(container_server, content, tenant_id, opts) do
+            {:ok, _container} -> {:ok, :created}
+            {:error, reason} -> {:error, reason}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
+  end
+
+  @spec compute_content_hash(binary()) :: String.t()
+  defp compute_content_hash(content) do
+    :crypto.hash(:sha256, content)
+    |> Base.encode16(case: :lower)
   end
 end

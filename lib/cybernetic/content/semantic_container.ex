@@ -489,14 +489,20 @@ defmodule Cybernetic.Content.SemanticContainer do
     # Truncate content for embedding
     text = truncate_for_embedding(content)
 
-    if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :embeddings, 1) do
+    if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :embed, 2) do
       try do
-        case ReqLLM.embeddings(input: text) do
+        case ReqLLM.embed(Req.new(), input: text) do
+          {:ok, %{body: %{"data" => [%{"embedding" => embedding} | _]}}} ->
+            {:ok, embedding}
+
           {:ok, %{data: [%{embedding: embedding} | _]}} ->
             {:ok, embedding}
 
           {:error, reason} ->
             {:error, reason}
+
+          _ ->
+            {:ok, generate_fallback_embedding(text)}
         end
       rescue
         e -> {:error, Exception.message(e)}
@@ -590,7 +596,15 @@ defmodule Cybernetic.Content.SemanticContainer do
   end
 
   defp search_hnsw(%{hnsw_index: hnsw}, embedding, k) do
-    Cybernetic.Intelligence.HNSW.Index.search(hnsw, embedding, k)
+    case Cybernetic.Intelligence.HNSW.Index.search(embedding, server: hnsw, k: k) do
+      {:ok, results} ->
+        # Convert search_result format to {id, distance} tuples
+        ids_with_distances = Enum.map(results, fn %{id: id, distance: dist} -> {id, dist} end)
+        {:ok, ids_with_distances}
+
+      {:error, _} = error ->
+        error
+    end
   end
 
   @spec remove_from_hnsw(map(), container_id()) :: :ok

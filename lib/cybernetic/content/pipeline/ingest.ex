@@ -21,6 +21,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   require Logger
 
   alias Cybernetic.Content.SemanticContainer
+  alias Cybernetic.Capabilities.Validation, as: CapValidation
 
   # Types
   @type source :: %{
@@ -54,6 +55,8 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   @max_concurrent 10
   @fetch_timeout 30_000
   @max_content_size 52_428_800  # 50MB
+  @job_ttl_ms :timer.hours(24)  # P1: Jobs cleaned up after 24 hours
+  @cleanup_interval :timer.minutes(15)
   @supported_content_types ~w(
     text/plain text/html text/markdown text/csv
     application/json application/xml application/pdf
@@ -150,6 +153,9 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
       }
     }
 
+    # P1: Schedule periodic job cleanup
+    schedule_cleanup()
+
     {:ok, state}
   end
 
@@ -240,10 +246,11 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
                 end)
           }
 
-          # Run async
+          # P1 Fix: Capture GenServer pid before spawning task
+          server = self()
           Task.start(fn ->
-            result = run_pipeline(job.source, job.tenant_id, job.options, state)
-            send(self(), {:job_completed, job_id, result})
+            result = run_pipeline(job.source, job.tenant_id, job.options, new_state)
+            send(server, {:job_completed, job_id, result})
           end)
 
           {:noreply, new_state}
@@ -260,21 +267,52 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   @impl true
   def handle_info({:job_completed, job_id, result}, state) do
-    new_state = %{
-      state
-      | processing: MapSet.delete(state.processing, job_id),
-        jobs:
-          Map.update!(state.jobs, job_id, fn j ->
-            %{
-              j
-              | status: if(result.status == :success, do: :completed, else: :failed),
-                result: result,
-                completed_at: DateTime.utc_now()
-            }
-          end)
-    }
+    case Map.fetch(state.jobs, job_id) do
+      {:ok, _job} ->
+        new_state = %{
+          state
+          | processing: MapSet.delete(state.processing, job_id),
+            jobs:
+              Map.update!(state.jobs, job_id, fn j ->
+                %{
+                  j
+                  | status: if(result.status == :success, do: :completed, else: :failed),
+                    result: result,
+                    completed_at: DateTime.utc_now()
+                }
+              end)
+        }
 
-    {:noreply, update_stats(new_state, result)}
+        {:noreply, update_stats(new_state, result)}
+
+      :error ->
+        # Job was already cleaned up
+        {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info(:cleanup_jobs, state) do
+    # P1: Clean up old completed/failed jobs
+    cutoff = DateTime.add(DateTime.utc_now(), -@job_ttl_ms, :millisecond)
+
+    cleaned_jobs =
+      state.jobs
+      |> Enum.reject(fn {_id, job} ->
+        job.status in [:completed, :failed] and
+          job.completed_at != nil and
+          DateTime.compare(job.completed_at, cutoff) == :lt
+      end)
+      |> Map.new()
+
+    removed_count = map_size(state.jobs) - map_size(cleaned_jobs)
+
+    if removed_count > 0 do
+      Logger.debug("Cleaned up #{removed_count} old ingest jobs")
+    end
+
+    schedule_cleanup()
+    {:noreply, %{state | jobs: cleaned_jobs}}
   end
 
   # Pipeline Stages
@@ -352,22 +390,57 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   @spec fetch_url(String.t()) :: {:ok, binary(), String.t()} | {:error, term()}
   defp fetch_url(url) do
-    case Req.get(url, receive_timeout: @fetch_timeout, max_redirects: 3) do
-      {:ok, %{status: 200, body: body, headers: headers}} ->
-        content_type = get_content_type_header(headers)
+    # P0 Security: Validate URL to prevent SSRF attacks
+    with :ok <- validate_url(url) do
+      case Req.get(url, receive_timeout: @fetch_timeout, max_redirects: 3) do
+        {:ok, %{status: 200, body: body, headers: headers}} ->
+          content_type = get_content_type_header(headers)
 
-        if byte_size(body) > @max_content_size do
-          {:error, :content_too_large}
-        else
-          {:ok, body, content_type}
-        end
+          if byte_size(body) > @max_content_size do
+            {:error, :content_too_large}
+          else
+            {:ok, body, content_type}
+          end
 
-      {:ok, %{status: status}} ->
-        {:error, {:http_error, status}}
+        {:ok, %{status: status}} ->
+          {:error, {:http_error, status}}
 
-      {:error, reason} ->
-        {:error, {:fetch_failed, reason}}
+        {:error, reason} ->
+          {:error, {:fetch_failed, reason}}
+      end
     end
+  end
+
+  @spec validate_url(String.t()) :: :ok | {:error, term()}
+  defp validate_url(url) do
+    # Use capabilities validation if available, otherwise basic checks
+    if Code.ensure_loaded?(CapValidation) and function_exported?(CapValidation, :validate_url, 1) do
+      CapValidation.validate_url(url)
+    else
+      # Fallback: basic URL validation
+      case URI.parse(url) do
+        %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) ->
+          if blocked_host?(host) do
+            {:error, :blocked_host}
+          else
+            :ok
+          end
+
+        _ ->
+          {:error, :invalid_url}
+      end
+    end
+  end
+
+  @blocked_hosts ["localhost", "127.0.0.1", "0.0.0.0", "::1", "169.254.169.254"]
+  @blocked_prefixes ["10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.",
+                     "172.21.", "172.22.", "172.23.", "172.24.", "172.25.", "172.26.",
+                     "172.27.", "172.28.", "172.29.", "172.30.", "172.31.", "192.168."]
+
+  @spec blocked_host?(String.t()) :: boolean()
+  defp blocked_host?(host) do
+    host in @blocked_hosts or
+      Enum.any?(@blocked_prefixes, &String.starts_with?(host, &1))
   end
 
   @spec get_content_type_header([{String.t(), String.t()}]) :: String.t()
@@ -381,6 +454,8 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   end
 
   # Stage 2: Normalize
+  @max_html_size 10_485_760  # P2: 10MB limit for HTML processing to prevent ReDoS
+
   @spec stage_normalize(binary(), String.t()) :: {:ok, binary()} | {:error, term()}
   defp stage_normalize(content, content_type) do
     cond do
@@ -404,17 +479,33 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   @spec normalize_html(binary()) :: binary()
   defp normalize_html(html) do
-    # Basic HTML to text conversion
-    html
+    # P2: Limit input size to prevent ReDoS attacks
+    truncated =
+      if byte_size(html) > @max_html_size do
+        binary_part(html, 0, @max_html_size)
+      else
+        html
+      end
+
+    # Basic HTML to text conversion with simple patterns
+    truncated
     |> String.replace(~r/<script[^>]*>.*?<\/script>/is, "")
     |> String.replace(~r/<style[^>]*>.*?<\/style>/is, "")
     |> String.replace(~r/<[^>]+>/, " ")
-    |> String.replace(~r/&nbsp;/, " ")
-    |> String.replace(~r/&amp;/, "&")
-    |> String.replace(~r/&lt;/, "<")
-    |> String.replace(~r/&gt;/, ">")
+    |> decode_html_entities()
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
+  end
+
+  @spec decode_html_entities(binary()) :: binary()
+  defp decode_html_entities(text) do
+    text
+    |> String.replace("&nbsp;", " ")
+    |> String.replace("&amp;", "&")
+    |> String.replace("&lt;", "<")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&quot;", "\"")
+    |> String.replace("&#39;", "'")
   end
 
   @spec normalize_text(binary()) :: binary()
@@ -544,5 +635,9 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
       %{duration: duration},
       metadata
     )
+  end
+
+  defp schedule_cleanup do
+    Process.send_after(self(), :cleanup_jobs, @cleanup_interval)
   end
 end

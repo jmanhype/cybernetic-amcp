@@ -649,7 +649,7 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
             if neighbor do
               dist = euclidean_distance(query, neighbor.vector)
               new_vis = MapSet.put(vis, n_id)
-              {res, res_count, res_furthest} = res_state
+              {_res, res_count, res_furthest} = res_state
 
               # Use bounded insert instead of full sort
               new_res_state =
