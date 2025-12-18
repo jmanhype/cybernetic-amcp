@@ -211,6 +211,14 @@ vsm.s5.policy.{decision}     # S5 policy broadcasts
 
 **LLM requests MUST prioritize local inference:**
 
+**Implementation: ReqLLM**
+All LLM interactions MUST use [ReqLLM](https://github.com/agentjido/req_llm) - unified Elixir library supporting 45+ providers and 665+ models.
+
+```elixir
+# mix.exs
+{:req_llm, "~> 0.1"}
+```
+
 **Provider Chain (in order):**
 1. **Ollama** (local) - Primary, no API costs, privacy-preserving
 2. **Groq** - Ultra-fast inference, low latency
@@ -229,6 +237,11 @@ config :cybernetic, :s4,
     openai: [model: "gpt-4o-mini"],
     anthropic: [model: "claude-3-haiku"]
   ]
+
+# ReqLLM usage
+ReqLLM.generate_text(:ollama, "llama3.2:3b", messages: messages)
+ReqLLM.stream_text(:groq, "llama-3.3-70b-versatile", messages: messages)
+ReqLLM.generate_object(:openai, "gpt-4o-mini", schema: schema, messages: messages)
 ```
 
 **Provider Selection by Task Type:**
@@ -238,6 +251,14 @@ config :cybernetic, :s4,
 | Episode analysis | Groq | OpenRouter | Speed critical |
 | Complex reasoning | OpenAI | Anthropic | Quality critical |
 | Bulk processing | OpenRouter | Together | Cost optimization |
+| Structured output | OpenAI | Anthropic | Schema validation |
+
+**ReqLLM Features to Use:**
+- `generate_text/3` - Simple text completion
+- `stream_text/3` - Streaming responses (SSE)
+- `generate_object/4` - Structured output with schema validation
+- Built-in usage/cost tracking (USD calculations)
+- Automatic parameter translation between providers
 
 **Failover Rules:**
 - Timeout on local → Try next provider
@@ -251,7 +272,7 @@ config :cybernetic, :s4,
 - Cache TTL: Configurable per request type
 - Cache invalidation: Manual or time-based
 
-**Rationale:** Local-first reduces costs, improves latency, and preserves data privacy. Cloud fallback ensures availability.
+**Rationale:** ReqLLM provides a unified, well-maintained interface for 45+ LLM providers. Local-first reduces costs, improves latency, and preserves data privacy. Cloud fallback ensures availability.
 
 ---
 
