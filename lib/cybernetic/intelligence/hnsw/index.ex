@@ -356,7 +356,8 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
   def handle_call({:load, path}, _from, state) do
     try do
       binary = File.read!(path)
-      data = :erlang.binary_to_term(binary)
+      # Use :safe to prevent arbitrary code execution from malicious files
+      data = :erlang.binary_to_term(binary, [:safe])
 
       if data.dimensions != state.dimensions do
         {:reply, {:error, :dimension_mismatch}, state}
@@ -626,11 +627,8 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
   end
 
   defp search_layer_loop(state, query, layer, ef, [{c_dist, c_id} | rest], visited, results, comps) do
-    furthest_dist =
-      case results do
-        [] -> :infinity
-        _ -> results |> Enum.max_by(fn {d, _} -> d end) |> elem(0)
-      end
+    # Get furthest distance from results (last element since sorted ascending)
+    furthest_dist = get_furthest_dist(results)
 
     if c_dist > furthest_dist do
       {results, comps}
@@ -649,11 +647,10 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
               dist = euclidean_distance(query, neighbor.vector)
               new_vis = MapSet.put(vis, n_id)
 
+              # Use bounded insert instead of full sort
               new_res =
                 if length(res) < ef or dist < furthest_dist do
-                  [{dist, n_id} | res]
-                  |> Enum.sort_by(fn {d, _} -> d end)
-                  |> Enum.take(ef)
+                  bounded_insert({dist, n_id}, res, ef)
                 else
                   res
                 end
@@ -677,6 +674,25 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
         new_results,
         comps + new_comps
       )
+    end
+  end
+
+  # O(1) get furthest distance (last element of sorted list)
+  @spec get_furthest_dist([{distance(), node_id()}]) :: distance()
+  defp get_furthest_dist([]), do: :infinity
+  defp get_furthest_dist(results), do: results |> List.last() |> elem(0)
+
+  # O(n) bounded insert maintaining sorted order, drops furthest if over limit
+  @spec bounded_insert({distance(), node_id()}, [{distance(), node_id()}], pos_integer()) ::
+          [{distance(), node_id()}]
+  defp bounded_insert(item, list, max_size) do
+    inserted = insert_one_sorted(item, list)
+
+    if length(inserted) > max_size do
+      # Drop the last (furthest) element
+      Enum.take(inserted, max_size)
+    else
+      inserted
     end
   end
 
@@ -727,16 +743,20 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
 
   @spec euclidean_distance(vector(), vector()) :: distance()
   defp euclidean_distance(v1, v2) when length(v1) == length(v2) do
-    v1
-    |> Enum.zip(v2)
-    |> Enum.reduce(0.0, fn {a, b}, acc ->
-      diff = a - b
-      acc + diff * diff
-    end)
-    |> :math.sqrt()
+    # Tail-recursive implementation avoids intermediate list allocation
+    euclidean_loop(v1, v2, 0.0)
   end
 
   defp euclidean_distance(_, _), do: :infinity
+
+  # Tail-recursive helper for O(1) memory usage
+  @spec euclidean_loop(vector(), vector(), float()) :: distance()
+  defp euclidean_loop([], [], acc), do: :math.sqrt(acc)
+
+  defp euclidean_loop([a | t1], [b | t2], acc) do
+    diff = a - b
+    euclidean_loop(t1, t2, acc + diff * diff)
+  end
 
   @spec validate_vector(term(), pos_integer()) :: :ok | {:error, term()}
   defp validate_vector(vector, dimensions) when is_list(vector) do
@@ -750,12 +770,25 @@ defmodule Cybernetic.Intelligence.HNSW.Index do
       not Enum.all?(vector, &is_number/1) ->
         {:error, :invalid_vector_values}
 
+      Enum.any?(vector, &is_nan_or_infinity/1) ->
+        {:error, :nan_or_infinity_values}
+
       true ->
         :ok
     end
   end
 
   defp validate_vector(_, _), do: {:error, :invalid_vector_type}
+
+  # Check for NaN or Infinity values (IEEE 754 special values)
+  @spec is_nan_or_infinity(number()) :: boolean()
+  defp is_nan_or_infinity(n) when is_float(n) do
+    # NaN: n != n (only true for NaN in IEEE 754)
+    # Infinity: abs(n) == :infinity
+    n != n or n == :infinity or n == :neg_infinity
+  end
+
+  defp is_nan_or_infinity(_), do: false
 
   defp validate_capacity(state) do
     if state.node_count >= @max_nodes do

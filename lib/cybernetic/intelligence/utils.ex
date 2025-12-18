@@ -46,8 +46,7 @@ defmodule Cybernetic.Intelligence.Utils do
   def truncate_list(list, max_size), do: Enum.take(list, max_size)
 
   @doc "Safe division avoiding divide by zero"
-  @spec safe_div(number(), number(), number()) :: float()
-  def safe_div(_numerator, 0, default), do: default
-  def safe_div(_numerator, 0.0, default), do: default
+  @spec safe_div(number(), number(), number()) :: number()
+  def safe_div(_numerator, denominator, default) when denominator == 0, do: default
   def safe_div(numerator, denominator, _default), do: numerator / denominator
 end

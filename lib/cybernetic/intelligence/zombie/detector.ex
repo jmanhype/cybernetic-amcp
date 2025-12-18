@@ -48,6 +48,16 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
   @default_check_interval_ms 10_000
   @memory_growth_threshold 5.0  # 5x baseline = zombie
 
+  # MFA whitelist for restart security - only allow calls to known safe modules
+  # Configure via Application.put_env(:cybernetic, :zombie_restart_whitelist, [MyModule])
+  @default_mfa_whitelist [
+    Supervisor,
+    DynamicSupervisor,
+    GenServer,
+    Task.Supervisor,
+    Registry
+  ]
+
   @telemetry [:cybernetic, :intelligence, :zombie]
 
   # Client API
@@ -233,20 +243,31 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
         {:reply, {:error, :not_found}, state}
 
       %{state: :zombie, restart_mfa: {mod, fun, args}} = process ->
-        Logger.warning("Restarting zombie process", pid: inspect(pid), name: process.name)
+        # Validate MFA against whitelist before executing
+        if mfa_whitelisted?(mod) do
+          Logger.warning("Restarting zombie process", pid: inspect(pid), name: process.name)
 
-        try do
-          apply(mod, fun, args)
+          try do
+            apply(mod, fun, args)
 
-          new_stats = Map.update!(state.stats, :processes_restarted, &(&1 + 1))
-          new_processes = Map.delete(state.processes, pid)
+            new_stats = Map.update!(state.stats, :processes_restarted, &(&1 + 1))
+            new_processes = Map.delete(state.processes, pid)
 
-          emit_telemetry(:zombie_restarted, %{pid: inspect(pid), name: process.name})
+            emit_telemetry(:zombie_restarted, %{pid: inspect(pid), name: process.name})
 
-          {:reply, :ok, %{state | processes: new_processes, stats: new_stats}}
-        rescue
-          e ->
-            {:reply, {:error, Exception.message(e)}, state}
+            {:reply, :ok, %{state | processes: new_processes, stats: new_stats}}
+          rescue
+            e ->
+              {:reply, {:error, Exception.message(e)}, state}
+          end
+        else
+          Logger.warning("Rejected restart: module not whitelisted",
+            pid: inspect(pid),
+            module: mod,
+            whitelist: mfa_whitelist()
+          )
+
+          {:reply, {:error, :module_not_whitelisted}, state}
         end
 
       %{state: :zombie} ->
@@ -500,6 +521,17 @@ defmodule Cybernetic.Intelligence.Zombie.Detector do
   end
 
   defp normalize_restart_spec(_), do: nil
+
+  # MFA whitelist security helpers
+  @spec mfa_whitelist() :: [module()]
+  defp mfa_whitelist do
+    Application.get_env(:cybernetic, :zombie_restart_whitelist, @default_mfa_whitelist)
+  end
+
+  @spec mfa_whitelisted?(module()) :: boolean()
+  defp mfa_whitelisted?(mod) when is_atom(mod) do
+    mod in mfa_whitelist()
+  end
 
   @spec emit_telemetry(atom(), map()) :: :ok
   defp emit_telemetry(event, metadata) do

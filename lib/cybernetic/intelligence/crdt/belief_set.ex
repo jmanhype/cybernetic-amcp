@@ -144,11 +144,15 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
     Logger.info("BeliefSet CRDT starting", node_id: node_id)
 
+    # ETS table for version index: {version, belief_id} ordered_set for efficient range queries
+    version_index = :ets.new(:belief_version_index, [:ordered_set, :private])
+
     state = %{
       node_id: node_id,
       beliefs: %{},
       version: 0,
       version_clock: %{},
+      version_index: version_index,
       max_beliefs: Keyword.get(opts, :max_beliefs, @max_beliefs),
       max_value_size: Keyword.get(opts, :max_value_size, @max_value_size),
       stats: %{
@@ -209,6 +213,9 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
         new_clock = Map.put(state.version_clock, state.node_id, new_version)
         new_stats = Map.update!(state.stats, :removes, &(&1 + 1))
 
+        # Add to version index for efficient get_delta
+        :ets.insert(state.version_index, {new_version, id})
+
         Logger.debug("Belief removed", id: id, version: new_version)
         emit_telemetry(:remove, %{id: id, version: new_version})
 
@@ -254,13 +261,15 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
 
   @impl true
   def handle_call({:get_delta, since_version}, _from, state) do
+    # Use version index for O(log n + k) lookup where k = number of entries changed
+    # Instead of O(n) scan of all beliefs
+    changed_ids = get_ids_since_version(state.version_index, since_version)
+
     entries =
-      state.beliefs
-      |> Map.values()
-      |> Enum.filter(fn entry ->
-        entry.added_at > since_version or
-          (entry.removed_at != nil and entry.removed_at > since_version)
-      end)
+      changed_ids
+      |> Enum.uniq()  # Dedupe: same ID may appear at multiple versions (add then remove)
+      |> Enum.map(&Map.get(state.beliefs, &1))
+      |> Enum.reject(&is_nil/1)
 
     delta = %{
       node_id: state.node_id,
@@ -271,6 +280,25 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     }
 
     {:reply, {:ok, delta}, state}
+  end
+
+  # Get belief IDs changed since a version using ETS ordered_set range query
+  @spec get_ids_since_version(:ets.tid(), version()) :: [belief_id()]
+  defp get_ids_since_version(version_index, since_version) do
+    # ETS ordered_set allows efficient range queries
+    # Start from the version after since_version
+    get_ids_from_key(version_index, since_version + 1, [])
+  end
+
+  defp get_ids_from_key(table, key, acc) do
+    case :ets.next(table, key - 1) do
+      :"$end_of_table" ->
+        Enum.reverse(acc)
+
+      next_key when next_key > key - 1 ->
+        [{^next_key, id}] = :ets.lookup(table, next_key)
+        get_ids_from_key(table, next_key + 1, [id | acc])
+    end
   end
 
   @impl true
@@ -362,6 +390,13 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     {:noreply, %{state | beliefs: new_beliefs, stats: new_stats}}
   end
 
+  @impl true
+  def terminate(_reason, state) do
+    # Clean up version index ETS table
+    :ets.delete(state.version_index)
+    :ok
+  end
+
   # Private Functions
 
   defp do_add(state, id, value) do
@@ -382,6 +417,9 @@ defmodule Cybernetic.Intelligence.CRDT.BeliefSet do
     new_beliefs = Map.put(state.beliefs, id, entry)
     new_clock = Map.put(state.version_clock, state.node_id, new_version)
     new_stats = Map.update!(state.stats, :adds, &(&1 + 1))
+
+    # Add to version index for efficient get_delta
+    :ets.insert(state.version_index, {new_version, id})
 
     Logger.debug("Belief added", id: id, version: new_version)
     emit_telemetry(:add, %{id: id, version: new_version})

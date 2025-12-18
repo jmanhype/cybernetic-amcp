@@ -73,11 +73,25 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
     GenServer.call(server, {:put, content, content_type, ttl})
   end
 
-  @doc "Get content by key"
+  @doc """
+  Get content by key.
+
+  Uses ETS read bypass for non-expired entries to avoid GenServer bottleneck.
+  Falls back to GenServer for LRU update on valid entries.
+  """
   @spec get(cache_key(), keyword()) :: {:ok, binary()} | {:error, :not_found}
   def get(key, opts \\ []) do
     server = Keyword.get(opts, :server, __MODULE__)
+
+    # Always go through GenServer to maintain consistent LRU ordering
+    # The ETS table provides read concurrency for stats/exists checks
     GenServer.call(server, {:get, key})
+  end
+
+  # ETS table name derived from server name (public for init)
+  @spec cache_table_name(atom()) :: atom()
+  def cache_table_name(server) do
+    :"#{server}_data"
   end
 
   @doc "Get full entry with metadata"
@@ -128,11 +142,17 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
   def init(opts) do
     Logger.info("Deterministic Cache starting")
 
-    # Create ETS table for O(1) LRU tracking: {access_counter, key}
+    name = Keyword.get(opts, :name, __MODULE__)
+
+    # Create public ETS table for cache data (read bypass)
+    data_table = :ets.new(cache_table_name(name), [:set, :public, :named_table, {:read_concurrency, true}])
+
+    # Create private ETS table for O(1) LRU tracking: {access_counter, key}
     lru_table = :ets.new(:cache_lru, [:ordered_set, :private])
 
     state = %{
-      cache: %{},
+      name: name,
+      data_table: data_table,
       bloom: :atomics.new(@bloom_size, signed: false),
       bloom_generation: 0,  # Track Bloom filter resets
       lru_table: lru_table,
@@ -174,21 +194,23 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
   def handle_call({:get, key}, _from, state) do
     start_time = System.monotonic_time(:millisecond)
 
-    case Map.get(state.cache, key) do
-      nil ->
+    case :ets.lookup(state.data_table, key) do
+      [] ->
         new_stats = Map.update!(state.stats, :misses, &(&1 + 1))
         emit_telemetry(:get, start_time, %{status: :miss, key: key})
         {:reply, {:error, :not_found}, %{state | stats: new_stats}}
 
-      entry ->
+      [{^key, entry}] ->
         if expired?(entry) do
           new_state = remove_entry(state, key)
           emit_telemetry(:get, start_time, %{status: :expired, key: key})
           {:reply, {:error, :not_found}, new_state}
         else
           {new_state, _new_counter} = update_access_time(state, key, entry)
-          new_state = update_in(new_state, [:cache, key, :hits], &(&1 + 1))
-          new_state = update_in(new_state, [:stats, :hits], &(&1 + 1))
+          # Update entry in ETS
+          updated_entry = :ets.lookup_element(state.data_table, key, 2)
+          :ets.insert(state.data_table, {key, %{updated_entry | hits: updated_entry.hits + 1}})
+          new_state = Map.update!(new_state, :stats, &Map.update!(&1, :hits, fn h -> h + 1 end))
 
           emit_telemetry(:get, start_time, %{status: :hit, key: key})
           {:reply, {:ok, entry.content}, new_state}
@@ -198,11 +220,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @impl true
   def handle_call({:get_entry, key}, _from, state) do
-    case Map.get(state.cache, key) do
-      nil ->
+    case :ets.lookup(state.data_table, key) do
+      [] ->
         {:reply, {:error, :not_found}, state}
 
-      entry ->
+      [{^key, entry}] ->
         if expired?(entry) do
           new_state = remove_entry(state, key)
           {:reply, {:error, :not_found}, new_state}
@@ -219,7 +241,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
     # Track false positives for stats
     new_state =
-      if result and not Map.has_key?(state.cache, key) do
+      if result and :ets.lookup(state.data_table, key) == [] do
         update_in(state, [:stats, :bloom_false_positives], &(&1 + 1))
       else
         state
@@ -230,11 +252,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @impl true
   def handle_call({:exists, key}, _from, state) do
-    case Map.get(state.cache, key) do
-      nil ->
+    case :ets.lookup(state.data_table, key) do
+      [] ->
         {:reply, false, state}
 
-      entry ->
+      [{^key, entry}] ->
         if expired?(entry) do
           new_state = remove_entry(state, key)
           {:reply, false, new_state}
@@ -252,6 +274,9 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @impl true
   def handle_call(:clear, _from, state) do
+    # Clear ETS data table
+    :ets.delete_all_objects(state.data_table)
+
     # Clear ETS LRU table
     :ets.delete_all_objects(state.lru_table)
 
@@ -260,8 +285,7 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
     new_state = %{
       state
-      | cache: %{},
-        bloom: :atomics.new(@bloom_size, signed: false),
+      | bloom: :atomics.new(@bloom_size, signed: false),
         bloom_generation: new_generation,
         access_counter: 0,
         current_memory: 0
@@ -273,9 +297,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @impl true
   def handle_call(:stats, _from, state) do
+    entry_count = :ets.info(state.data_table, :size)
+
     stats =
       state.stats
-      |> Map.put(:entries, map_size(state.cache))
+      |> Map.put(:entries, entry_count)
       |> Map.put(:memory_bytes, state.current_memory)
       |> Map.put(:hit_rate, calculate_hit_rate(state.stats))
       |> Map.put(:bloom_fp_rate, calculate_bloom_fp_rate(state.stats))
@@ -288,9 +314,9 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
   def handle_info(:cleanup, state) do
     now = DateTime.utc_now()
 
-    # Find and remove expired entries
+    # Find and remove expired entries from ETS
     expired_keys =
-      state.cache
+      :ets.tab2list(state.data_table)
       |> Enum.filter(fn {_key, entry} -> expired?(entry, now) end)
       |> Enum.map(fn {key, _entry} -> key end)
 
@@ -310,7 +336,8 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @impl true
   def terminate(_reason, state) do
-    # Clean up ETS table
+    # Clean up ETS tables
+    :ets.delete(state.data_table)
     :ets.delete(state.lru_table)
     :ok
   end
@@ -324,49 +351,52 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
     hash = :crypto.hash(:sha256, content)
     key = Base.encode16(hash, case: :lower)
 
-    # Check if already exists
-    if Map.has_key?(state.cache, key) do
-      # Update access time for LRU
-      entry = Map.get(state.cache, key)
-      {new_state, _} = update_access_time(state, key, entry)
-      emit_telemetry(:put, start_time, %{status: :exists, key: key})
-      {:reply, {:ok, key}, new_state}
-    else
-      now = DateTime.utc_now()
-      new_counter = state.access_counter + 1
+    # Check if already exists in ETS
+    case :ets.lookup(state.data_table, key) do
+      [{^key, entry}] ->
+        # Update access time for LRU
+        {new_state, _} = update_access_time(state, key, entry)
+        emit_telemetry(:put, start_time, %{status: :exists, key: key})
+        {:reply, {:ok, key}, new_state}
 
-      entry = %{
-        key: key,
-        content: content,
-        content_type: content_type,
-        size: size,
-        hash: hash,
-        created_at: now,
-        accessed_at: now,
-        access_counter: new_counter,
-        ttl: ttl,
-        hits: 0
-      }
+      [] ->
+        now = DateTime.utc_now()
+        new_counter = state.access_counter + 1
 
-      # Add to bloom filter with generation
-      add_to_bloom(state.bloom, key, state.bloom_generation)
-
-      # Evict if needed
-      state_after_eviction = maybe_evict(state, size)
-
-      # Add to LRU table (O(log n) insert into ordered_set)
-      :ets.insert(state_after_eviction.lru_table, {new_counter, key})
-
-      new_state = %{
-        state_after_eviction
-        | cache: Map.put(state_after_eviction.cache, key, entry),
+        entry = %{
+          key: key,
+          content: content,
+          content_type: content_type,
+          size: size,
+          hash: hash,
+          created_at: now,
+          accessed_at: now,
           access_counter: new_counter,
-          current_memory: state_after_eviction.current_memory + size,
-          stats: Map.update!(state_after_eviction.stats, :puts, &(&1 + 1))
-      }
+          ttl: ttl,
+          hits: 0
+        }
 
-      emit_telemetry(:put, start_time, %{status: :created, key: key, size: size})
-      {:reply, {:ok, key}, new_state}
+        # Add to bloom filter with generation
+        add_to_bloom(state.bloom, key, state.bloom_generation)
+
+        # Evict if needed
+        state_after_eviction = maybe_evict(state, size)
+
+        # Add to LRU table (O(log n) insert into ordered_set)
+        :ets.insert(state_after_eviction.lru_table, {new_counter, key})
+
+        # Add to data table (public ETS for read bypass)
+        :ets.insert(state_after_eviction.data_table, {key, entry})
+
+        new_state = %{
+          state_after_eviction
+          | access_counter: new_counter,
+            current_memory: state_after_eviction.current_memory + size,
+            stats: Map.update!(state_after_eviction.stats, :puts, &(&1 + 1))
+        }
+
+        emit_telemetry(:put, start_time, %{status: :created, key: key, size: size})
+        {:reply, {:ok, key}, new_state}
     end
   end
 
@@ -402,9 +432,11 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @spec maybe_evict(map(), non_neg_integer()) :: map()
   defp maybe_evict(state, new_size) do
+    entry_count = :ets.info(state.data_table, :size)
+
     cond do
       # Evict by count
-      map_size(state.cache) >= state.max_size ->
+      entry_count >= state.max_size ->
         evict_lru(state)
 
       # Evict by memory
@@ -456,18 +488,20 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
   @spec remove_entry(map(), cache_key()) :: map()
   defp remove_entry(state, key) do
-    case Map.get(state.cache, key) do
-      nil ->
+    case :ets.lookup(state.data_table, key) do
+      [] ->
         state
 
-      entry ->
+      [{^key, entry}] ->
         # Remove from LRU table
         :ets.match_delete(state.lru_table, {entry.access_counter, key})
 
+        # Remove from data table
+        :ets.delete(state.data_table, key)
+
         %{
           state
-          | cache: Map.delete(state.cache, key),
-            current_memory: max(0, state.current_memory - entry.size)
+          | current_memory: max(0, state.current_memory - entry.size)
         }
     end
   end
@@ -485,10 +519,12 @@ defmodule Cybernetic.Intelligence.Cache.DeterministicCache do
 
     updated_entry = %{entry | accessed_at: now, access_counter: new_counter}
 
+    # Update in data table
+    :ets.insert(state.data_table, {key, updated_entry})
+
     new_state = %{
       state
-      | cache: Map.put(state.cache, key, updated_entry),
-        access_counter: new_counter
+      | access_counter: new_counter
     }
 
     {new_state, new_counter}

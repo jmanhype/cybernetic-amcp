@@ -164,7 +164,7 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
         new_state = %{
           state
           | hooks: Map.put(state.hooks, hook.id, hook),
-            windows: Map.put(state.windows, hook.id, %{events: [], count: 0})
+            windows: Map.put(state.windows, hook.id, %{events: :queue.new(), count: 0})
         }
 
         Logger.info("Registered CEP hook", hook_id: hook.id, name: hook.name)
@@ -251,12 +251,16 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
         window_ms = get_window_ms(hook)
         cutoff = DateTime.add(now, -window_ms, :millisecond)
 
-        cleaned_events =
-          Enum.filter(window.events, fn {timestamp, _event} ->
+        # Convert queue to list, filter, then back to queue
+        cleaned_list =
+          :queue.to_list(window.events)
+          |> Enum.filter(fn {timestamp, _event} ->
             DateTime.compare(timestamp, cutoff) == :gt
           end)
 
-        {hook_id, %{events: cleaned_events, count: length(cleaned_events)}}
+        cleaned_queue = :queue.from_list(cleaned_list)
+
+        {hook_id, %{events: cleaned_queue, count: length(cleaned_list)}}
       end)
 
     schedule_window_cleanup()
@@ -285,7 +289,7 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
             }
 
             new_hooks = Map.put(acc_state.hooks, hook_id, updated_hook)
-            new_windows = Map.put(acc_state.windows, hook_id, %{events: [], count: 0})
+            new_windows = Map.put(acc_state.windows, hook_id, %{events: :queue.new(), count: 0})
 
             {%{acc_state | hooks: new_hooks, windows: new_windows}, count + 1}
           else
@@ -427,18 +431,24 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
 
   @spec update_window(map(), hook_id(), map(), DateTime.t()) :: map()
   defp update_window(state, hook_id, event, timestamp) do
-    window = Map.get(state.windows, hook_id, %{events: [], count: 0})
+    window = Map.get(state.windows, hook_id, %{events: :queue.new(), count: 0})
 
-    # Truncate to max_window_events to prevent memory bloat
-    new_events =
-      [{timestamp, event} | window.events]
-      |> Enum.take(state.max_window_events)
+    # Use :queue for O(1) insert and O(1) drop from opposite ends
+    events_queue = window.events
+    new_queue = :queue.in({timestamp, event}, events_queue)
+    current_count = window.count + 1
 
-    dropped = max(0, window.count + 1 - state.max_window_events)
+    # Drop oldest events if over limit (O(1) drop from front)
+    {final_queue, final_count, dropped} =
+      if current_count > state.max_window_events do
+        trim_queue(new_queue, current_count, state.max_window_events)
+      else
+        {new_queue, current_count, 0}
+      end
 
     new_window = %{
-      events: new_events,
-      count: length(new_events)
+      events: final_queue,
+      count: final_count
     }
 
     new_state = %{state | windows: Map.put(state.windows, hook_id, new_window)}
@@ -450,11 +460,28 @@ defmodule Cybernetic.Intelligence.CEP.WorkflowHooks do
     end
   end
 
+  # Trim queue to max size by dropping oldest (front) entries
+  @spec trim_queue(:queue.queue(), non_neg_integer(), non_neg_integer()) ::
+          {:queue.queue(), non_neg_integer(), non_neg_integer()}
+  defp trim_queue(queue, current_count, max_count) when current_count <= max_count do
+    {queue, current_count, 0}
+  end
+
+  defp trim_queue(queue, current_count, max_count) do
+    case :queue.out(queue) do
+      {{:value, _}, rest} ->
+        trim_queue(rest, current_count - 1, max_count)
+
+      {:empty, _} ->
+        {queue, 0, current_count}
+    end
+  end
+
   @spec threshold_met?(map(), hook_id(), threshold() | nil) :: boolean()
   defp threshold_met?(_state, _hook_id, nil), do: true
 
   defp threshold_met?(state, hook_id, threshold) do
-    window = Map.get(state.windows, hook_id, %{events: [], count: 0})
+    window = Map.get(state.windows, hook_id, %{events: :queue.new(), count: 0})
 
     cond do
       Map.has_key?(threshold, :count) ->
