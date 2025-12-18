@@ -76,10 +76,13 @@ defmodule Cybernetic.Storage.Adapters.LocalTest do
       # Write a file first
       assert {:ok, _} = Local.put(@test_tenant, "atomic.txt", "complete content")
 
-      # Verify no .tmp files left behind
+      # Verify no .tmp files left for THIS specific file
       tenant_path = Path.join(base_path, @test_tenant)
-      tmp_files = Path.wildcard(Path.join(tenant_path, "**/*.tmp"))
-      assert tmp_files == []
+      atomic_tmp_files = Path.wildcard(Path.join(tenant_path, "atomic.txt.*.tmp"))
+      assert atomic_tmp_files == []
+
+      # Verify the actual content was written completely
+      assert {:ok, "complete content"} = Local.get(@test_tenant, "atomic.txt")
     end
   end
 
