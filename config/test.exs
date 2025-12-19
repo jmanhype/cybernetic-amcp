@@ -16,6 +16,9 @@ config :cybernetic,
   transport: Cybernetic.Transport.InMemory,
   test_mode: true,
   environment: :test,
+  # Enable minimal test mode - only starts essential services (PubSub, AuthManager, JWKSCache)
+  # This dramatically improves test speed and reduces noise
+  minimal_test_mode: true,
   # Keep unit tests fast and quiet by default; integration tests can re-enable as needed.
   enable_telemetry: false,
   enable_health_monitoring: false

@@ -1,9 +1,15 @@
 defmodule Cybernetic.VSM.System1.MessageHandlerTest do
   @moduledoc """
-  Unit tests for System1 MessageHandler
+  Unit tests for System1 MessageHandler.
+
+  Note: These tests require the full VSM infrastructure (AMQP publisher) to be running,
+  so they are tagged as :integration and excluded from minimal test mode.
   """
   use ExUnit.Case, async: true
   alias Cybernetic.VSM.System1.MessageHandler
+
+  # Tag as integration since it depends on AMQP Publisher
+  @moduletag :integration
 
   describe "handle_message/3" do
     test "handles operation messages" do

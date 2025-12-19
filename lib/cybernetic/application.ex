@@ -1,6 +1,12 @@
 defmodule Cybernetic.Application do
   @moduledoc """
   Boots the Cybernetic runtime mapped to VSM systems.
+
+  In test mode (`:minimal_test_mode`), only essential services are started:
+  - JWKSCache, AuthManager (for auth/JWT tests)
+  - Phoenix.PubSub (for event tests)
+
+  This dramatically improves test speed and reduces noise.
   """
   use Application
   require Logger
@@ -9,6 +15,7 @@ defmodule Cybernetic.Application do
     # Validate critical configuration before starting
     with :ok <- validate_configuration() do
       env = Application.get_env(:cybernetic, :environment, :prod)
+      minimal_test? = Application.get_env(:cybernetic, :minimal_test_mode, false)
 
       # Initialize OpenTelemetry with error handling
       if env != :test do
@@ -70,60 +77,66 @@ defmodule Cybernetic.Application do
         end
 
       children =
-        (repo_children ++
-           [
-             # Phoenix PubSub (used by SSE and event broadcasting)
-             {Phoenix.PubSub, name: Cybernetic.PubSub},
-             # Cluster discovery
-             cluster_children,
-             # Phoenix Edge Gateway Endpoint
-             Cybernetic.Edge.Gateway.Endpoint,
-             # Core Security
-             Cybernetic.Core.Security.NonceBloom,
-             # CRDT Graph
-             Cybernetic.Core.CRDT.Graph,
-             # CRDT Context Graph for semantic triples
-             Cybernetic.Core.CRDT.ContextGraph,
-             # AMQP Transport
-             amqp_children,
-             {Cybernetic.Core.CRDT.Cache, []},
-             {Cybernetic.Telemetry.BatchedCollector, []},
-             # MCP Registry
-             Cybernetic.Core.MCP.Hermes.Registry,
-             # Circuit Breaker Registry
-             {Registry,
-              keys: :unique, name: Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry},
-             # Goldrush Integration
-             {Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic, []},
-             Cybernetic.Core.Goldrush.Bridge,
-             Cybernetic.Core.Goldrush.Pipeline,
-             # Central Aggregator (must be before S4 Bridge)
-             {Cybernetic.Core.Aggregator.CentralAggregator, []},
-             # S5 SOP Engine (must be before S4 Bridge so it can receive messages)
-             {Cybernetic.VSM.System5.SOPEngine, []},
-             # S5 Policy Intelligence Engine
-             {Cybernetic.VSM.System5.PolicyIntelligence, []},
-             # S4 Intelligence Layer
-             {Cybernetic.VSM.System4.LLMBridge, provider: Cybernetic.VSM.System4.Providers.Null},
-             # S4 Multi-Provider Intelligence Service
-             {Cybernetic.VSM.System4.Service, []},
-             # S4 Memory for conversation context
-             {Cybernetic.VSM.System4.Memory, []},
-             # S3 Rate Limiter for budget management
-             {Cybernetic.VSM.System3.RateLimiter, []},
-             # JWKS Cache for JWT/OIDC verification (must start before AuthManager)
-             {Cybernetic.Security.JWKSCache, []},
-             # Security AuthManager for MCP tools
-             {Cybernetic.Security.AuthManager, []},
-             # Edge WASM Validator is stateless - use Cybernetic.Edge.WASM.Validator.load/2 where needed
-             # VSM Supervisor (includes S1-S5)
-             Cybernetic.VSM.Supervisor,
-             # Telegram Agent (S1)
-             Cybernetic.VSM.System1.Agents.TelegramAgent
-           ])
-        |> List.flatten()
-        |> Kernel.++(health_children())
-        |> Kernel.++(telemetry_children())
+        if minimal_test? do
+          # Minimal children for fast unit tests - only essential services
+          minimal_test_children()
+        else
+          # Full children for production/integration tests
+          (repo_children ++
+             [
+               # Phoenix PubSub (used by SSE and event broadcasting)
+               {Phoenix.PubSub, name: Cybernetic.PubSub},
+               # Cluster discovery
+               cluster_children,
+               # Phoenix Edge Gateway Endpoint
+               Cybernetic.Edge.Gateway.Endpoint,
+               # Core Security
+               Cybernetic.Core.Security.NonceBloom,
+               # CRDT Graph
+               Cybernetic.Core.CRDT.Graph,
+               # CRDT Context Graph for semantic triples
+               Cybernetic.Core.CRDT.ContextGraph,
+               # AMQP Transport
+               amqp_children,
+               {Cybernetic.Core.CRDT.Cache, []},
+               {Cybernetic.Telemetry.BatchedCollector, []},
+               # MCP Registry
+               Cybernetic.Core.MCP.Hermes.Registry,
+               # Circuit Breaker Registry
+               {Registry,
+                keys: :unique, name: Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry},
+               # Goldrush Integration
+               {Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic, []},
+               Cybernetic.Core.Goldrush.Bridge,
+               Cybernetic.Core.Goldrush.Pipeline,
+               # Central Aggregator (must be before S4 Bridge)
+               {Cybernetic.Core.Aggregator.CentralAggregator, []},
+               # S5 SOP Engine (must be before S4 Bridge so it can receive messages)
+               {Cybernetic.VSM.System5.SOPEngine, []},
+               # S5 Policy Intelligence Engine
+               {Cybernetic.VSM.System5.PolicyIntelligence, []},
+               # S4 Intelligence Layer
+               {Cybernetic.VSM.System4.LLMBridge, provider: Cybernetic.VSM.System4.Providers.Null},
+               # S4 Multi-Provider Intelligence Service
+               {Cybernetic.VSM.System4.Service, []},
+               # S4 Memory for conversation context
+               {Cybernetic.VSM.System4.Memory, []},
+               # S3 Rate Limiter for budget management
+               {Cybernetic.VSM.System3.RateLimiter, []},
+               # JWKS Cache for JWT/OIDC verification (must start before AuthManager)
+               {Cybernetic.Security.JWKSCache, []},
+               # Security AuthManager for MCP tools
+               {Cybernetic.Security.AuthManager, []},
+               # Edge WASM Validator is stateless - use Cybernetic.Edge.WASM.Validator.load/2 where needed
+               # VSM Supervisor (includes S1-S5)
+               Cybernetic.VSM.Supervisor,
+               # Telegram Agent (S1)
+               Cybernetic.VSM.System1.Agents.TelegramAgent
+             ])
+          |> List.flatten()
+          |> Kernel.++(health_children())
+          |> Kernel.++(telemetry_children())
+        end
 
       opts = [
         strategy: :one_for_one,
@@ -244,5 +257,26 @@ defmodule Cybernetic.Application do
     else
       []
     end
+  end
+
+  # Minimal children for fast unit tests
+  # Only starts services actually needed by most unit tests
+  defp minimal_test_children do
+    Logger.info("Starting in minimal test mode - only essential services")
+
+    [
+      # Phoenix PubSub (for event tests)
+      {Phoenix.PubSub, name: Cybernetic.PubSub},
+      # Core Security (for nonce/replay tests)
+      Cybernetic.Core.Security.NonceBloom,
+      # JWKS Cache (for JWT tests)
+      {Cybernetic.Security.JWKSCache, []},
+      # AuthManager (for auth tests)
+      {Cybernetic.Security.AuthManager, []},
+      # MCP Registry (for capability tests)
+      Cybernetic.Core.MCP.Hermes.Registry,
+      # Rate Limiter (for rate limit tests)
+      {Cybernetic.VSM.System3.RateLimiter, []}
+    ]
   end
 end
