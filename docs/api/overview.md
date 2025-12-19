@@ -30,12 +30,16 @@ Response includes:
 
 Session tokens are validated against `:auth_sessions` ETS table. Expiration is enforced; expired tokens are deleted on access.
 
+**Important**: Session tokens (HS256) do not survive server restarts. After restart, users must re-authenticate to get a new session token.
+
 #### 2. External JWT/OIDC Tokens (Stateless)
 
-If a Bearer token is not found in the session store, it falls back to `Cybernetic.Security.JWT.verify/1`:
+If a Bearer token is not found in the session store, it falls back to `Cybernetic.Security.JWT.verify_external/1`:
 
-- **HS256**: Verified using `JWT_SECRET` environment variable
-- **RS256**: Verified using JWKS from `OIDC_JWKS_URL` or discovered via `OIDC_ISSUER`
+- **RS256 only**: Verified using JWKS from `OIDC_JWKS_URL` or discovered via `OIDC_ISSUER`
+- **HS256 rejected**: Returns `:session_expired` error (session tokens must be in ETS)
+
+This design prevents session tokens from becoming stateless after restart, ensuring proper session lifecycle management.
 
 Validations performed:
 - Signature (strict algorithm match)

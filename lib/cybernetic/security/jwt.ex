@@ -37,19 +37,44 @@ defmodule Cybernetic.Security.JWT do
           | {:invalid_audience, term()}
           | {:decode_error, term()}
 
-  @doc "Verify a JWT and return its claims."
+  @doc """
+  Verify a JWT and return its claims.
+
+  Accepts both HS256 (using JWT_SECRET) and RS256 (using JWKS).
+  """
   @spec verify(String.t()) :: {:ok, claims()} | {:error, error_reason()}
   def verify(token) when is_binary(token) do
+    verify_with_algs(token, allowed_algs())
+  end
+
+  @doc """
+  Verify an external JWT (RS256 only via JWKS).
+
+  Use this for fallback validation when session token is not found in ETS.
+  Rejects HS256 to prevent session tokens from becoming stateless after restart.
+  """
+  @spec verify_external(String.t()) :: {:ok, claims()} | {:error, error_reason()}
+  def verify_external(token) when is_binary(token) do
+    # Only allow RS256 for external tokens - HS256 session tokens must be in ETS
+    verify_with_algs(token, ["RS256"])
+  end
+
+  defp verify_with_algs(token, allowed) do
     with true <- jwt_format?(token) || {:error, :not_a_jwt},
          {:ok, header} <- peek_header(token),
          {:ok, alg} <- fetch_alg(header),
-         :ok <- validate_alg_allowed(alg),
+         :ok <- validate_alg_in_list(alg, allowed),
          {:ok, jwk} <- resolve_verification_key(alg, header),
          {:ok, claims} <- verify_and_extract_claims(jwk, alg, token),
          :ok <- validate_time_claims(claims),
          :ok <- validate_expected_claims(claims) do
       {:ok, claims}
     end
+  end
+
+  defp allowed_algs do
+    Application.get_env(:cybernetic, :oidc, [])
+    |> Keyword.get(:allowed_algs, ["RS256", "HS256"])
   end
 
   defp jwt_format?(token) do
@@ -69,11 +94,7 @@ defmodule Cybernetic.Security.JWT do
   defp fetch_alg(%{"alg" => alg}) when is_binary(alg) and alg != "", do: {:ok, alg}
   defp fetch_alg(_), do: {:error, :missing_alg}
 
-  defp validate_alg_allowed(alg) do
-    allowed =
-      Application.get_env(:cybernetic, :oidc, [])
-      |> Keyword.get(:allowed_algs, ["RS256", "HS256"])
-
+  defp validate_alg_in_list(alg, allowed) do
     if alg in allowed do
       :ok
     else

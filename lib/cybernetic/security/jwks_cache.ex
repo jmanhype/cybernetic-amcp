@@ -18,7 +18,24 @@ defmodule Cybernetic.Security.JWKSCache do
   @default_ttl_ms :timer.minutes(5)
   @http_timeout_ms 10_000
   @http_connect_timeout_ms 5_000
-  @max_redirects 2
+  # Disable redirects to prevent SSRF via redirect to internal host
+  @max_redirects 0
+
+  # Private/reserved IP ranges (RFC 1918, loopback, link-local)
+  @private_ranges [
+    # 10.0.0.0/8
+    {{10, 0, 0, 0}, {10, 255, 255, 255}},
+    # 172.16.0.0/12
+    {{172, 16, 0, 0}, {172, 31, 255, 255}},
+    # 192.168.0.0/16
+    {{192, 168, 0, 0}, {192, 168, 255, 255}},
+    # 127.0.0.0/8 (loopback)
+    {{127, 0, 0, 0}, {127, 255, 255, 255}},
+    # 169.254.0.0/16 (link-local)
+    {{169, 254, 0, 0}, {169, 254, 255, 255}},
+    # 0.0.0.0/8 (current network)
+    {{0, 0, 0, 0}, {0, 255, 255, 255}}
+  ]
 
   # Public API
 
@@ -196,7 +213,7 @@ defmodule Cybernetic.Security.JWKSCache do
       uri.host in [nil, ""] ->
         {:error, :missing_host}
 
-      # Block localhost/internal IPs in prod
+      # Block localhost/internal IPs in prod (includes DNS resolution)
       env == :prod and internal_host?(uri.host) ->
         {:error, :internal_host_blocked}
 
@@ -205,13 +222,57 @@ defmodule Cybernetic.Security.JWKSCache do
     end
   end
 
+  # Check if host resolves to internal/private IP (SSRF protection)
   defp internal_host?(host) do
-    host in ["localhost", "127.0.0.1", "0.0.0.0", "::1"] or
-      String.starts_with?(host, "192.168.") or
-      String.starts_with?(host, "10.") or
-      String.starts_with?(host, "172.16.") or
-      String.ends_with?(host, ".local")
+    # Quick string checks first
+    if quick_internal_check?(host) do
+      true
+    else
+      # DNS resolution check - resolve and verify IPs are not private
+      resolve_and_check_private(host)
+    end
   end
+
+  defp quick_internal_check?(host) do
+    host in ["localhost", "127.0.0.1", "0.0.0.0", "::1"] or
+      String.ends_with?(host, ".local") or
+      String.ends_with?(host, ".internal") or
+      String.ends_with?(host, ".localhost")
+  end
+
+  defp resolve_and_check_private(host) do
+    # Resolve hostname to IP addresses
+    case :inet.getaddr(String.to_charlist(host), :inet) do
+      {:ok, ip_tuple} ->
+        ip_in_private_range?(ip_tuple)
+
+      {:error, _} ->
+        # If resolution fails, also check IPv6
+        case :inet.getaddr(String.to_charlist(host), :inet6) do
+          {:ok, ip_tuple} ->
+            ipv6_is_private?(ip_tuple)
+
+          {:error, _} ->
+            # Can't resolve - block in prod as suspicious
+            true
+        end
+    end
+  end
+
+  defp ip_in_private_range?({a, b, c, d} = ip) when is_tuple(ip) do
+    Enum.any?(@private_ranges, fn {{start_a, start_b, start_c, start_d}, {end_a, end_b, end_c, end_d}} ->
+      a >= start_a and a <= end_a and
+        b >= start_b and b <= end_b and
+        c >= start_c and c <= end_c and
+        d >= start_d and d <= end_d
+    end)
+  end
+
+  defp ipv6_is_private?({0, 0, 0, 0, 0, 0, 0, 1}), do: true  # ::1 (loopback)
+  defp ipv6_is_private?({0xfe80, _, _, _, _, _, _, _}), do: true  # fe80::/10 (link-local)
+  defp ipv6_is_private?({0xfc00, _, _, _, _, _, _, _}), do: true  # fc00::/7 (unique local)
+  defp ipv6_is_private?({0xfd00, _, _, _, _, _, _, _}), do: true  # fd00::/8 (unique local)
+  defp ipv6_is_private?(_), do: false
 
   defp decode_json(body) when is_binary(body) do
     Jason.decode(body)

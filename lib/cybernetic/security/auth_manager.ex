@@ -107,10 +107,35 @@ defmodule Cybernetic.Security.AuthManager do
   end
 
   @doc """
-  Validate JWT token and return auth context
+  Validate JWT token and return auth context.
+
+  Uses direct ETS read for session tokens (fast path), falling back to
+  GenServer call for JWT verification (slow path). This allows high throughput
+  for repeated validations of the same session token.
   """
   def validate_token(token) do
-    GenServer.call(__MODULE__, {:validate_token, token})
+    # Fast path: direct ETS read for session tokens
+    case :ets.lookup(:auth_sessions, token) do
+      [{^token, session}] ->
+        if DateTime.compare(DateTime.utc_now(), session.expires_at) == :lt do
+          {:ok, %{
+            user_id: session.user_id,
+            roles: session.roles,
+            permissions: expand_permissions(session.roles),
+            metadata: %{
+              username: session.username,
+              auth_method: :jwt
+            }
+          }}
+        else
+          # Expired - need GenServer to delete from ETS
+          GenServer.call(__MODULE__, {:validate_expired_token, token})
+        end
+
+      [] ->
+        # Not in ETS - need GenServer for JWT verification (may need rate limiting)
+        GenServer.call(__MODULE__, {:validate_external_token, token})
+    end
   end
 
   @doc """
@@ -232,41 +257,31 @@ defmodule Cybernetic.Security.AuthManager do
     end
   end
 
+  # Handle expired token - delete from ETS and return error
   @impl true
-  def handle_call({:validate_token, token}, _from, state) do
-    case :ets.lookup(:auth_sessions, token) do
-      [{^token, session}] ->
-        # Check expiration
-        if DateTime.compare(DateTime.utc_now(), session.expires_at) == :lt do
-          auth_context = %{
-            user_id: session.user_id,
-            roles: session.roles,
-            permissions: expand_permissions(session.roles),
-            metadata: %{
-              username: session.username,
-              auth_method: :jwt
-            }
-          }
+  def handle_call({:validate_expired_token, token}, _from, state) do
+    :ets.delete(:auth_sessions, token)
+    {:reply, {:error, :token_expired}, state}
+  end
 
-          {:reply, {:ok, auth_context}, state}
-        else
-          # Token expired
-          :ets.delete(:auth_sessions, token)
-          {:reply, {:error, :token_expired}, state}
-        end
+  # Handle external JWT verification (RS256 only, falls through from fast path)
+  @impl true
+  def handle_call({:validate_external_token, token}, _from, state) do
+    # Not a local session token; try verifying it as an external JWT (RS256 only).
+    # HS256 tokens must be in ETS (session tokens don't survive restart).
+    case Cybernetic.Security.JWT.verify_external(token) do
+      {:ok, claims} ->
+        {:reply, {:ok, auth_context_from_claims(claims)}, state}
 
-      [] ->
-        # Not a local session token; try verifying it as a real JWT (OIDC/JWKS).
-        case Cybernetic.Security.JWT.verify(token) do
-          {:ok, claims} ->
-            {:reply, {:ok, auth_context_from_claims(claims)}, state}
+      {:error, :token_expired} ->
+        {:reply, {:error, :token_expired}, state}
 
-          {:error, :token_expired} ->
-            {:reply, {:error, :token_expired}, state}
+      {:error, {:unsupported_alg, "HS256"}} ->
+        # HS256 session token not in ETS - likely expired or server restarted
+        {:reply, {:error, :session_expired}, state}
 
-          _ ->
-            {:reply, {:error, :invalid_token}, state}
-        end
+      _ ->
+        {:reply, {:error, :invalid_token}, state}
     end
   end
 

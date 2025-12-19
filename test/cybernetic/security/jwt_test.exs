@@ -224,6 +224,24 @@ defmodule Cybernetic.Security.JWTTest do
     end
   end
 
+  describe "verify_external/1" do
+    test "rejects HS256 tokens (session tokens must be in ETS)" do
+      token = create_hs256_token(%{"sub" => "user123", "exp" => future_exp()})
+      assert {:error, {:unsupported_alg, "HS256"}} = JWT.verify_external(token)
+    end
+
+    test "rejects HS256 even with valid signature" do
+      # Even a perfectly valid HS256 token should be rejected by verify_external
+      token = create_hs256_token(%{
+        "sub" => "user123",
+        "exp" => future_exp(),
+        "iss" => "https://auth.example.com",
+        "aud" => "my-api"
+      })
+      assert {:error, {:unsupported_alg, "HS256"}} = JWT.verify_external(token)
+    end
+  end
+
   # Helper functions
 
   defp create_hs256_token(claims, secret \\ @test_secret) do
