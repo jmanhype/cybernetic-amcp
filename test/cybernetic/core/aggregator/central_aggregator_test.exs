@@ -8,10 +8,14 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       case Process.whereis(CentralAggregator) do
         nil ->
           {:ok, p} = CentralAggregator.start_link([])
-          # Wait for ETS table to be created by init
+          # Wait for ETS tables to be created by init
           Enum.reduce_while(1..50, nil, fn _, _ ->
-            case :ets.whereis(:cyb_agg_window) do
-              :undefined ->
+            case {:ets.whereis(:cyb_agg_window), :ets.whereis(:cyb_agg_counts)} do
+              {:undefined, _} ->
+                Process.sleep(10)
+                {:cont, nil}
+
+              {_, :undefined} ->
                 Process.sleep(10)
                 {:cont, nil}
 
@@ -26,10 +30,12 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
           existing_pid
       end
 
-    # Clear the ETS table for clean test state
-    case :ets.whereis(:cyb_agg_window) do
-      :undefined -> :ok
-      _ -> :ets.delete_all_objects(:cyb_agg_window)
+    # Clear the ETS tables for clean test state
+    for table <- [:cyb_agg_window, :cyb_agg_counts] do
+      case :ets.whereis(table) do
+        :undefined -> :ok
+        _ -> :ets.delete_all_objects(table)
+      end
     end
 
     # Don't exit the shared process on test cleanup

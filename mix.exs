@@ -48,8 +48,7 @@ defmodule Cybernetic.MixProject do
 
       # Goldrush branches for reactive stream processing (pinned to SHA)
       {:goldrush,
-       git: "https://github.com/DeadZen/goldrush",
-       ref: "57e71f2789632a085f0963e1244644fdcb1941b9"},
+       git: "https://github.com/DeadZen/goldrush", ref: "57e71f2789632a085f0963e1244644fdcb1941b9"},
       {:goldrush_elixir,
        git: "https://github.com/DeadZen/goldrush",
        ref: "1d39c73c5ec2409f6866933b5af6bda3138d9fad",

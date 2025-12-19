@@ -16,8 +16,12 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
   require Logger
 
   @table :cyb_agg_window
+  @counts_table :cyb_agg_counts
   @emit_every_ms 5_000
   @window_ms 60_000
+  # Bucket counts by second to avoid scanning the full window table on every emit.
+  # Note: Window boundaries are bucketed (≤1s approximation).
+  @bucket_ms 1_000
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -27,11 +31,25 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
     # Key is {timestamp, unique_ref} to prevent collision when multiple events arrive in same ms
     case :ets.whereis(@table) do
       :undefined ->
-        :ets.new(@table, [:ordered_set, :public, :named_table, read_concurrency: true])
+        :ets.new(
+          @table,
+          [:ordered_set, :public, :named_table, read_concurrency: true, write_concurrency: true]
+        )
 
       _ ->
         # Table already exists, clear it
         :ets.delete_all_objects(@table)
+    end
+
+    case :ets.whereis(@counts_table) do
+      :undefined ->
+        :ets.new(
+          @counts_table,
+          [:ordered_set, :public, :named_table, read_concurrency: true, write_concurrency: true]
+        )
+
+      _ ->
+        :ets.delete_all_objects(@counts_table)
     end
 
     attach_sources()
@@ -75,13 +93,31 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
       data: meas
     }
 
-    case :ets.whereis(@table) do
-      :undefined ->
+    case {:ets.whereis(@table), :ets.whereis(@counts_table)} do
+      {:undefined, _} ->
         Logger.warning("CentralAggregator: ETS table #{@table} not found during handle_source")
 
-      _ ->
+      {_, :undefined} ->
+        Logger.warning(
+          "CentralAggregator: ETS table #{@counts_table} not found during handle_source"
+        )
+
+        :ets.insert(@table, {{entry.at, make_ref()}, entry})
+
+      {_, _} ->
         # P1 Fix: Use compound key {timestamp, unique_ref} to prevent collision
         :ets.insert(@table, {{entry.at, make_ref()}, entry})
+
+        bucket = div(entry.at, @bucket_ms)
+        count_key = {bucket, entry.source, entry.severity, entry.labels}
+
+        _new_count =
+          :ets.update_counter(
+            @counts_table,
+            count_key,
+            {2, 1},
+            {count_key, 0}
+          )
     end
   end
 
@@ -114,37 +150,48 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
         # Match spec: key is {timestamp, ref}, select where timestamp < cutoff
         match_spec = [{{{:"$1", :_}, :_}, [{:<, :"$1", cutoff}], [true]}]
         :ets.select_delete(@table, match_spec)
+
+        prune_counts(cutoff)
+    end
+  end
+
+  defp prune_counts(cutoff_ms) do
+    case :ets.whereis(@counts_table) do
+      :undefined ->
+        Logger.warning(
+          "CentralAggregator: ETS table #{@counts_table} not found during prune_counts"
+        )
+
+        :ok
+
+      _ ->
+        cutoff_bucket = div(cutoff_ms, @bucket_ms)
+        match_spec = [{{{:"$1", :_, :_, :_}, :_}, [{:<, :"$1", cutoff_bucket}], [true]}]
+        :ets.select_delete(@counts_table, match_spec)
     end
   end
 
   defp summarize do
-    case :ets.whereis(@table) do
+    case :ets.whereis(@counts_table) do
       :undefined ->
-        Logger.warning("CentralAggregator: ETS table #{@table} not found during summarize")
+        Logger.warning("CentralAggregator: ETS table #{@counts_table} not found during summarize")
         []
 
       _ ->
-        :ets.tab2list(@table)
-        |> Enum.map(fn {_k, v} -> v end)
-        |> to_facts()
+        @counts_table
+        |> :ets.tab2list()
+        |> Enum.reduce(%{}, fn {{_bucket, src, sev, labels}, count}, acc ->
+          Map.update(acc, {src, sev, labels}, count, &(&1 + count))
+        end)
+        |> Enum.map(fn {{src, sev, labels}, count} ->
+          %{
+            "source" => Enum.join(Enum.map(src, &inspect/1), "/"),
+            "severity" => sev,
+            "labels" => labels,
+            "count" => count
+          }
+        end)
     end
-  end
-
-  defp to_facts(entries) do
-    # Example rollup: counts by label and severity
-    by_label =
-      entries
-      |> Enum.group_by(fn e -> {e.source, e.severity, e.labels} end)
-      |> Enum.map(fn {{src, sev, labels}, group} ->
-        %{
-          "source" => Enum.join(Enum.map(src, &inspect/1), "/"),
-          "severity" => sev,
-          "labels" => labels,
-          "count" => length(group)
-        }
-      end)
-
-    by_label
   end
 
   defp now_ms, do: System.system_time(:millisecond)

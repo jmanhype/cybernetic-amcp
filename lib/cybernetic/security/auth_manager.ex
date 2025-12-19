@@ -118,15 +118,16 @@ defmodule Cybernetic.Security.AuthManager do
     case :ets.lookup(:auth_sessions, token) do
       [{^token, session}] ->
         if DateTime.compare(DateTime.utc_now(), session.expires_at) == :lt do
-          {:ok, %{
-            user_id: session.user_id,
-            roles: session.roles,
-            permissions: expand_permissions(session.roles),
-            metadata: %{
-              username: session.username,
-              auth_method: :jwt
-            }
-          }}
+          {:ok,
+           %{
+             user_id: session.user_id,
+             roles: session.roles,
+             permissions: expand_permissions(session.roles),
+             metadata: %{
+               username: session.username,
+               auth_method: :jwt
+             }
+           }}
         else
           # Expired - need GenServer to delete from ETS
           GenServer.call(__MODULE__, {:validate_expired_token, token})

@@ -18,6 +18,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   """
 
   use GenServer
+  import Bitwise
   require Logger
 
   alias Cybernetic.Content.SemanticContainer
@@ -35,6 +36,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
           id: String.t(),
           status: :success | :failed | :skipped,
           container_id: String.t() | nil,
+          bytes_ingested: non_neg_integer(),
           error: term() | nil,
           duration_ms: non_neg_integer()
         }
@@ -252,7 +254,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
           server = self()
 
           Task.start(fn ->
-            result = run_pipeline(job.source, job.tenant_id, job.options, new_state)
+            result = run_pipeline(job.source, job.tenant_id, job.options, new_state, job_id)
             send(server, {:job_completed, job_id, result})
           end)
 
@@ -322,8 +324,12 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   @spec run_pipeline(source(), String.t(), keyword(), map()) :: pipeline_result()
   defp run_pipeline(source, tenant_id, opts, state) do
+    run_pipeline(source, tenant_id, opts, state, generate_job_id())
+  end
+
+  @spec run_pipeline(source(), String.t(), keyword(), map(), String.t()) :: pipeline_result()
+  defp run_pipeline(source, tenant_id, opts, state, job_id) do
     start_time = System.monotonic_time(:millisecond)
-    job_id = generate_job_id()
 
     result =
       with {:ok, content, content_type} <- stage_fetch(source),
@@ -339,6 +345,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
           id: job_id,
           status: :success,
           container_id: container.id,
+          bytes_ingested: byte_size(normalized),
           error: nil,
           duration_ms: System.monotonic_time(:millisecond) - start_time
         }
@@ -348,6 +355,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
             id: job_id,
             status: :skipped,
             container_id: nil,
+            bytes_ingested: 0,
             error: reason,
             duration_ms: System.monotonic_time(:millisecond) - start_time
           }
@@ -359,6 +367,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
             id: job_id,
             status: :failed,
             container_id: nil,
+            bytes_ingested: 0,
             error: reason,
             duration_ms: System.monotonic_time(:millisecond) - start_time
           }
@@ -369,8 +378,14 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   # Stage 1: Fetch
   @spec stage_fetch(source()) :: {:ok, binary(), String.t()} | {:error, term()}
-  defp stage_fetch(%{content: content}) when is_binary(content) and byte_size(content) > 0 do
-    content_type = Cybernetic.Storage.ContentType.detect(content, "application/octet-stream")
+  defp stage_fetch(%{content: content} = source)
+       when is_binary(content) and byte_size(content) > 0 do
+    content_type =
+      case Map.get(source, :content_type) do
+        type when is_binary(type) and type != "" -> type
+        _ -> Cybernetic.Storage.ContentType.detect(content, "application/octet-stream")
+      end
+
     {:ok, content, content_type}
   end
 
@@ -436,32 +451,77 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   end
 
   @blocked_hosts ["localhost", "127.0.0.1", "0.0.0.0", "::1", "169.254.169.254"]
-  @blocked_prefixes [
-    "10.",
-    "172.16.",
-    "172.17.",
-    "172.18.",
-    "172.19.",
-    "172.20.",
-    "172.21.",
-    "172.22.",
-    "172.23.",
-    "172.24.",
-    "172.25.",
-    "172.26.",
-    "172.27.",
-    "172.28.",
-    "172.29.",
-    "172.30.",
-    "172.31.",
-    "192.168."
+  @blocked_suffixes [".local", ".internal", ".localhost"]
+
+  # Private/reserved IP ranges (RFC 1918, loopback, link-local, metadata)
+  @private_ranges [
+    # 10.0.0.0/8
+    {{10, 0, 0, 0}, {10, 255, 255, 255}},
+    # 172.16.0.0/12
+    {{172, 16, 0, 0}, {172, 31, 255, 255}},
+    # 192.168.0.0/16
+    {{192, 168, 0, 0}, {192, 168, 255, 255}},
+    # 127.0.0.0/8 (loopback)
+    {{127, 0, 0, 0}, {127, 255, 255, 255}},
+    # 169.254.0.0/16 (link-local, includes cloud metadata 169.254.169.254)
+    {{169, 254, 0, 0}, {169, 254, 255, 255}},
+    # 0.0.0.0/8 (current network)
+    {{0, 0, 0, 0}, {0, 255, 255, 255}}
   ]
 
   @spec blocked_host?(String.t()) :: boolean()
   defp blocked_host?(host) do
-    host in @blocked_hosts or
-      Enum.any?(@blocked_prefixes, &String.starts_with?(host, &1))
+    # Quick string checks first
+    cond do
+      host in @blocked_hosts ->
+        true
+
+      Enum.any?(@blocked_suffixes, &String.ends_with?(host, &1)) ->
+        true
+
+      true ->
+        # DNS resolution check - resolve and verify IPs are not private
+        # This catches "evil.com" → "10.0.0.1" SSRF attacks
+        resolve_and_check_private(host)
+    end
   end
+
+  defp resolve_and_check_private(host) do
+    case :inet.getaddr(String.to_charlist(host), :inet) do
+      {:ok, ip_tuple} ->
+        ip_in_private_range?(ip_tuple)
+
+      {:error, _} ->
+        # Try IPv6
+        case :inet.getaddr(String.to_charlist(host), :inet6) do
+          {:ok, ip_tuple} ->
+            ipv6_is_private?(ip_tuple)
+
+          {:error, _} ->
+            # Can't resolve in prod = block as suspicious
+            Application.get_env(:cybernetic, :environment, :prod) == :prod
+        end
+    end
+  end
+
+  defp ip_in_private_range?({a, b, c, d}) do
+    Enum.any?(@private_ranges, fn {{start_a, start_b, start_c, start_d}, {end_a, end_b, end_c, end_d}} ->
+      a >= start_a and a <= end_a and
+        b >= start_b and b <= end_b and
+        c >= start_c and c <= end_c and
+        d >= start_d and d <= end_d
+    end)
+  end
+
+  # IPv6 private ranges
+  defp ipv6_is_private?({0, 0, 0, 0, 0, 0, 0, 1}), do: true  # ::1 (loopback)
+  defp ipv6_is_private?({0, 0, 0, 0, 0, 0xFFFF, hi, lo}) do
+    # IPv4-mapped IPv6 (::ffff:x.x.x.x) - check embedded IPv4
+    ip_in_private_range?({hi >>> 8, hi &&& 0xFF, lo >>> 8, lo &&& 0xFF})
+  end
+  defp ipv6_is_private?({a, _, _, _, _, _, _, _}) when a >= 0xfe80 and a <= 0xfebf, do: true  # fe80::/10 link-local
+  defp ipv6_is_private?({a, _, _, _, _, _, _, _}) when a >= 0xfc00 and a <= 0xfdff, do: true  # fc00::/7 unique local
+  defp ipv6_is_private?(_), do: false
 
   @spec get_content_type_header([{String.t(), String.t()}]) :: String.t()
   defp get_content_type_header(headers) do
@@ -616,11 +676,24 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   end
 
   @spec update_stats(map(), pipeline_result()) :: map()
-  defp update_stats(state, %{status: :success, duration_ms: duration}) do
+  defp update_stats(state, %{status: :success, duration_ms: duration} = result) do
+    old_total = state.stats.total_ingested
+    new_total = old_total + 1
+    old_avg = state.stats.avg_duration_ms
+    bytes_ingested = Map.get(result, :bytes_ingested, 0)
+
+    new_avg_duration =
+      if old_total == 0 do
+        duration
+      else
+        div(old_avg * old_total + duration, new_total)
+      end
+
     new_stats =
       state.stats
-      |> Map.update!(:total_ingested, &(&1 + 1))
-      |> update_avg_duration(duration)
+      |> Map.put(:total_ingested, new_total)
+      |> Map.put(:avg_duration_ms, new_avg_duration)
+      |> Map.update!(:total_bytes, &(&1 + bytes_ingested))
 
     %{state | stats: new_stats}
   end
@@ -631,21 +704,6 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   end
 
   defp update_stats(state, _), do: state
-
-  @spec update_avg_duration(map(), non_neg_integer()) :: map()
-  defp update_avg_duration(stats, new_duration) do
-    total = stats.total_ingested
-    old_avg = stats.avg_duration_ms
-
-    new_avg =
-      if total == 0 do
-        new_duration
-      else
-        div(old_avg * total + new_duration, total + 1)
-      end
-
-    %{stats | avg_duration_ms: new_avg}
-  end
 
   @spec emit_telemetry(atom(), integer(), map()) :: :ok
   defp emit_telemetry(event, start_time, metadata) do

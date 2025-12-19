@@ -483,7 +483,7 @@ defmodule Cybernetic.Content.Buckets.CBCP do
   @impl true
   def handle_info(:cleanup, state) do
     Logger.debug("Running CBCP cleanup")
-    # TODO: Apply retention policies, clean up deleted buckets
+    state = apply_retention_policies(state)
     schedule_cleanup()
     {:noreply, state}
   end
@@ -576,7 +576,8 @@ defmodule Cybernetic.Content.Buckets.CBCP do
       min_retention_days: nil,
       max_retention_days: nil,
       auto_archive_days: nil,
-      auto_delete_days: nil
+      # Default to eventually hard-deleting archived/deleted buckets to avoid unbounded ETS growth.
+      auto_delete_days: 30
     }
   end
 
@@ -642,6 +643,87 @@ defmodule Cybernetic.Content.Buckets.CBCP do
 
   defp schedule_cleanup do
     Process.send_after(self(), :cleanup, @cleanup_interval)
+  end
+
+  @spec apply_retention_policies(map()) :: map()
+  defp apply_retention_policies(state) do
+    now = DateTime.utc_now()
+
+    {archived_count, deleted_count} =
+      :ets.foldl(
+        fn {bucket_id, bucket}, {archived_acc, deleted_acc} ->
+          {archived_delta, deleted_delta} = apply_retention_policy(state, bucket_id, bucket, now)
+          {archived_acc + archived_delta, deleted_acc + deleted_delta}
+        end,
+        {0, 0},
+        state.buckets
+      )
+
+    if archived_count > 0 or deleted_count > 0 do
+      Logger.info("CBCP retention cleanup", archived: archived_count, deleted: deleted_count)
+
+      :telemetry.execute(
+        @telemetry ++ [:cleanup],
+        %{archived: archived_count, deleted: deleted_count},
+        %{timestamp: now}
+      )
+    end
+
+    state
+  end
+
+  @spec apply_retention_policy(map(), bucket_id(), bucket(), DateTime.t()) ::
+          {non_neg_integer(), non_neg_integer()}
+  defp apply_retention_policy(state, bucket_id, bucket, now) do
+    policy = bucket.retention_policy || default_retention_policy()
+    auto_archive_days = Map.get(policy, :auto_archive_days)
+    auto_delete_days = Map.get(policy, :auto_delete_days)
+
+    cond do
+      bucket.status == :active and is_integer(auto_archive_days) and auto_archive_days >= 0 and
+          older_than_days?(bucket.updated_at, now, auto_archive_days) ->
+        archived_bucket = %{
+          bucket
+          | status: :archived,
+            archived_at: now,
+            updated_at: now
+        }
+
+        :ets.insert(state.buckets, {bucket_id, archived_bucket})
+        emit_telemetry(:auto_archive, %{bucket_id: bucket_id})
+        {1, 0}
+
+      bucket.status == :archived and is_integer(auto_delete_days) and auto_delete_days >= 0 and
+          older_than_days?(bucket.archived_at || bucket.updated_at, now, auto_delete_days) ->
+        hard_delete_bucket(state, bucket_id, bucket)
+        emit_telemetry(:auto_delete, %{bucket_id: bucket_id, prior_status: :archived})
+        {0, 1}
+
+      bucket.status == :deleted and is_integer(auto_delete_days) and auto_delete_days >= 0 and
+          older_than_days?(bucket.updated_at, now, auto_delete_days) ->
+        hard_delete_bucket(state, bucket_id, bucket)
+        emit_telemetry(:auto_delete, %{bucket_id: bucket_id, prior_status: :deleted})
+        {0, 1}
+
+      true ->
+        {0, 0}
+    end
+  end
+
+  @spec hard_delete_bucket(map(), bucket_id(), bucket()) :: :ok
+  defp hard_delete_bucket(state, bucket_id, bucket) do
+    :ets.delete(state.buckets, bucket_id)
+    :ets.match_delete(state.tenant_index, {bucket.tenant_id, bucket_id})
+    :ets.match_delete(state.container_index, {bucket_id, :_})
+    :ok
+  end
+
+  @spec older_than_days?(DateTime.t() | nil, DateTime.t(), non_neg_integer()) :: boolean()
+  defp older_than_days?(nil, _now, _days), do: false
+
+  defp older_than_days?(%DateTime{} = timestamp, %DateTime{} = now, days) when is_integer(days) do
+    seconds = days * 86_400
+    DateTime.diff(now, timestamp, :second) >= seconds
   end
 
   @spec emit_telemetry(atom(), map()) :: :ok

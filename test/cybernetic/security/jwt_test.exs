@@ -76,8 +76,16 @@ defmodule Cybernetic.Security.JWTTest do
     test "rejects token with unsupported algorithm" do
       # Create a token with alg=ES512 which is not in default allowed list
       # We manually construct the token to test this
-      header = %{"alg" => "ES512", "typ" => "JWT"} |> Jason.encode!() |> Base.url_encode64(padding: false)
-      payload = %{"sub" => "test", "exp" => future_exp()} |> Jason.encode!() |> Base.url_encode64(padding: false)
+      header =
+        %{"alg" => "ES512", "typ" => "JWT"}
+        |> Jason.encode!()
+        |> Base.url_encode64(padding: false)
+
+      payload =
+        %{"sub" => "test", "exp" => future_exp()}
+        |> Jason.encode!()
+        |> Base.url_encode64(padding: false)
+
       # Fake signature - won't verify but should fail on alg check first
       token = "#{header}.#{payload}.fake-sig"
       assert {:error, {:unsupported_alg, "ES512"}} = JWT.verify(token)
@@ -232,12 +240,14 @@ defmodule Cybernetic.Security.JWTTest do
 
     test "rejects HS256 even with valid signature" do
       # Even a perfectly valid HS256 token should be rejected by verify_external
-      token = create_hs256_token(%{
-        "sub" => "user123",
-        "exp" => future_exp(),
-        "iss" => "https://auth.example.com",
-        "aud" => "my-api"
-      })
+      token =
+        create_hs256_token(%{
+          "sub" => "user123",
+          "exp" => future_exp(),
+          "iss" => "https://auth.example.com",
+          "aud" => "my-api"
+        })
+
       assert {:error, {:unsupported_alg, "HS256"}} = JWT.verify_external(token)
     end
   end

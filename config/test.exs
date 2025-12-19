@@ -20,6 +20,9 @@ config :cybernetic,
   enable_telemetry: false,
   enable_health_monitoring: false
 
+# Disable OpenTelemetry exporting in test to avoid external network dependencies.
+config :opentelemetry, traces_exporter: :none
+
 # Disable AMQP during tests
 config :cybernetic, :amqp, enabled: false
 

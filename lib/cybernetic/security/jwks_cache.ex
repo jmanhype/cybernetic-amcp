@@ -260,7 +260,8 @@ defmodule Cybernetic.Security.JWKSCache do
   end
 
   defp ip_in_private_range?({a, b, c, d} = ip) when is_tuple(ip) do
-    Enum.any?(@private_ranges, fn {{start_a, start_b, start_c, start_d}, {end_a, end_b, end_c, end_d}} ->
+    Enum.any?(@private_ranges, fn {{start_a, start_b, start_c, start_d},
+                                   {end_a, end_b, end_c, end_d}} ->
       a >= start_a and a <= end_a and
         b >= start_b and b <= end_b and
         c >= start_c and c <= end_c and
@@ -268,10 +269,14 @@ defmodule Cybernetic.Security.JWKSCache do
     end)
   end
 
-  defp ipv6_is_private?({0, 0, 0, 0, 0, 0, 0, 1}), do: true  # ::1 (loopback)
-  defp ipv6_is_private?({0xfe80, _, _, _, _, _, _, _}), do: true  # fe80::/10 (link-local)
-  defp ipv6_is_private?({0xfc00, _, _, _, _, _, _, _}), do: true  # fc00::/7 (unique local)
-  defp ipv6_is_private?({0xfd00, _, _, _, _, _, _, _}), do: true  # fd00::/8 (unique local)
+  # ::1 (loopback)
+  defp ipv6_is_private?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
+  # fe80::/10 (link-local)
+  defp ipv6_is_private?({0xFE80, _, _, _, _, _, _, _}), do: true
+  # fc00::/7 (unique local)
+  defp ipv6_is_private?({0xFC00, _, _, _, _, _, _, _}), do: true
+  # fd00::/8 (unique local)
+  defp ipv6_is_private?({0xFD00, _, _, _, _, _, _, _}), do: true
   defp ipv6_is_private?(_), do: false
 
   defp decode_json(body) when is_binary(body) do

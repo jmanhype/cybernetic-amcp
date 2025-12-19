@@ -409,36 +409,48 @@ defmodule Cybernetic.Capabilities.Planner.Collaboration do
 
   @spec broadcast_event(String.t(), map()) :: :ok
   defp broadcast_event(topic, payload) do
-    try do
-      PubSub.broadcast(pubsub_module(), topic, {:planner_event, topic, payload})
-    rescue
-      e ->
-        Logger.warning("PubSub broadcast failed",
-          topic: topic,
-          error: Exception.message(e)
-        )
-
-        :telemetry.execute(
-          @telemetry ++ [:broadcast_failed],
-          %{count: 1},
-          %{topic: topic, error: :exception}
-        )
+    # Check if PubSub is available before attempting broadcast
+    case Process.whereis(pubsub_module()) do
+      nil ->
+        # PubSub not running - silently skip in test, debug log otherwise
+        if Application.get_env(:cybernetic, :environment, :prod) != :test do
+          Logger.debug("PubSub not available, skipping broadcast", topic: topic)
+        end
 
         :ok
-    catch
-      :exit, reason ->
-        Logger.warning("PubSub not available",
-          topic: topic,
-          reason: inspect(reason)
-        )
 
-        :telemetry.execute(
-          @telemetry ++ [:broadcast_failed],
-          %{count: 1},
-          %{topic: topic, error: :exit}
-        )
+      _pid ->
+        try do
+          PubSub.broadcast(pubsub_module(), topic, {:planner_event, topic, payload})
+        rescue
+          e ->
+            Logger.warning("PubSub broadcast failed",
+              topic: topic,
+              error: Exception.message(e)
+            )
 
-        :ok
+            :telemetry.execute(
+              @telemetry ++ [:broadcast_failed],
+              %{count: 1},
+              %{topic: topic, error: :exception}
+            )
+
+            :ok
+        catch
+          :exit, reason ->
+            Logger.debug("PubSub broadcast exited",
+              topic: topic,
+              reason: inspect(reason)
+            )
+
+            :telemetry.execute(
+              @telemetry ++ [:broadcast_failed],
+              %{count: 1},
+              %{topic: topic, error: :exit}
+            )
+
+            :ok
+        end
     end
   end
 

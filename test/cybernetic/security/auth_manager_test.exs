@@ -163,6 +163,7 @@ defmodule Cybernetic.Security.AuthManagerTest do
 
       assert {:ok, _} = AuthManager.validate_token(token)
       assert :ok = AuthManager.revoke(token)
+
       # After revoke, session token (HS256) is not in ETS, so fallback rejects it as session_expired
       assert {:error, :session_expired} = AuthManager.validate_token(token)
     end
