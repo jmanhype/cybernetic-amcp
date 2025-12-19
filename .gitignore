@@ -33,6 +33,8 @@ Thumbs.db
 # AI Assistant files
 .claude/hooks/logs/
 .claude/settings.local.json
+.claude/checkpoints/
+.claude-flow/
 .vincent/
 
 # Logs

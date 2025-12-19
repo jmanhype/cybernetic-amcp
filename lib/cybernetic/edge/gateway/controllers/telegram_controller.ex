@@ -98,7 +98,8 @@ defmodule Cybernetic.Edge.Gateway.TelegramController do
     end
   rescue
     # If RateLimiter is not running, allow request
-    _ -> :ok
+    ArgumentError -> :ok
+    ErlangError -> :ok
   end
 
   # Process the validated update
@@ -160,16 +161,23 @@ defmodule Cybernetic.Edge.Gateway.TelegramController do
     )
 
     # Enqueue command processing job
-    %{
-      type: "telegram_command",
-      command: command,
-      args: args,
-      chat_id: chat_id,
-      user_id: user_id,
-      message: message
-    }
-    |> Cybernetic.Workers.TelegramDispatcher.new()
-    |> Oban.insert()
+    job =
+      %{
+        type: "telegram_command",
+        command: command,
+        args: args,
+        chat_id: chat_id,
+        user_id: user_id,
+        message: message
+      }
+      |> Cybernetic.Workers.TelegramDispatcher.new()
+
+    case Oban.insert(job) do
+      {:ok, _job} -> {:ok, :command_enqueued}
+      {:error, changeset} ->
+        Logger.error("Failed to enqueue Telegram command job", error: inspect(changeset))
+        {:error, :enqueue_failed}
+    end
   end
 
   defp handle_message(message) do
@@ -197,15 +205,22 @@ defmodule Cybernetic.Edge.Gateway.TelegramController do
       user_id: user_id
     )
 
-    %{
-      type: "telegram_callback",
-      callback_id: callback_id,
-      data: data,
-      user_id: user_id,
-      callback_query: callback_query
-    }
-    |> Cybernetic.Workers.TelegramDispatcher.new()
-    |> Oban.insert()
+    job =
+      %{
+        type: "telegram_callback",
+        callback_id: callback_id,
+        data: data,
+        user_id: user_id,
+        callback_query: callback_query
+      }
+      |> Cybernetic.Workers.TelegramDispatcher.new()
+
+    case Oban.insert(job) do
+      {:ok, _job} -> {:ok, :callback_enqueued}
+      {:error, changeset} ->
+        Logger.error("Failed to enqueue Telegram callback job", error: inspect(changeset))
+        {:error, :enqueue_failed}
+    end
   end
 
   # Handle inline queries
@@ -279,14 +294,19 @@ defmodule Cybernetic.Edge.Gateway.TelegramController do
   end
 
   # Publish event to PubSub
+  # SECURITY: Always include tenant_id to prevent cross-tenant leakage via SSE
   @spec publish_event(update(), {:ok, term()} | {:error, term()}) :: :ok
   defp publish_event(update, result) do
     event_type = get_update_type(update)
+    chat_id = extract_chat_id(update)
 
     Phoenix.PubSub.broadcast(@pubsub, "events:telegram", {
       :event,
       "telegram.#{event_type}",
       %{
+        # Use chat_id as tenant to scope Telegram events
+        # This prevents events from leaking to other tenants via SSE
+        tenant_id: tenant_for_chat(chat_id),
         update_id: update["update_id"],
         type: event_type,
         result: elem(result, 0),
@@ -294,6 +314,11 @@ defmodule Cybernetic.Edge.Gateway.TelegramController do
       }
     })
   end
+
+  # Map Telegram chat_id to a tenant_id for isolation
+  @spec tenant_for_chat(chat_id() | nil) :: String.t()
+  defp tenant_for_chat(nil), do: "__system_telegram__"
+  defp tenant_for_chat(chat_id), do: "telegram:#{chat_id}"
 
   # Get webhook secret from config
   @spec get_webhook_secret() :: String.t() | nil

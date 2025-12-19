@@ -66,7 +66,7 @@ defmodule Cybernetic.Edge.Gateway.Plugs.OIDC do
     end
   rescue
     # Handle specific known exceptions to avoid masking programming errors
-    e in [ArgumentError, RuntimeError, ErlangError] ->
+    e in [ArgumentError] ->
       Logger.warning("Authentication raised exception", error: inspect(e))
       {:error, {:exception, e}}
   end
@@ -82,15 +82,16 @@ defmodule Cybernetic.Edge.Gateway.Plugs.OIDC do
     env = Application.get_env(:cybernetic, :environment, :prod)
 
     if env == :prod do
-      # In production, require explicit tenant_id claim
-      # Falling back to user_id could cause cross-tenant data access
-      Logger.warning("Auth context missing tenant_id in production, using user_id",
+      # In production, require explicit tenant_id claim - no fallback to user_id
+      # This prevents cross-tenant data access when tenant_id is missing
+      Logger.error("Auth context missing tenant_id in production - rejecting",
         user_id: user_id
       )
+      {:error, :missing_tenant_context}
+    else
+      # In dev/test, fall back to user_id for convenience
+      {:ok, user_id}
     end
-
-    # Fall back to user_id (single-tenant mode or legacy)
-    {:ok, user_id}
   end
 
   defp tenant_id_from_auth(_) do
