@@ -264,12 +264,20 @@ defmodule Cybernetic.Intelligence.Vectors.Quantizer do
   defp select_strategy(strategy, _dim, _target_compression), do: strategy
 
   defp train_pq(vectors, dim, target_compression, opts) do
-    # Calculate m based on target compression
+    # Calculate m based on target compression, unless explicitly provided
     # compression = dim * 4 / m
     # m = dim * 4 / compression
-    default_m = max(8, div(dim * 4, target_compression))
-    # Ensure m divides dim evenly
-    m = find_divisor(dim, default_m)
+    m =
+      case Keyword.get(opts, :m) do
+        nil ->
+          default_m = max(8, div(dim * 4, target_compression))
+          # Ensure m divides dim evenly
+          find_divisor(dim, default_m)
+
+        explicit_m ->
+          explicit_m
+      end
+
     k = Keyword.get(opts, :k, 256)
     iterations = Keyword.get(opts, :iterations, 20)
 

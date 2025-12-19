@@ -8,12 +8,11 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
 
   ## Syntax
 
-      policy "can_edit_document" do
-        require :authenticated
-        require role: :editor
-        require resource.owner_id == context.user_id
-        allow when: resource.status in [:draft, :review]
-      end
+      # Line-based DSL (supported):
+      require :authenticated
+      require role: :editor
+      require resource.owner_id == context.user_id
+      allow when: resource.status in [:draft, :review]
 
   ## Operators
 
@@ -28,7 +27,22 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
   - `resource` - The resource being accessed
   - `action` - The action being performed
   - `environment` - Environment variables (time, ip, etc.)
+
+  ## Security
+
+  Atom values are restricted to a known allowlist to prevent atom table exhaustion.
+  Unknown atoms are kept as strings and matched at runtime.
   """
+
+  # Allowlist of atoms that can be created from DSL input
+  # All other values stay as strings to prevent atom table exhaustion (DoS)
+  @allowed_atoms ~w(
+    authenticated admin editor viewer operator guest
+    draft review published archived deleted
+    read write delete create update execute
+    context resource action environment
+    true false nil
+  )a
 
   @type ast :: term()
   @type policy :: %{
@@ -210,6 +224,10 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
       expr == ":authenticated" ->
         {:require, :authenticated}
 
+      String.starts_with?(expr, "role in ") ->
+        [_left, right] = String.split(expr, " in ", parts: 2)
+        {:require, {:any_role, parse_list(right)}}
+
       String.starts_with?(expr, "role:") ->
         role =
           expr
@@ -217,7 +235,7 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
           |> String.trim()
           |> parse_atom_or_string()
 
-        {:require, {:eq, :role, role}}
+        {:require, {:role, role}}
 
       String.contains?(expr, " in ") ->
         [left, right] = String.split(expr, " in ", parts: 2)
@@ -277,6 +295,27 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
       String.starts_with?(expr, "not ") ->
         {:not, parse_condition(String.replace_prefix(expr, "not ", ""))}
 
+      String.starts_with?(expr, "present? ") ->
+        path = String.replace_prefix(expr, "present? ", "") |> String.trim()
+        {:present, parse_path(path)}
+
+      String.starts_with?(expr, "blank? ") ->
+        path = String.replace_prefix(expr, "blank? ", "") |> String.trim()
+        {:blank, parse_path(path)}
+
+      String.starts_with?(expr, "role in ") ->
+        [_left, right] = String.split(expr, " in ", parts: 2)
+        {:any_role, parse_list(right)}
+
+      String.starts_with?(expr, "role:") ->
+        role =
+          expr
+          |> String.replace_prefix("role:", "")
+          |> String.trim()
+          |> parse_atom_or_string()
+
+        {:role, role}
+
       String.contains?(expr, " in ") ->
         [left, right] = String.split(expr, " in ", parts: 2)
         {:in, parse_path(left), parse_list(right)}
@@ -332,7 +371,8 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
 
     cond do
       String.starts_with?(str, ":") ->
-        String.replace_prefix(str, ":", "") |> String.to_atom()
+        # Use safe_to_atom to prevent atom DoS
+        String.replace_prefix(str, ":", "") |> safe_to_atom()
 
       String.starts_with?(str, "\"") and String.ends_with?(str, "\"") ->
         String.slice(str, 1..-2//1)
@@ -367,10 +407,20 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
     str = String.trim(str)
 
     if String.starts_with?(str, ":") do
-      String.replace_prefix(str, ":", "") |> String.to_atom()
+      # Use safe_to_atom to prevent atom DoS
+      String.replace_prefix(str, ":", "") |> safe_to_atom()
     else
       str
     end
+  end
+
+  # Convert string to atom only if in allowlist, otherwise keep as string
+  # This prevents atom table exhaustion attacks
+  defp safe_to_atom(str) when is_binary(str) do
+    atom = String.to_existing_atom(str)
+    if atom in @allowed_atoms, do: atom, else: str
+  rescue
+    ArgumentError -> str
   end
 
   defp validate_rules(rules) do
@@ -406,8 +456,13 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
   defp validate_rule(rule), do: {:error, {:invalid_rule, rule}}
 
   defp format_rule({:require, :authenticated}), do: "require :authenticated"
+  defp format_rule({:require, {:role, role}}), do: "require role: #{inspect(role)}"
+  defp format_rule({:require, {:any_role, roles}}), do: "require role in #{inspect(roles)}"
   defp format_rule({:require, {:eq, :role, role}}), do: "require role: #{inspect(role)}"
-  defp format_rule({:require, {:in, path, values}}), do: "require #{format_path(path)} in #{inspect(values)}"
+
+  defp format_rule({:require, {:in, path, values}}),
+    do: "require #{format_path(path)} in #{inspect(values)}"
+
   defp format_rule({:require, condition}), do: "require #{format_condition(condition)}"
   defp format_rule({:allow, true}), do: "allow"
   defp format_rule({:allow, condition}), do: "allow when: #{format_condition(condition)}"
@@ -417,9 +472,17 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
   defp format_path(path) when is_list(path), do: Enum.join(path, ".")
   defp format_path(path), do: to_string(path)
 
-  defp format_condition({:and, conditions}), do: Enum.map(conditions, &format_condition/1) |> Enum.join(" and ")
-  defp format_condition({:or, conditions}), do: Enum.map(conditions, &format_condition/1) |> Enum.join(" or ")
+  defp format_condition({:and, conditions}),
+    do: Enum.map(conditions, &format_condition/1) |> Enum.join(" and ")
+
+  defp format_condition({:or, conditions}),
+    do: Enum.map(conditions, &format_condition/1) |> Enum.join(" or ")
+
   defp format_condition({:not, condition}), do: "not #{format_condition(condition)}"
+  defp format_condition({:role, role}), do: "role: #{inspect(role)}"
+  defp format_condition({:any_role, roles}), do: "role in #{inspect(roles)}"
+  defp format_condition({:present, path}), do: "present? #{format_path(path)}"
+  defp format_condition({:blank, path}), do: "blank? #{format_path(path)}"
   defp format_condition({:eq, left, right}), do: "#{format_path(left)} == #{inspect(right)}"
   defp format_condition({:neq, left, right}), do: "#{format_path(left)} != #{inspect(right)}"
   defp format_condition({:in, left, right}), do: "#{format_path(left)} in #{inspect(right)}"

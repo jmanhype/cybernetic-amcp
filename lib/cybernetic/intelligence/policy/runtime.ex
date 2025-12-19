@@ -157,14 +157,24 @@ defmodule Cybernetic.Intelligence.Policy.Runtime do
   end
 
   defp evaluate_condition({:and, conditions}, eval_context, depth) do
-    Enum.all?(conditions, fn cond ->
-      evaluate_condition(cond, eval_context, depth + 1) == true
+    # Evaluate all conditions, propagating errors
+    Enum.reduce_while(conditions, true, fn cond, _acc ->
+      case evaluate_condition(cond, eval_context, depth + 1) do
+        true -> {:cont, true}
+        false -> {:halt, false}
+        {:error, _} = error -> {:halt, error}
+      end
     end)
   end
 
   defp evaluate_condition({:or, conditions}, eval_context, depth) do
-    Enum.any?(conditions, fn cond ->
-      evaluate_condition(cond, eval_context, depth + 1) == true
+    # Evaluate conditions until one is true, propagating errors
+    Enum.reduce_while(conditions, false, fn cond, _acc ->
+      case evaluate_condition(cond, eval_context, depth + 1) do
+        true -> {:halt, true}
+        false -> {:cont, false}
+        {:error, _} = error -> {:halt, error}
+      end
     end)
   end
 
@@ -176,16 +186,27 @@ defmodule Cybernetic.Intelligence.Policy.Runtime do
     end
   end
 
+  defp evaluate_condition({:role, required_role}, %{context: context}, _depth) do
+    roles = Map.get(context, :roles, []) || []
+    role_match?(required_role, roles)
+  end
+
+  defp evaluate_condition({:any_role, required_roles}, %{context: context}, _depth)
+       when is_list(required_roles) do
+    roles = Map.get(context, :roles, []) || []
+    Enum.any?(required_roles, &role_match?(&1, roles))
+  end
+
   defp evaluate_condition({:eq, left, right}, eval_context, depth) do
     left_val = resolve_value(left, eval_context, depth + 1)
     right_val = resolve_value(right, eval_context, depth + 1)
-    left_val == right_val
+    comparable(left_val) == comparable(right_val)
   end
 
   defp evaluate_condition({:neq, left, right}, eval_context, depth) do
     left_val = resolve_value(left, eval_context, depth + 1)
     right_val = resolve_value(right, eval_context, depth + 1)
-    left_val != right_val
+    comparable(left_val) != comparable(right_val)
   end
 
   defp evaluate_condition({:gt, left, right}, eval_context, depth) do
@@ -217,9 +238,15 @@ defmodule Cybernetic.Intelligence.Policy.Runtime do
     right_val = resolve_value(right, eval_context, depth + 1)
 
     cond do
-      is_list(right_val) -> left_val in right_val
-      is_map(right_val) -> Map.has_key?(right_val, left_val)
-      true -> false
+      is_list(right_val) ->
+        left = comparable(left_val)
+        Enum.any?(right_val, fn v -> comparable(v) == left end)
+
+      is_map(right_val) ->
+        Map.has_key?(right_val, left_val)
+
+      true ->
+        false
     end
   end
 
@@ -234,12 +261,35 @@ defmodule Cybernetic.Intelligence.Policy.Runtime do
   end
 
   defp evaluate_condition(atom, eval_context, _depth) when is_atom(atom) do
-    # Check if atom is a role
     roles = get_in(eval_context, [:context, :roles]) || []
-    atom in roles
+    role_match?(atom, roles)
   end
 
   defp evaluate_condition(_, _, _), do: false
+
+  defp role_match?(required_role, roles) when is_list(roles) do
+    required = role_to_string(required_role)
+
+    if is_binary(required) and required != "" do
+      Enum.any?(roles, fn role ->
+        case role_to_string(role) do
+          nil -> false
+          role_str -> String.downcase(role_str) == String.downcase(required)
+        end
+      end)
+    else
+      false
+    end
+  end
+
+  defp role_to_string(role) when is_atom(role), do: Atom.to_string(role)
+  defp role_to_string(role) when is_binary(role), do: role
+  defp role_to_string(_role), do: nil
+
+  # Normalize atoms and strings for comparison (without creating new atoms).
+  defp comparable(value) when is_atom(value), do: Atom.to_string(value)
+  defp comparable(value) when is_binary(value), do: value
+  defp comparable(value), do: value
 
   # Value resolution
 
@@ -256,8 +306,12 @@ defmodule Cybernetic.Intelligence.Policy.Runtime do
     # Could be a path or a literal list
     case values do
       [first | _] when is_atom(first) or is_binary(first) ->
-        # Treat as path
-        resolve_path(values, eval_context, depth)
+        # Treat as path only when the root is a known context variable
+        if root_path_segment?(first) do
+          resolve_path(values, eval_context, depth)
+        else
+          Enum.map(values, &resolve_value(&1, eval_context, depth + 1))
+        end
 
       _ ->
         # Literal list
@@ -306,6 +360,16 @@ defmodule Cybernetic.Intelligence.Policy.Runtime do
   rescue
     ArgumentError -> key
   end
+
+  defp root_path_segment?(:context), do: true
+  defp root_path_segment?(:resource), do: true
+  defp root_path_segment?(:action), do: true
+  defp root_path_segment?(:environment), do: true
+  defp root_path_segment?("context"), do: true
+  defp root_path_segment?("resource"), do: true
+  defp root_path_segment?("action"), do: true
+  defp root_path_segment?("environment"), do: true
+  defp root_path_segment?(_), do: false
 
   # WASM evaluation (placeholder - requires Wasmex)
 

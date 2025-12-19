@@ -144,7 +144,9 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
     Logger.info("Ingest Pipeline starting")
 
     {:ok, task_supervisor} =
-      Task.Supervisor.start_link(max_children: Keyword.get(opts, :max_concurrent, @max_concurrent))
+      Task.Supervisor.start_link(
+        max_children: Keyword.get(opts, :max_concurrent, @max_concurrent)
+      )
 
     state = %{
       jobs: %{},
@@ -467,8 +469,11 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   defp failed_result(job_id, job, error) do
     duration_ms =
       case job.started_at do
-        %DateTime{} = started_at -> max(0, DateTime.diff(DateTime.utc_now(), started_at, :millisecond))
-        _ -> 0
+        %DateTime{} = started_at ->
+          max(0, DateTime.diff(DateTime.utc_now(), started_at, :millisecond))
+
+        _ ->
+          0
       end
 
     %{

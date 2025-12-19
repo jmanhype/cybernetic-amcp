@@ -37,20 +37,28 @@ defmodule Cybernetic.Security.SSRF do
 
   @default_blocked_suffixes [".local", ".internal", ".localhost"]
 
-  # Private/reserved IPv4 ranges (RFC 1918, loopback, link-local)
+  # Private/reserved IPv4 ranges (RFC 1918, loopback, link-local, etc.)
   @private_ipv4_ranges [
-    # 10.0.0.0/8
+    # 10.0.0.0/8 (RFC 1918)
     {{10, 0, 0, 0}, {10, 255, 255, 255}},
-    # 172.16.0.0/12
+    # 172.16.0.0/12 (RFC 1918)
     {{172, 16, 0, 0}, {172, 31, 255, 255}},
-    # 192.168.0.0/16
+    # 192.168.0.0/16 (RFC 1918)
     {{192, 168, 0, 0}, {192, 168, 255, 255}},
     # 127.0.0.0/8 (loopback)
     {{127, 0, 0, 0}, {127, 255, 255, 255}},
     # 169.254.0.0/16 (link-local, includes metadata 169.254.169.254)
     {{169, 254, 0, 0}, {169, 254, 255, 255}},
     # 0.0.0.0/8 (current network)
-    {{0, 0, 0, 0}, {0, 255, 255, 255}}
+    {{0, 0, 0, 0}, {0, 255, 255, 255}},
+    # 100.64.0.0/10 (carrier-grade NAT, RFC 6598)
+    {{100, 64, 0, 0}, {100, 127, 255, 255}},
+    # 198.18.0.0/15 (benchmarking, RFC 2544)
+    {{198, 18, 0, 0}, {198, 19, 255, 255}},
+    # 224.0.0.0/4 (multicast)
+    {{224, 0, 0, 0}, {239, 255, 255, 255}},
+    # 240.0.0.0/4 (reserved/experimental)
+    {{240, 0, 0, 0}, {255, 255, 255, 255}}
   ]
 
   @doc """
@@ -68,7 +76,8 @@ defmodule Cybernetic.Security.SSRF do
   - `:block_unresolvable_hosts` - when true, blocks hosts that don't resolve (fail-closed)
   - `:blocked_hosts` / `:blocked_suffixes` - override defaults
   """
-  @spec prepare_request(String.t(), keyword()) :: {:ok, prepared_request()} | {:error, prepare_error()}
+  @spec prepare_request(String.t(), keyword()) ::
+          {:ok, prepared_request()} | {:error, prepare_error()}
   def prepare_request(url, opts \\ [])
 
   def prepare_request(url, opts) when is_binary(url) do

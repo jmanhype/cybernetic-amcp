@@ -616,6 +616,7 @@ defmodule Cybernetic.Security.AuthManager do
     case System.get_env("CYBERNETIC_HMAC_SECRET") do
       nil ->
         env = Application.get_env(:cybernetic, :environment, :prod)
+
         if env == :prod do
           raise "CYBERNETIC_HMAC_SECRET is required in production"
         else

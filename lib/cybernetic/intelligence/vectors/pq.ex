@@ -58,6 +58,9 @@ defmodule Cybernetic.Intelligence.Vectors.PQ do
 
   `{:ok, codebook}` or `{:error, reason}`
   """
+  # PQ encodes one centroid index per byte, so k is limited to 256.
+  @max_k 256
+
   @spec train([vector()], keyword()) :: {:ok, codebook()} | {:error, term()}
   def train(vectors, opts \\ []) when is_list(vectors) and length(vectors) > 0 do
     m = Keyword.get(opts, :m, @default_m)
@@ -65,6 +68,19 @@ defmodule Cybernetic.Intelligence.Vectors.PQ do
     iterations = Keyword.get(opts, :iterations, @default_iterations)
     sample_size = Keyword.get(opts, :sample_size, @default_sample_size)
 
+    cond do
+      k < 2 ->
+        {:error, {:invalid_params, "k must be at least 2, got #{k}"}}
+
+      k > @max_k ->
+        {:error, {:invalid_params, "k must be <= #{@max_k}, got #{k}"}}
+
+      true ->
+        do_train(vectors, m, k, iterations, sample_size)
+    end
+  end
+
+  defp do_train(vectors, m, k, iterations, sample_size) do
     # Sample if needed
     training_vectors =
       if length(vectors) > sample_size do

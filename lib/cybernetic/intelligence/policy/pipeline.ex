@@ -203,8 +203,11 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
 
     result =
       case policies do
-        {:error, _} = error -> error
-        policies when is_list(policies) -> Runtime.evaluate_all(Enum.reverse(policies), eval_context, opts)
+        {:error, _} = error ->
+          error
+
+        policies when is_list(policies) ->
+          Runtime.evaluate_all(Enum.reverse(policies), eval_context, opts)
       end
 
     elapsed_us = System.monotonic_time(:microsecond) - start_time
