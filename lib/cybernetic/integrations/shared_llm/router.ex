@@ -62,7 +62,9 @@ defmodule Cybernetic.Integrations.SharedLLM.Router do
   Start the shared LLM router.
   """
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    _tenant_id = Keyword.fetch!(opts, :tenant_id)
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
   end
 
   @doc """
@@ -173,6 +175,28 @@ defmodule Cybernetic.Integrations.SharedLLM.Router do
 
       {:error, :rate_limited} ->
         {:reply, {:error, :rate_limited}, state}
+
+      {:error, :unknown_budget} ->
+        # Budget not configured for this tenant - allow but log
+        Logger.debug("No rate limit budget for tenant, allowing request")
+        # Check in-flight limit
+        if map_size(state.in_flight) >= state.config.max_in_flight do
+          {:reply, {:error, :too_many_requests}, state}
+        else
+          fingerprint = generate_fingerprint(operation, params)
+          case Map.get(state.in_flight, fingerprint) do
+            nil ->
+              process_request(state, fingerprint, tenant_id, operation, params, opts, from)
+
+            waiters ->
+              new_in_flight = Map.put(state.in_flight, fingerprint, [from | waiters])
+              new_stats = update_stat(state.stats, :deduplicated)
+              {:noreply, %{state | in_flight: new_in_flight, stats: new_stats}}
+          end
+        end
+
+      {:denied, _reason} ->
+        {:reply, {:error, :rate_limited}, state}
     end
   end
 
@@ -185,7 +209,7 @@ defmodule Cybernetic.Integrations.SharedLLM.Router do
         cache_hit_rate: calculate_hit_rate(state.stats)
       })
 
-    {:reply, {:ok, stats}, state}
+    {:reply, stats, state}
   end
 
   @impl true
@@ -196,12 +220,18 @@ defmodule Cybernetic.Integrations.SharedLLM.Router do
   @impl true
   def handle_call(:clear_cache, _from, state) do
     # Clear LLMCDN's internal cache (DeterministicCache is not used directly)
-    try do
-      LLMCDN.clear_cache()
-      {:reply, :ok, state}
-    rescue
-      _ -> {:reply, {:error, :cache_unavailable}, state}
-    end
+    # Use try/catch since GenServer.call exits if process not running
+    result =
+      try do
+        LLMCDN.clear_cache()
+        :ok
+      rescue
+        _ -> {:error, :cache_unavailable}
+      catch
+        :exit, _ -> {:error, :cache_unavailable}
+      end
+
+    {:reply, result, state}
   end
 
   @impl true
