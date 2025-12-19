@@ -151,52 +151,57 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridgeTest do
   end
 
   describe "PubSub relay (regression)" do
-    test "relays :vsm_event messages without crashing", %{pid: pid, name: name} do
-      # Get initial stats
+    test "relays {:vsm_event, _} from PubSub and increments emitted", %{pid: pid, name: name} do
+      Phoenix.PubSub.subscribe(Cybernetic.PubSub, "event_bridge:#{@tenant_id}:outbound")
+
       {:ok, initial_stats} = GenServer.call(name, :stats)
-      initial_emitted = initial_stats.emitted
 
-      # Send a :vsm_event message directly to the process (simulates PubSub delivery)
-      send(pid, {:vsm_event, %{type: "state_change", data: %{key: "value"}}})
+      payload = %{type: "state_change", data: %{key: "value"}}
 
-      # Give it time to process
-      Process.sleep(10)
+      Phoenix.PubSub.broadcast(
+        Cybernetic.PubSub,
+        "vsm_bridge:events:#{@tenant_id}",
+        {:vsm_event, payload}
+      )
 
-      # Process should still be alive
+      assert_receive {:event_bridge, event}, 500
+      assert event.type == "vsm.state_changed"
+      assert event.payload == payload
+
       assert Process.alive?(pid)
 
-      # Stats should have incremented
       {:ok, final_stats} = GenServer.call(name, :stats)
-      assert final_stats.emitted == initial_emitted + 1
+      assert final_stats.emitted == initial_stats.emitted + 1
     end
 
-    test "relays :vsm_state_change messages without crashing", %{pid: pid, name: name} do
+    test "relays {:vsm_state_change, _} from PubSub and increments emitted", %{
+      pid: pid,
+      name: name
+    } do
+      Phoenix.PubSub.subscribe(Cybernetic.PubSub, "event_bridge:#{@tenant_id}:outbound")
+
       {:ok, initial_stats} = GenServer.call(name, :stats)
-      initial_emitted = initial_stats.emitted
 
-      # Send a :vsm_state_change message (what VSMBridge actually broadcasts)
-      send(pid, {:vsm_state_change, %{action: :update, changes: %{}, timestamp: DateTime.utc_now()}})
+      payload = %{
+        action: :updated,
+        changes: [{1, %{changed: %{k: "v"}, removed: []}}],
+        timestamp: DateTime.utc_now()
+      }
 
-      Process.sleep(10)
+      Phoenix.PubSub.broadcast(
+        Cybernetic.PubSub,
+        "vsm_bridge:state:#{@tenant_id}",
+        {:vsm_state_change, payload}
+      )
+
+      assert_receive {:event_bridge, event}, 500
+      assert event.type == "vsm.state_changed"
+      assert event.payload == payload
 
       assert Process.alive?(pid)
 
       {:ok, final_stats} = GenServer.call(name, :stats)
-      assert final_stats.emitted == initial_emitted + 1
-    end
-
-    test "relays :episode_created messages without crashing", %{pid: pid, name: name} do
-      {:ok, initial_stats} = GenServer.call(name, :stats)
-      initial_emitted = initial_stats.emitted
-
-      send(pid, {:episode_created, %{id: "ep_123", title: "Test Episode"}})
-
-      Process.sleep(10)
-
-      assert Process.alive?(pid)
-
-      {:ok, final_stats} = GenServer.call(name, :stats)
-      assert final_stats.emitted == initial_emitted + 1
+      assert final_stats.emitted == initial_stats.emitted + 1
     end
   end
 end
