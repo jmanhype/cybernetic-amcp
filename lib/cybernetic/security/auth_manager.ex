@@ -174,7 +174,7 @@ defmodule Cybernetic.Security.AuthManager do
              permissions: expand_permissions(session.roles),
              metadata: %{
                username: session.username,
-               tenant_id: session.tenant_id,
+               tenant_id: Map.get(session, :tenant_id),
                auth_method: :jwt
              }
            }}
@@ -256,7 +256,7 @@ defmodule Cybernetic.Security.AuthManager do
             }
 
             :ets.insert(:auth_sessions, {jwt, session})
-            :ets.insert(:refresh_tokens, {refresh, user.id})
+            :ets.insert(:refresh_tokens, {refresh, {user.id, tenant_id}})
             # P1 Performance: Index by expiry for O(log n) cleanup
             expiry_key = {DateTime.to_unix(session.expires_at), jwt}
             :ets.insert(:auth_session_expiry, {expiry_key, refresh})
@@ -362,7 +362,7 @@ defmodule Cybernetic.Security.AuthManager do
   @impl true
   def handle_call({:refresh_token, refresh_token}, _from, state) do
     case :ets.lookup(:refresh_tokens, refresh_token) do
-      [{^refresh_token, user_id}] ->
+      [{^refresh_token, {user_id, tenant_id}}] ->
         # Generate new tokens
         user =
           Map.get(state.users_by_id, user_id) ||
@@ -377,12 +377,13 @@ defmodule Cybernetic.Security.AuthManager do
 
         # Update sessions
         :ets.delete(:refresh_tokens, refresh_token)
-        :ets.insert(:refresh_tokens, {new_refresh, user_id})
+        :ets.insert(:refresh_tokens, {new_refresh, {user_id, tenant_id}})
 
         session = %{
           user_id: user.id,
           username: user.username,
           roles: user.roles,
+          tenant_id: tenant_id,
           jwt: new_jwt,
           refresh_token: new_refresh,
           created_at: DateTime.utc_now(),
@@ -391,6 +392,45 @@ defmodule Cybernetic.Security.AuthManager do
 
         :ets.insert(:auth_sessions, {new_jwt, session})
         # P1 Performance: Index by expiry for O(log n) cleanup
+        expiry_key = {DateTime.to_unix(session.expires_at), new_jwt}
+        :ets.insert(:auth_session_expiry, {expiry_key, new_refresh})
+
+        Logger.info("Token refreshed for user: #{user_id}")
+
+        {:reply,
+         {:ok, %{token: new_jwt, refresh_token: new_refresh, expires_in: @jwt_ttl_seconds}},
+         state}
+
+      [{^refresh_token, user_id}] ->
+        # Backwards-compatible shape: refresh token stored without tenant_id
+        tenant_id = nil
+
+        user =
+          Map.get(state.users_by_id, user_id) ||
+            %{
+              id: user_id,
+              username: user_id,
+              roles: [:viewer]
+            }
+
+        new_jwt = generate_jwt(user)
+        new_refresh = generate_refresh_token(user)
+
+        :ets.delete(:refresh_tokens, refresh_token)
+        :ets.insert(:refresh_tokens, {new_refresh, {user_id, tenant_id}})
+
+        session = %{
+          user_id: user.id,
+          username: user.username,
+          roles: user.roles,
+          tenant_id: tenant_id,
+          jwt: new_jwt,
+          refresh_token: new_refresh,
+          created_at: DateTime.utc_now(),
+          expires_at: DateTime.add(DateTime.utc_now(), @jwt_ttl_seconds, :second)
+        }
+
+        :ets.insert(:auth_sessions, {new_jwt, session})
         expiry_key = {DateTime.to_unix(session.expires_at), new_jwt}
         :ets.insert(:auth_session_expiry, {expiry_key, new_refresh})
 
