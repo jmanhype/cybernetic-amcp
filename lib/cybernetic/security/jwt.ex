@@ -103,13 +103,14 @@ defmodule Cybernetic.Security.JWT do
   end
 
   defp resolve_verification_key("HS256", _header) do
-    secret = System.get_env("JWT_SECRET")
-
-    if is_binary(secret) and secret != "" do
-      {:ok, JOSE.JWK.from_oct(secret)}
-    else
+    # Use centralized secret management for consistent validation
+    secret = Cybernetic.Security.Secrets.jwt_secret()
+    {:ok, JOSE.JWK.from_oct(secret)}
+  rescue
+    # If secret loading fails (missing/invalid in prod), treat as missing config
+    e in RuntimeError ->
+      Logger.warning("JWT secret not available: #{Exception.message(e)}")
       {:error, :missing_jwks_config}
-    end
   end
 
   defp resolve_verification_key("RS256", header) do

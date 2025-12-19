@@ -35,36 +35,9 @@ defmodule Cybernetic.Security.AuthManager do
   # JWT configuration - TTL in seconds
   @jwt_ttl_seconds 3600
 
-  # P0 Security: Get JWT secret at runtime from environment
-  # Raises in production if not set or too short
+  # Delegate to centralized Secrets module for consistent validation
   @spec get_jwt_secret() :: String.t()
-  defp get_jwt_secret do
-    case System.get_env("JWT_SECRET") do
-      nil ->
-        env = Application.get_env(:cybernetic, :environment, :prod)
-
-        if env == :prod do
-          raise "JWT_SECRET environment variable is required in production"
-        else
-          "dev-secret-change-in-production"
-        end
-
-      "" ->
-        raise "JWT_SECRET cannot be empty"
-
-      secret when byte_size(secret) < 32 ->
-        env = Application.get_env(:cybernetic, :environment, :prod)
-
-        if env == :prod do
-          raise "JWT_SECRET must be at least 32 bytes in production"
-        else
-          secret
-        end
-
-      secret ->
-        secret
-    end
-  end
+  defp get_jwt_secret, do: Cybernetic.Security.Secrets.jwt_secret()
 
   # Role definitions with permissions
   @role_permissions %{
@@ -676,25 +649,8 @@ defmodule Cybernetic.Security.AuthManager do
     :crypto.mac(:hmac, :sha256, hmac_secret, key) |> Base.encode16()
   end
 
-  defp get_hmac_secret do
-    # Runtime secret - required in prod, defaults to dev value otherwise
-    case System.get_env("CYBERNETIC_HMAC_SECRET") do
-      nil ->
-        env = Application.get_env(:cybernetic, :environment, :prod)
-
-        if env == :prod do
-          raise "CYBERNETIC_HMAC_SECRET is required in production"
-        else
-          "dev-hmac-secret-not-for-production-use"
-        end
-
-      secret when byte_size(secret) < 32 ->
-        raise "CYBERNETIC_HMAC_SECRET must be at least 32 bytes"
-
-      secret ->
-        secret
-    end
-  end
+  # Delegate to centralized Secrets module for consistent validation
+  defp get_hmac_secret, do: Cybernetic.Security.Secrets.hmac_secret()
 
   defp hash_password(password) do
     pepper = System.get_env("PASSWORD_SALT", "")

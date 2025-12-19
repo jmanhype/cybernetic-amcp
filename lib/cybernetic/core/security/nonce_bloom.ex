@@ -353,25 +353,13 @@ defmodule Cybernetic.Core.Security.NonceBloom do
 
   @spec get_hmac_secret() :: String.t()
   defp get_hmac_secret do
-    # P0 Security: Require HMAC secret in production, no insecure fallback
-    # In production, rotate this secret regularly and store securely
-    config_secret = Application.get_env(:cybernetic, :security)[:hmac_secret]
-    env_secret = System.get_env("CYBERNETIC_HMAC_SECRET")
-    env = Application.get_env(:cybernetic, :environment, :prod)
+    # Allow config override, otherwise use centralized Secrets module
+    case Application.get_env(:cybernetic, :security)[:hmac_secret] do
+      secret when is_binary(secret) and secret != "" ->
+        secret
 
-    cond do
-      is_binary(config_secret) and config_secret != "" ->
-        config_secret
-
-      is_binary(env_secret) and env_secret != "" ->
-        env_secret
-
-      env == :prod ->
-        raise "CYBERNETIC_HMAC_SECRET is required in production"
-
-      true ->
-        Logger.warning("Using insecure default HMAC secret - NOT for production use")
-        "dev-only-insecure-hmac-secret-not-for-production"
+      _ ->
+        Cybernetic.Security.Secrets.hmac_secret()
     end
   end
 
