@@ -203,5 +203,77 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridgeTest do
       {:ok, final_stats} = GenServer.call(name, :stats)
       assert final_stats.emitted == initial_stats.emitted + 1
     end
+
+    test "relays {:event, \"episode.analyzed\", _} for matching tenant_id", %{
+      pid: pid,
+      name: name
+    } do
+      Phoenix.PubSub.subscribe(Cybernetic.PubSub, "event_bridge:#{@tenant_id}:outbound")
+
+      {:ok, initial_stats} = GenServer.call(name, :stats)
+
+      payload = %{
+        tenant_id: @tenant_id,
+        episode_id: "ep_123",
+        analysis_type: "summary",
+        timestamp: DateTime.utc_now()
+      }
+
+      Phoenix.PubSub.broadcast(
+        Cybernetic.PubSub,
+        "events:episode",
+        {:event, "episode.analyzed", payload}
+      )
+
+      assert_receive {:event_bridge, event}, 500
+      assert event.type == "episode.analyzed"
+      assert event.payload == payload
+
+      assert Process.alive?(pid)
+
+      {:ok, final_stats} = GenServer.call(name, :stats)
+      assert final_stats.emitted == initial_stats.emitted + 1
+    end
+
+    test "does not relay {:event, _} for non-matching tenant_id", %{pid: pid} do
+      Phoenix.PubSub.subscribe(Cybernetic.PubSub, "event_bridge:#{@tenant_id}:outbound")
+
+      payload = %{tenant_id: "other_tenant", episode_id: "ep_999", timestamp: DateTime.utc_now()}
+
+      Phoenix.PubSub.broadcast(
+        Cybernetic.PubSub,
+        "events:episode",
+        {:event, "episode.analyzed", payload}
+      )
+
+      refute_receive {:event_bridge, _}, 100
+      assert Process.alive?(pid)
+    end
+
+    test "relays {:event, \"policy.evaluated\", _} for matching tenant_id", %{
+      pid: pid,
+      name: name
+    } do
+      Phoenix.PubSub.subscribe(Cybernetic.PubSub, "event_bridge:#{@tenant_id}:outbound")
+
+      {:ok, initial_stats} = GenServer.call(name, :stats)
+
+      payload = %{tenant_id: @tenant_id, policy_id: "pol_1", timestamp: DateTime.utc_now()}
+
+      Phoenix.PubSub.broadcast(
+        Cybernetic.PubSub,
+        "events:policy",
+        {:event, "policy.evaluated", payload}
+      )
+
+      assert_receive {:event_bridge, event}, 500
+      assert event.type == "policy.evaluated"
+      assert event.payload == payload
+
+      assert Process.alive?(pid)
+
+      {:ok, final_stats} = GenServer.call(name, :stats)
+      assert final_stats.emitted == initial_stats.emitted + 1
+    end
   end
 end

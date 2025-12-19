@@ -56,6 +56,7 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
     episode.created
     episode.completed
     episode.message
+    episode.analyzed
     policy.evaluated
     capability.discovered
     capability.matched
@@ -142,9 +143,18 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
 
     topics =
       case direction do
-        :outbound -> ["#{@events_topic}:#{tenant_id}:outbound"]
-        :inbound -> ["#{@events_topic}:#{tenant_id}:inbound"]
-        :both -> ["#{@events_topic}:#{tenant_id}", "#{@events_topic}:#{tenant_id}:outbound", "#{@events_topic}:#{tenant_id}:inbound"]
+        :outbound ->
+          ["#{@events_topic}:#{tenant_id}:outbound"]
+
+        :inbound ->
+          ["#{@events_topic}:#{tenant_id}:inbound"]
+
+        :both ->
+          [
+            "#{@events_topic}:#{tenant_id}",
+            "#{@events_topic}:#{tenant_id}:outbound",
+            "#{@events_topic}:#{tenant_id}:inbound"
+          ]
       end
 
     Enum.each(topics, &Phoenix.PubSub.unsubscribe(@pubsub, &1))
@@ -322,6 +332,18 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
     relay_internal_event("vsm.state_changed", payload, state)
   end
 
+  # Handle events published on the shared `events:*` PubSub topics (used by SSE).
+  # These topics are not tenant-scoped, so we must filter by tenant_id.
+  @impl true
+  def handle_info({:event, event_type, payload}, state)
+      when is_binary(event_type) and is_map(payload) do
+    if event_belongs_to_tenant?(payload, state.tenant_id) do
+      relay_internal_event(event_type, payload, state)
+    else
+      {:noreply, state}
+    end
+  end
+
   # Handle episode events
   @impl true
   def handle_info({:episode_created, episode}, state) do
@@ -382,9 +404,9 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
     internal_topics = [
       "vsm_bridge:state:#{tenant_id}",
       "vsm_bridge:events:#{tenant_id}",
-      "episode:#{tenant_id}",
-      "policy:#{tenant_id}",
-      "capability:#{tenant_id}"
+      # Shared event topics (used by SSE). These are not tenant-scoped, so EventBridge filters by tenant_id.
+      "events:episode",
+      "events:policy"
     ]
 
     Enum.each(internal_topics, fn topic ->
@@ -397,6 +419,16 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
       end
     end)
   end
+
+  defp event_belongs_to_tenant?(payload, tenant_id)
+       when is_binary(tenant_id) and tenant_id != "" do
+    case Map.get(payload, :tenant_id) || Map.get(payload, "tenant_id") do
+      ^tenant_id -> true
+      _ -> false
+    end
+  end
+
+  defp event_belongs_to_tenant?(_payload, _tenant_id), do: true
 
   defp build_event(event_type, payload, tenant_id, direction, opts) do
     %{
@@ -511,8 +543,11 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
 
       type_match? =
         case types do
-          [] -> true
-          types -> event.type in types or String.starts_with?(event.type, Enum.map(types, &"#{&1}."))
+          [] ->
+            true
+
+          types ->
+            event.type in types or String.starts_with?(event.type, Enum.map(types, &"#{&1}."))
         end
 
       after_since? and type_match?
