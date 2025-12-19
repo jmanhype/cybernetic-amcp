@@ -18,10 +18,10 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   """
 
   use GenServer
-  import Bitwise
   require Logger
 
   alias Cybernetic.Content.SemanticContainer
+  alias Cybernetic.Security.SSRF
 
   # Types
   @type source :: %{
@@ -143,9 +143,14 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   def init(opts) do
     Logger.info("Ingest Pipeline starting")
 
+    {:ok, task_supervisor} =
+      Task.Supervisor.start_link(max_children: Keyword.get(opts, :max_concurrent, @max_concurrent))
+
     state = %{
       jobs: %{},
       processing: MapSet.new(),
+      tasks: %{},
+      task_supervisor: task_supervisor,
       container_server: Keyword.get(opts, :container_server, SemanticContainer),
       max_concurrent: Keyword.get(opts, :max_concurrent, @max_concurrent),
       stats: %{
@@ -249,13 +254,12 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
                 end)
           }
 
-          # P1 Fix: Capture GenServer pid before spawning task
-          server = self()
+          task =
+            Task.Supervisor.async_nolink(state.task_supervisor, fn ->
+              run_pipeline(job.source, job.tenant_id, job.options, new_state, job_id)
+            end)
 
-          Task.start(fn ->
-            result = run_pipeline(job.source, job.tenant_id, job.options, new_state, job_id)
-            send(server, {:job_completed, job_id, result})
-          end)
+          new_state = %{new_state | tasks: Map.put(new_state.tasks, task.ref, job_id)}
 
           {:noreply, new_state}
         else
@@ -270,28 +274,75 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   end
 
   @impl true
-  def handle_info({:job_completed, job_id, result}, state) do
-    case Map.fetch(state.jobs, job_id) do
-      {:ok, _job} ->
-        new_state = %{
-          state
-          | processing: MapSet.delete(state.processing, job_id),
-            jobs:
-              Map.update!(state.jobs, job_id, fn j ->
-                %{
-                  j
-                  | status: if(result.status == :success, do: :completed, else: :failed),
-                    result: result,
-                    completed_at: DateTime.utc_now()
-                }
-              end)
-        }
-
-        {:noreply, update_stats(new_state, result)}
-
-      :error ->
-        # Job was already cleaned up
+  def handle_info({ref, result}, state) when is_reference(ref) and is_map(result) do
+    case Map.pop(state.tasks, ref) do
+      {nil, _tasks} ->
         {:noreply, state}
+
+      {job_id, remaining_tasks} ->
+        Process.demonitor(ref, [:flush])
+
+        state = %{state | tasks: remaining_tasks}
+
+        case Map.fetch(state.jobs, job_id) do
+          {:ok, _job} ->
+            new_state = %{
+              state
+              | processing: MapSet.delete(state.processing, job_id),
+                jobs:
+                  Map.update!(state.jobs, job_id, fn j ->
+                    %{
+                      j
+                      | status: if(result.status == :success, do: :completed, else: :failed),
+                        result: result,
+                        completed_at: DateTime.utc_now()
+                    }
+                  end)
+            }
+
+            {:noreply, update_stats(new_state, result)}
+
+          :error ->
+            # Job was already cleaned up
+            {:noreply, state}
+        end
+    end
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) when is_reference(ref) do
+    case Map.pop(state.tasks, ref) do
+      {nil, _tasks} ->
+        {:noreply, state}
+
+      {job_id, remaining_tasks} ->
+        Process.demonitor(ref, [:flush])
+
+        state = %{state | tasks: remaining_tasks}
+
+        case Map.fetch(state.jobs, job_id) do
+          {:ok, job} ->
+            result = failed_result(job_id, job, {:task_down, reason})
+
+            new_state = %{
+              state
+              | processing: MapSet.delete(state.processing, job_id),
+                jobs:
+                  Map.update!(state.jobs, job_id, fn j ->
+                    %{
+                      j
+                      | status: :failed,
+                        result: result,
+                        completed_at: DateTime.utc_now()
+                    }
+                  end)
+            }
+
+            {:noreply, update_stats(new_state, result)}
+
+          :error ->
+            {:noreply, state}
+        end
     end
   end
 
@@ -330,7 +381,7 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   defp run_pipeline(source, tenant_id, opts, state, job_id) do
     start_time = System.monotonic_time(:millisecond)
 
-    result =
+    try do
       with {:ok, content, content_type} <- stage_fetch(source),
            {:ok, normalized} <- stage_normalize(content, content_type),
            {:ok, metadata} <- stage_extract(normalized, content_type, opts),
@@ -370,9 +421,64 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
             error: reason,
             duration_ms: System.monotonic_time(:millisecond) - start_time
           }
+
+        unexpected ->
+          emit_telemetry(:error, start_time, %{
+            tenant_id: tenant_id,
+            reason: {:unexpected, unexpected}
+          })
+
+          %{
+            id: job_id,
+            status: :failed,
+            container_id: nil,
+            bytes_ingested: 0,
+            error: {:unexpected, unexpected},
+            duration_ms: System.monotonic_time(:millisecond) - start_time
+          }
+      end
+    rescue
+      e ->
+        emit_telemetry(:error, start_time, %{tenant_id: tenant_id, reason: {:exception, e}})
+
+        %{
+          id: job_id,
+          status: :failed,
+          container_id: nil,
+          bytes_ingested: 0,
+          error: {:exception, e},
+          duration_ms: System.monotonic_time(:millisecond) - start_time
+        }
+    catch
+      :exit, reason ->
+        emit_telemetry(:error, start_time, %{tenant_id: tenant_id, reason: {:exit, reason}})
+
+        %{
+          id: job_id,
+          status: :failed,
+          container_id: nil,
+          bytes_ingested: 0,
+          error: {:exit, reason},
+          duration_ms: System.monotonic_time(:millisecond) - start_time
+        }
+    end
+  end
+
+  defp failed_result(job_id, job, error) do
+    duration_ms =
+      case job.started_at do
+        %DateTime{} = started_at -> max(0, DateTime.diff(DateTime.utc_now(), started_at, :millisecond))
+        _ -> 0
       end
 
-    result
+    %{
+      id: job_id,
+      status: :failed,
+      container_id: nil,
+      bytes_ingested: 0,
+      error: error,
+      duration_ms: duration_ms
+    }
   end
 
   # Stage 1: Fetch
@@ -410,17 +516,21 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   @spec fetch_url(String.t()) :: {:ok, binary(), String.t()} | {:error, term()}
   defp fetch_url(url) do
-    # P0 Security: Validate URL to prevent SSRF attacks
-    with :ok <- validate_url(url) do
-      # Disable redirects to prevent SSRF bypass via redirect to internal host
-      # Each redirect would need revalidation, so we disable them entirely
-      case Req.get(url,
-             receive_timeout: @fetch_timeout,
-             connect_options: [timeout: @http_connect_timeout_ms],
-             max_redirects: 0,
-             retry: false
-           ) do
-        {:ok, %{status: 200, body: body, headers: headers}} ->
+    env = Application.get_env(:cybernetic, :environment, :prod)
+
+    with {:ok, %{connect_hostname: hostname, pinned_uris: pinned_uris}} <-
+           SSRF.prepare_request(url,
+             env: env,
+             require_https_in_prod: false,
+             # Ingest is user-input; block obvious internal hosts always.
+             block_internal_hosts: true,
+             # In prod, also fail-closed on private/reserved IPs (DNS + literals).
+             block_private_ips: env == :prod,
+             block_unresolvable_hosts: env == :prod
+           ),
+         {:ok, response} <- pinned_get(pinned_uris, hostname) do
+      case response do
+        %{status: 200, body: body, headers: headers} ->
           content_type = get_content_type_header(headers)
 
           if byte_size(body) > @max_content_size do
@@ -429,118 +539,53 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
             {:ok, body, content_type}
           end
 
-        {:ok, %{status: status}} when status in [301, 302, 303, 307, 308] ->
-          # Redirect blocked - return specific error
+        %{status: status} when status in [301, 302, 303, 307, 308] ->
           {:error, {:redirect_blocked, status}}
 
-        {:ok, %{status: status}} ->
+        %{status: status} ->
           {:error, {:http_error, status}}
-
-        {:error, reason} ->
-          {:error, {:fetch_failed, reason}}
       end
-    end
-  end
+    else
+      {:error, :internal_host_blocked} ->
+        {:error, :blocked_host}
 
-  @spec validate_url(String.t()) :: :ok | {:error, term()}
-  defp validate_url(url) do
-    # SECURITY: Always do our own SSRF checks with DNS resolution
-    # Do NOT delegate to CapValidation which only does string checks
-    case URI.parse(url) do
-      %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) and host != "" ->
-        env = Application.get_env(:cybernetic, :environment, :prod)
+      {:error, :dns_resolution_failed} ->
+        {:error, :blocked_host}
 
-        cond do
-          # Quick string checks
-          blocked_host?(host) ->
-            {:error, :blocked_host}
-
-          # In prod, resolve DNS and verify not private (SSRF protection)
-          env == :prod ->
-            if resolve_and_check_private(host) do
-              {:error, :blocked_host}
-            else
-              :ok
-            end
-
-          true ->
-            :ok
-        end
-
-      _ ->
+      {:error, :invalid_scheme} ->
         {:error, :invalid_url}
+
+      {:error, :missing_host} ->
+        {:error, :invalid_url}
+
+      {:error, :https_required_in_prod} ->
+        {:error, :invalid_url}
+
+      {:error, reason} ->
+        {:error, {:fetch_failed, reason}}
     end
   end
 
-  @blocked_hosts ["localhost", "127.0.0.1", "0.0.0.0", "::1", "169.254.169.254"]
-  @blocked_suffixes [".local", ".internal", ".localhost"]
+  defp pinned_get([], _hostname), do: {:error, :dns_resolution_failed}
 
-  # Private/reserved IP ranges (RFC 1918, loopback, link-local, metadata)
-  @private_ranges [
-    # 10.0.0.0/8
-    {{10, 0, 0, 0}, {10, 255, 255, 255}},
-    # 172.16.0.0/12
-    {{172, 16, 0, 0}, {172, 31, 255, 255}},
-    # 192.168.0.0/16
-    {{192, 168, 0, 0}, {192, 168, 255, 255}},
-    # 127.0.0.0/8 (loopback)
-    {{127, 0, 0, 0}, {127, 255, 255, 255}},
-    # 169.254.0.0/16 (link-local, includes cloud metadata 169.254.169.254)
-    {{169, 254, 0, 0}, {169, 254, 255, 255}},
-    # 0.0.0.0/8 (current network)
-    {{0, 0, 0, 0}, {0, 255, 255, 255}}
-  ]
+  defp pinned_get([%URI{} = pinned_uri | rest], hostname) when is_binary(hostname) do
+    case Req.get(URI.to_string(pinned_uri),
+           receive_timeout: @fetch_timeout,
+           connect_options: [timeout: @http_connect_timeout_ms, hostname: hostname],
+           max_redirects: 0,
+           retry: false
+         ) do
+      {:ok, _} = ok ->
+        ok
 
-  @spec blocked_host?(String.t()) :: boolean()
-  defp blocked_host?(host) do
-    # String-only checks (fast path)
-    # DNS resolution is done separately in validate_url/1 for prod
-    host in @blocked_hosts or
-      Enum.any?(@blocked_suffixes, &String.ends_with?(host, &1))
-  end
-
-  defp resolve_and_check_private(host) do
-    case :inet.getaddr(String.to_charlist(host), :inet) do
-      {:ok, ip_tuple} ->
-        ip_in_private_range?(ip_tuple)
-
-      {:error, _} ->
-        # Try IPv6
-        case :inet.getaddr(String.to_charlist(host), :inet6) do
-          {:ok, ip_tuple} ->
-            ipv6_is_private?(ip_tuple)
-
-          {:error, _} ->
-            # Can't resolve in prod = block as suspicious
-            Application.get_env(:cybernetic, :environment, :prod) == :prod
+      {:error, _reason} = error ->
+        if rest == [] do
+          error
+        else
+          pinned_get(rest, hostname)
         end
     end
   end
-
-  defp ip_in_private_range?({a, b, c, d}) do
-    Enum.any?(@private_ranges, fn {{start_a, start_b, start_c, start_d},
-                                   {end_a, end_b, end_c, end_d}} ->
-      a >= start_a and a <= end_a and
-        b >= start_b and b <= end_b and
-        c >= start_c and c <= end_c and
-        d >= start_d and d <= end_d
-    end)
-  end
-
-  # IPv6 private ranges
-  # ::1 (loopback)
-  defp ipv6_is_private?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
-
-  defp ipv6_is_private?({0, 0, 0, 0, 0, 0xFFFF, hi, lo}) do
-    # IPv4-mapped IPv6 (::ffff:x.x.x.x) - check embedded IPv4
-    ip_in_private_range?({hi >>> 8, hi &&& 0xFF, lo >>> 8, lo &&& 0xFF})
-  end
-
-  # fe80::/10 link-local
-  defp ipv6_is_private?({a, _, _, _, _, _, _, _}) when a >= 0xFE80 and a <= 0xFEBF, do: true
-  # fc00::/7 unique local
-  defp ipv6_is_private?({a, _, _, _, _, _, _, _}) when a >= 0xFC00 and a <= 0xFDFF, do: true
-  defp ipv6_is_private?(_), do: false
 
   @spec get_content_type_header([{String.t(), String.t()}]) :: String.t()
   defp get_content_type_header(headers) do

@@ -12,8 +12,9 @@ defmodule Cybernetic.Security.JWKSCache do
   """
 
   use GenServer
-  import Bitwise
   require Logger
+
+  alias Cybernetic.Security.SSRF
 
   @cache_table :cybernetic_jwks_cache
   @default_ttl_ms :timer.minutes(5)
@@ -21,22 +22,6 @@ defmodule Cybernetic.Security.JWKSCache do
   @http_connect_timeout_ms 5_000
   # Disable redirects to prevent SSRF via redirect to internal host
   @max_redirects 0
-
-  # Private/reserved IP ranges (RFC 1918, loopback, link-local)
-  @private_ranges [
-    # 10.0.0.0/8
-    {{10, 0, 0, 0}, {10, 255, 255, 255}},
-    # 172.16.0.0/12
-    {{172, 16, 0, 0}, {172, 31, 255, 255}},
-    # 192.168.0.0/16
-    {{192, 168, 0, 0}, {192, 168, 255, 255}},
-    # 127.0.0.0/8 (loopback)
-    {{127, 0, 0, 0}, {127, 255, 255, 255}},
-    # 169.254.0.0/16 (link-local)
-    {{169, 254, 0, 0}, {169, 254, 255, 255}},
-    # 0.0.0.0/8 (current network)
-    {{0, 0, 0, 0}, {0, 255, 255, 255}}
-  ]
 
   # Public API
 
@@ -152,8 +137,7 @@ defmodule Cybernetic.Security.JWKSCache do
   # Private helpers
 
   defp fetch_jwks(url) do
-    with :ok <- validate_url(url),
-         {:ok, %{status: 200, body: body}} <- safe_get(url),
+    with {:ok, %{status: 200, body: body}} <- safe_get(url),
          {:ok, json} <- decode_json(body),
          %{"keys" => keys} when is_list(keys) <- json do
       {:ok, build_keys_map(keys)}
@@ -172,8 +156,7 @@ defmodule Cybernetic.Security.JWKSCache do
   defp discover_from_issuer(issuer) do
     discovery_url = String.trim_trailing(issuer, "/") <> "/.well-known/openid-configuration"
 
-    with :ok <- validate_url(discovery_url),
-         {:ok, %{status: 200, body: body}} <- safe_get(discovery_url),
+    with {:ok, %{status: 200, body: body}} <- safe_get(discovery_url),
          {:ok, json} <- decode_json(body),
          jwks_url when is_binary(jwks_url) and jwks_url != "" <- json["jwks_uri"] do
       {:ok, jwks_url}
@@ -189,146 +172,46 @@ defmodule Cybernetic.Security.JWKSCache do
     end
   end
 
-  # DNS rebinding protection: resolve once, connect to resolved IP
-  # This prevents TOCTOU attacks where DNS resolves to public IP during validation
-  # but to internal IP at connect time.
   defp safe_get(url) do
-    uri = URI.parse(url)
-    host = uri.host
-    host_charlist = String.to_charlist(host)
+    env = Application.get_env(:cybernetic, :environment, :prod)
 
-    # Resolve to a specific IP address to pin the connection
-    resolved_ip =
-      case :inet.getaddr(host_charlist, :inet) do
-        {:ok, ip} -> ip
-        {:error, _} ->
-          case :inet.getaddr(host_charlist, :inet6) do
-            {:ok, ip} -> ip
-            {:error, _} -> nil
-          end
-      end
-
-    case resolved_ip do
-      nil ->
-        {:error, :dns_resolution_failed}
-
-      ip_tuple ->
-        # Convert IP tuple to string for Req's ip option
-        ip_string = :inet.ntoa(ip_tuple) |> to_string()
-
-        Req.get(url,
-          receive_timeout: @http_timeout_ms,
-          connect_options: [
-            timeout: @http_connect_timeout_ms,
-            # Pin to resolved IP (prevents DNS rebinding)
-            hostname: ip_string
-          ],
-          max_redirects: @max_redirects,
-          retry: false
-        )
+    with {:ok, %{connect_hostname: hostname, pinned_uris: pinned_uris}} <-
+           SSRF.prepare_request(url,
+             env: env,
+             require_https_in_prod: true,
+             # In dev/test allow local JWKS servers; in prod block internal/private hosts.
+             block_internal_hosts: env == :prod,
+             block_private_ips: env == :prod,
+             block_unresolvable_hosts: env == :prod
+           ) do
+      pinned_get(pinned_uris, hostname)
     end
   rescue
     e -> {:error, {:request_error, Exception.message(e)}}
   end
 
-  defp validate_url(url) do
-    uri = URI.parse(url)
-    env = Application.get_env(:cybernetic, :environment, :prod)
+  defp pinned_get([], _hostname), do: {:error, :dns_resolution_failed}
 
-    cond do
-      uri.scheme not in ["http", "https"] ->
-        {:error, :invalid_scheme}
+  # DNS rebinding protection: connect to a resolved IP, keep the original hostname
+  # for Host header and TLS SNI/verification (`Mint.HTTP.connect/4` `:hostname`).
+  defp pinned_get([%URI{} = pinned_uri | rest], hostname) when is_binary(hostname) do
+    case Req.get(URI.to_string(pinned_uri),
+           receive_timeout: @http_timeout_ms,
+           connect_options: [timeout: @http_connect_timeout_ms, hostname: hostname],
+           max_redirects: @max_redirects,
+           retry: false
+         ) do
+      {:ok, _} = ok ->
+        ok
 
-      env == :prod and uri.scheme != "https" ->
-        {:error, :https_required_in_prod}
-
-      uri.host in [nil, ""] ->
-        {:error, :missing_host}
-
-      # Block localhost/internal IPs in prod (includes DNS resolution)
-      env == :prod and internal_host?(uri.host) ->
-        {:error, :internal_host_blocked}
-
-      true ->
-        :ok
-    end
-  end
-
-  # Check if host resolves to internal/private IP (SSRF protection)
-  defp internal_host?(host) do
-    # Quick string checks first
-    if quick_internal_check?(host) do
-      true
-    else
-      # DNS resolution check - resolve and verify IPs are not private
-      resolve_and_check_private(host)
-    end
-  end
-
-  defp quick_internal_check?(host) do
-    host in ["localhost", "127.0.0.1", "0.0.0.0", "::1"] or
-      String.ends_with?(host, ".local") or
-      String.ends_with?(host, ".internal") or
-      String.ends_with?(host, ".localhost")
-  end
-
-  defp resolve_and_check_private(host) do
-    host_charlist = String.to_charlist(host)
-
-    # Fast path: literal IPs (no DNS)
-    case :inet.parse_address(host_charlist) do
-      {:ok, {_, _, _, _} = ip} ->
-        ip_in_private_range?(ip)
-
-      {:ok, {_, _, _, _, _, _, _, _} = ip} ->
-        ipv6_is_private?(ip)
-
-      {:error, _} ->
-        # DNS resolution check - block if ANY resolved address is private/reserved
-        ipv4_addrs =
-          case :inet.getaddrs(host_charlist, :inet) do
-            {:ok, addrs} when is_list(addrs) -> addrs
-            _ -> []
-          end
-
-        ipv6_addrs =
-          case :inet.getaddrs(host_charlist, :inet6) do
-            {:ok, addrs} when is_list(addrs) -> addrs
-            _ -> []
-          end
-
-        if ipv4_addrs == [] and ipv6_addrs == [] do
-          # Can't resolve - block in prod as suspicious
-          true
+      {:error, _reason} = error ->
+        if rest == [] do
+          error
         else
-          Enum.any?(ipv4_addrs, &ip_in_private_range?/1) or
-            Enum.any?(ipv6_addrs, &ipv6_is_private?/1)
+          pinned_get(rest, hostname)
         end
     end
   end
-
-  defp ip_in_private_range?({a, b, c, d} = ip) when is_tuple(ip) do
-    Enum.any?(@private_ranges, fn {{start_a, start_b, start_c, start_d},
-                                   {end_a, end_b, end_c, end_d}} ->
-      a >= start_a and a <= end_a and
-        b >= start_b and b <= end_b and
-        c >= start_c and c <= end_c and
-        d >= start_d and d <= end_d
-    end)
-  end
-
-  # ::1 (loopback)
-  defp ipv6_is_private?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
-  # IPv4-mapped IPv6 (::ffff:x.x.x.x)
-  defp ipv6_is_private?({0, 0, 0, 0, 0, 0xFFFF, hi, lo}) do
-    ip_in_private_range?({hi >>> 8, hi &&& 0xFF, lo >>> 8, lo &&& 0xFF})
-  end
-
-  # fe80::/10 (link-local) = fe80..febf
-  defp ipv6_is_private?({a, _, _, _, _, _, _, _}) when a >= 0xFE80 and a <= 0xFEBF, do: true
-  # fc00::/7 (unique local) = fc00..fdff
-  defp ipv6_is_private?({a, _, _, _, _, _, _, _}) when a >= 0xFC00 and a <= 0xFDFF, do: true
-  defp ipv6_is_private?(_), do: false
 
   defp decode_json(body) when is_binary(body) do
     Jason.decode(body)
