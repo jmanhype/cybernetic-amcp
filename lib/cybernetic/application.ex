@@ -280,6 +280,8 @@ defmodule Cybernetic.Application do
       {Cybernetic.Security.AuthManager, []},
       # MCP Registry (for capability tests)
       Cybernetic.Core.MCP.Hermes.Registry,
+      # Integrations Registry (for streaming/integration tests)
+      {Registry, keys: :unique, name: Cybernetic.Integrations.Registry},
       # Rate Limiter (for rate limit tests)
       {Cybernetic.VSM.System3.RateLimiter, []}
     ]

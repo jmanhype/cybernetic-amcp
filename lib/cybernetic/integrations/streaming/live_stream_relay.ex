@@ -347,6 +347,10 @@ defmodule Cybernetic.Integrations.Streaming.LiveStreamRelay do
         Logger.debug("Transcription error: #{inspect(e)}")
         # Return placeholder in development
         {:ok, "[Audio chunk #{state.stats.chunks_processed + 1}]"}
+    catch
+      :exit, _ ->
+        # LLMCDN not running (e.g., in minimal test mode)
+        {:ok, "[Audio chunk #{state.stats.chunks_processed + 1}]"}
     end
   end
 
