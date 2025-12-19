@@ -318,8 +318,8 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
 
   # Handle VSM state broadcasts (from vsm_bridge:state:tenant_id topic)
   @impl true
-  def handle_info({:state_updated, system, _new_state}, state) do
-    relay_internal_event("vsm.state_changed", %{system: system}, state)
+  def handle_info({:vsm_state_change, payload}, state) do
+    relay_internal_event("vsm.state_changed", payload, state)
   end
 
   # Handle episode events
@@ -363,7 +363,7 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
       # Broadcast externally
       broadcast_event(state.tenant_id, event, :outbound)
 
-      new_stats = Map.update!(state.stats, :events_emitted, &(&1 + 1))
+      new_stats = Map.update!(state.stats, :emitted, &(&1 + 1))
       {:noreply, %{state | event_buffer: new_buffer, stats: new_stats}}
     else
       {:noreply, state}

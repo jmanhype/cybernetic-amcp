@@ -149,4 +149,54 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridgeTest do
       GenServer.stop(pid2, :normal, 100)
     end
   end
+
+  describe "PubSub relay (regression)" do
+    test "relays :vsm_event messages without crashing", %{pid: pid, name: name} do
+      # Get initial stats
+      {:ok, initial_stats} = GenServer.call(name, :stats)
+      initial_emitted = initial_stats.emitted
+
+      # Send a :vsm_event message directly to the process (simulates PubSub delivery)
+      send(pid, {:vsm_event, %{type: "state_change", data: %{key: "value"}}})
+
+      # Give it time to process
+      Process.sleep(10)
+
+      # Process should still be alive
+      assert Process.alive?(pid)
+
+      # Stats should have incremented
+      {:ok, final_stats} = GenServer.call(name, :stats)
+      assert final_stats.emitted == initial_emitted + 1
+    end
+
+    test "relays :vsm_state_change messages without crashing", %{pid: pid, name: name} do
+      {:ok, initial_stats} = GenServer.call(name, :stats)
+      initial_emitted = initial_stats.emitted
+
+      # Send a :vsm_state_change message (what VSMBridge actually broadcasts)
+      send(pid, {:vsm_state_change, %{action: :update, changes: %{}, timestamp: DateTime.utc_now()}})
+
+      Process.sleep(10)
+
+      assert Process.alive?(pid)
+
+      {:ok, final_stats} = GenServer.call(name, :stats)
+      assert final_stats.emitted == initial_emitted + 1
+    end
+
+    test "relays :episode_created messages without crashing", %{pid: pid, name: name} do
+      {:ok, initial_stats} = GenServer.call(name, :stats)
+      initial_emitted = initial_stats.emitted
+
+      send(pid, {:episode_created, %{id: "ep_123", title: "Test Episode"}})
+
+      Process.sleep(10)
+
+      assert Process.alive?(pid)
+
+      {:ok, final_stats} = GenServer.call(name, :stats)
+      assert final_stats.emitted == initial_emitted + 1
+    end
+  end
 end
