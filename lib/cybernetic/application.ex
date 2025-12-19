@@ -86,10 +86,14 @@ defmodule Cybernetic.Application do
              [
                # Phoenix PubSub (used by SSE and event broadcasting)
                {Phoenix.PubSub, name: Cybernetic.PubSub},
+               # Hermes MCP runtime (streamable HTTP transport)
+               Hermes.Server.Registry,
                # Cluster discovery
                cluster_children,
                # Phoenix Edge Gateway Endpoint
                Cybernetic.Edge.Gateway.Endpoint,
+               # oh-my-opencode MCP server (mounted at /mcp)
+               {Cybernetic.Integrations.OhMyOpencode.MCPProvider, transport: :streamable_http},
                # Core Security
                Cybernetic.Core.Security.NonceBloom,
                # CRDT Graph

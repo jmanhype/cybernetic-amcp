@@ -17,6 +17,13 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   The `resource_type` parameter is for telemetry/logging only and does NOT
   create separate rate limit counters.
 
+  ## Tuple Budget Keys
+
+  Tuple budget keys (e.g. `{:mcp_tools, client_id}`) are supported and inherit
+  their limits from the base atom budget (`:mcp_tools`). Budgets for tuple keys
+  are created on-demand and cleaned up after an idle TTL to avoid unbounded
+  memory growth.
+
   ## Priority Multipliers
 
   Requests consume tokens based on priority:
@@ -210,28 +217,60 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   # Private functions
 
   defp do_request_tokens(budget_key, resource_type, priority, state) do
-    case Map.get(state.budgets, budget_key) do
-      nil ->
+    case get_or_create_budget(budget_key, state) do
+      {:error, :unknown_budget} ->
         # P1 Fix: Deny by default when no budget configured (fail-closed)
         Logger.warning("Rate limiter: Unknown budget #{inspect(budget_key)}, denying request")
         {{:error, :unknown_budget}, state}
 
-      budget ->
+      {:ok, budget, state} ->
         budget = normalize_budget_window(budget)
 
         case check_budget_limits(budget, resource_type, priority) do
           :ok ->
             new_budget = consume_tokens(budget, resource_type, priority)
-            new_budgets = Map.put(state.budgets, budget_key, new_budget)
-            new_state = %{state | budgets: new_budgets}
+            new_state = put_in(state.budgets[budget_key], new_budget)
             {:ok, new_state}
 
           {:error, reason} ->
             # Persist any window reset even when denying the request.
-            new_state = %{state | budgets: Map.put(state.budgets, budget_key, budget)}
+            new_state = put_in(state.budgets[budget_key], budget)
             {{:error, reason}, new_state}
         end
     end
+  end
+
+  defp get_or_create_budget(budget_key, state) do
+    case Map.get(state.budgets, budget_key) do
+      nil -> maybe_create_dynamic_budget(budget_key, state)
+      budget -> {:ok, budget, state}
+    end
+  end
+
+  defp maybe_create_dynamic_budget({base_key, _id} = budget_key, %{config: config} = state)
+       when is_atom(base_key) do
+    case config.default_budgets do
+      %{^base_key => budget_config} ->
+        budget = build_budget(budget_config)
+        {:ok, budget, put_in(state.budgets[budget_key], budget)}
+
+      _ ->
+        {:error, :unknown_budget}
+    end
+  end
+
+  defp maybe_create_dynamic_budget(_budget_key, _state), do: {:error, :unknown_budget}
+
+  defp build_budget(budget_config) do
+    now = current_time()
+
+    %{
+      limit: budget_config.limit,
+      window_ms: budget_config.window_ms,
+      consumed: 0,
+      last_reset: now,
+      last_request: nil
+    }
   end
 
   defp normalize_budget_window(budget) do
@@ -307,6 +346,9 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
       cleanup_interval: 60_000,
       # 5 minutes
       default_window: 300_000,
+      # Dynamic (tuple) budgets are removed after this idle TTL.
+      # Keep this >= the largest window to avoid churn.
+      dynamic_budget_ttl_ms: 600_000,
       default_budgets: %{
         # 100 requests per 5 minutes
         s4_llm: %{limit: 100, window_ms: 300_000},
@@ -325,24 +367,21 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
       |> Enum.into(%{})
 
     opts_config =
-      Keyword.take(opts, [:cleanup_interval, :default_window, :default_budgets])
+      Keyword.take(opts, [
+        :cleanup_interval,
+        :default_window,
+        :dynamic_budget_ttl_ms,
+        :default_budgets
+      ])
       |> Enum.into(%{})
 
     Map.merge(default_config, Map.merge(app_config, opts_config))
   end
 
   defp initialize_budgets(config) do
-    current_time = current_time()
-
     config.default_budgets
     |> Enum.map(fn {key, budget_config} ->
-      budget = %{
-        limit: budget_config.limit,
-        window_ms: budget_config.window_ms,
-        consumed: 0,
-        last_reset: current_time,
-        last_request: nil
-      }
+      budget = build_budget(budget_config)
 
       {key, budget}
     end)
@@ -350,8 +389,30 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   end
 
   defp cleanup_expired_windows(state) do
-    # For now, just return the state as windows are managed per-budget
-    state
+    now = current_time()
+    ttl_ms = state.config.dynamic_budget_ttl_ms
+
+    {budgets, removed} =
+      Enum.reduce(state.budgets, {%{}, 0}, fn
+        {budget_key, budget}, {acc, removed} when is_tuple(budget_key) ->
+          last_request = budget.last_request || budget.last_reset
+          budget_ttl_ms = max(ttl_ms, budget.window_ms * 2)
+
+          if is_integer(last_request) and now - last_request > budget_ttl_ms do
+            {acc, removed + 1}
+          else
+            {Map.put(acc, budget_key, budget), removed}
+          end
+
+        {budget_key, budget}, {acc, removed} ->
+          {Map.put(acc, budget_key, budget), removed}
+      end)
+
+    if removed > 0 do
+      Logger.debug("Rate limiter cleaned up #{removed} dynamic budgets")
+    end
+
+    %{state | budgets: budgets}
   end
 
   defp schedule_cleanup do

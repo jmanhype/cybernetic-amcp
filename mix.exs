@@ -30,11 +30,17 @@ defmodule Cybernetic.MixProject do
   end
 
   defp deps do
+    json_dep =
+      if Version.compare(System.version(), "1.18.0") == :lt do
+        {:json, "~> 1.4"}
+      end
+
     [
       # Core dependencies
       {:amqp, "~> 4.1"},
       {:jason, ">= 0.0.0"},
-      {:json, "~> 1.4"},
+      # Elixir 1.18+ ships `JSON`/`JSON.Encoder`; only use Hex `:json` on older runtimes.
+      json_dep,
       {:telemetry, ">= 0.0.0"},
       {:libcluster, ">= 0.0.0"},
       {:delta_crdt, ">= 0.0.0"},
@@ -120,6 +126,7 @@ defmodule Cybernetic.MixProject do
       # Prometheus metrics exporter
       {:telemetry_metrics_prometheus_core, "~> 1.1"}
     ]
+    |> Enum.reject(&is_nil/1)
   end
 
   defp aliases do

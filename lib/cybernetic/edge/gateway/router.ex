@@ -22,6 +22,12 @@ defmodule Cybernetic.Edge.Gateway.Router do
     plug(Cybernetic.Edge.Gateway.Plugs.TenantIsolation)
   end
 
+  pipeline :mcp do
+    plug(Cybernetic.Edge.Gateway.Plugs.RequestId)
+    plug(Cybernetic.Edge.Gateway.Plugs.OIDC)
+    plug(Cybernetic.Edge.Gateway.Plugs.TenantIsolation)
+  end
+
   # API v1 endpoints
   scope "/v1", Cybernetic.Edge.Gateway do
     pipe_through(:api)
@@ -39,6 +45,17 @@ defmodule Cybernetic.Edge.Gateway.Router do
   # Telegram webhook (no auth required)
   scope "/telegram", Cybernetic.Edge.Gateway do
     post("/webhook", TelegramController, :webhook)
+  end
+
+  # MCP endpoint (Hermes StreamableHTTP)
+  scope "/mcp" do
+    pipe_through(:mcp)
+
+    forward(
+      "/",
+      Hermes.Server.Transport.StreamableHTTP.Plug,
+      server: Cybernetic.Integrations.OhMyOpencode.MCPProvider
+    )
   end
 
   # Prometheus metrics endpoint (no auth)
