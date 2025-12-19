@@ -3,31 +3,17 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
   alias Cybernetic.Core.Aggregator.CentralAggregator
 
   setup do
-    # Ensure CentralAggregator is started (may be started by Application or needs manual start)
-    pid =
+    {pid, started_by_test?} =
       case Process.whereis(CentralAggregator) do
         nil ->
-          {:ok, p} = CentralAggregator.start_link([])
-          # Wait for ETS tables to be created by init
-          Enum.reduce_while(1..50, nil, fn _, _ ->
-            case {:ets.whereis(:cyb_agg_window), :ets.whereis(:cyb_agg_counts)} do
-              {:undefined, _} ->
-                Process.sleep(10)
-                {:cont, nil}
-
-              {_, :undefined} ->
-                Process.sleep(10)
-                {:cont, nil}
-
-              _ ->
-                {:halt, :ok}
-            end
-          end)
-
-          p
+          # Use the test supervisor to avoid linking the aggregator to the test process.
+          child_spec = Supervisor.child_spec({CentralAggregator, []}, restart: :temporary)
+          pid = start_supervised!(child_spec)
+          wait_for_tables()
+          {pid, true}
 
         existing_pid ->
-          existing_pid
+          {existing_pid, false}
       end
 
     # Clear the ETS tables for clean test state
@@ -38,8 +24,7 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       end
     end
 
-    # Don't exit the shared process on test cleanup
-    {:ok, pid: pid}
+    {:ok, pid: pid, started_by_test?: started_by_test?}
   end
 
   describe "event ingestion" do
@@ -82,6 +67,26 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
     end
   end
 
+  describe "telemetry handler lifecycle" do
+    test "detaches telemetry handlers on shutdown", %{
+      pid: pid,
+      started_by_test?: started_by_test?
+    } do
+      if started_by_test? do
+        handler_id = {CentralAggregator, :goldrush}
+        assert handler_id in handler_ids([:cybernetic, :work, :finished])
+
+        ref = Process.monitor(pid)
+        GenServer.stop(pid, :shutdown)
+        assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1_000
+
+        refute handler_id in handler_ids([:cybernetic, :work, :finished])
+      else
+        :ok
+      end
+    end
+  end
+
   describe "fact emission" do
     test "emits aggregated facts periodically", %{pid: _pid} do
       # Attach listener for facts
@@ -94,10 +99,8 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       :telemetry.attach(
         {__MODULE__, ref},
         [:cybernetic, :aggregator, :facts],
-        fn _event, measurements, meta, _config ->
-          send(parent, {:facts_emitted, measurements, meta})
-        end,
-        nil
+        &__MODULE__.handle_facts_emitted/4,
+        parent
       )
 
       # Inject test events
@@ -225,10 +228,8 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
       :telemetry.attach(
         {__MODULE__, ref},
         [:cybernetic, :aggregator, :facts],
-        fn _event, measurements, _meta, _config ->
-          send(parent, {:facts, measurements.facts})
-        end,
-        nil
+        &__MODULE__.handle_facts_list/4,
+        parent
       )
 
       send(Process.whereis(CentralAggregator), :emit)
@@ -254,5 +255,41 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
 
       :telemetry.detach({__MODULE__, ref})
     end
+  end
+
+  defp handler_ids(event) do
+    :telemetry.list_handlers(event)
+    |> Enum.map(fn
+      %{id: id} -> id
+      {id, _function, _config} -> id
+      other -> other
+    end)
+  end
+
+  defp wait_for_tables do
+    Enum.reduce_while(1..50, nil, fn _, _ ->
+      case {:ets.whereis(:cyb_agg_window), :ets.whereis(:cyb_agg_counts)} do
+        {:undefined, _} ->
+          Process.sleep(10)
+          {:cont, nil}
+
+        {_, :undefined} ->
+          Process.sleep(10)
+          {:cont, nil}
+
+        _ ->
+          {:halt, :ok}
+      end
+    end)
+
+    :ok
+  end
+
+  def handle_facts_emitted(_event, measurements, meta, parent) when is_pid(parent) do
+    send(parent, {:facts_emitted, measurements, meta})
+  end
+
+  def handle_facts_list(_event, measurements, _meta, parent) when is_pid(parent) do
+    send(parent, {:facts, measurements.facts})
   end
 end

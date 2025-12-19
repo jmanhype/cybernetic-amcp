@@ -57,9 +57,17 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
     {:ok, %{last_emit: now_ms()}}
   end
 
+  @impl true
+  def terminate(_reason, _state) do
+    # Telemetry handlers are global and must be detached on shutdown to avoid
+    # callbacks firing after ETS tables are gone (e.g., in tests or restarts).
+    _ = :telemetry.detach({__MODULE__, :goldrush})
+    :ok
+  end
+
   defp attach_sources do
     # Detach any existing handlers first
-    :telemetry.detach({__MODULE__, :goldrush})
+    _ = :telemetry.detach({__MODULE__, :goldrush})
 
     # Goldrush matches → [:cybernetic, :goldrush, :match]
     result =

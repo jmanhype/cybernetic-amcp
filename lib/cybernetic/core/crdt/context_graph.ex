@@ -109,8 +109,10 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
     neighbors =
       nodes
       |> Enum.map(fn node ->
-        pid = :rpc.call(node, Process, :whereis, [__MODULE__])
-        if pid && pid != :undefined, do: pid, else: nil
+        case :rpc.call(node, Process, :whereis, [__MODULE__]) do
+          pid when is_pid(pid) -> pid
+          _ -> nil
+        end
       end)
       |> Enum.filter(& &1)
 
