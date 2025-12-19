@@ -236,7 +236,7 @@ defmodule Cybernetic.Integrations.OhMyOpencode.ContextGraphTest do
   end
 
   describe "merge_subgraph/2" do
-    test "merges external graph data", %{name: name} do
+    test "merges external graph data and nodes are retrievable", %{name: name} do
       external_graph = %{
         nodes: %{
           "file:external.ex" => %{
@@ -250,12 +250,40 @@ defmodule Cybernetic.Integrations.OhMyOpencode.ContextGraphTest do
       }
 
       result = GenServer.call(name, {:merge_subgraph, external_graph})
-
       assert result == :ok or match?({:ok, _}, result)
+
+      # SEMANTIC: Verify the merged node is actually retrievable
+      {:ok, node} = GenServer.call(name, {:get_node, "file:external.ex"})
+      assert node.id == "file:external.ex"
+      assert node.type == :file
+      assert node.attrs.path == "external.ex"
     end
 
-    test "handles LWW conflict resolution", %{name: name} do
-      # Add local node
+    test "merges subgraph with string keys (from JSON)", %{name: name} do
+      # Simulates JSON-decoded subgraph with string keys
+      external_graph = %{
+        "nodes" => %{
+          "file:json.ex" => %{
+            "id" => "file:json.ex",
+            "type" => "file",
+            "attrs" => %{"path" => "json.ex"},
+            "updated_at" => DateTime.to_iso8601(DateTime.utc_now())
+          }
+        },
+        "edges" => %{}
+      }
+
+      result = GenServer.call(name, {:merge_subgraph, external_graph})
+      assert result == :ok or match?({:ok, _}, result)
+
+      # SEMANTIC: Verify the JSON-keyed node was merged
+      {:ok, node} = GenServer.call(name, {:get_node, "file:json.ex"})
+      assert node.id == "file:json.ex"
+    end
+
+    test "handles LWW conflict resolution - newer wins", %{name: name} do
+      # Add local node with old timestamp
+      old_time = DateTime.add(DateTime.utc_now(), -3600, :second)
       GenServer.call(name, {:add_node, "file:conflict.ex", %{type: :file, version: 1}})
 
       # Merge with newer remote data

@@ -4,10 +4,13 @@ defmodule Cybernetic.Integrations.Supervisor do
 
   Manages:
   - Integration registry (for per-tenant process lookup)
+  - DynamicSupervisor for tenant integration processes
   - Global integration services
   """
 
   use Supervisor
+
+  @dynamic_supervisor Cybernetic.Integrations.DynamicSupervisor
 
   def start_link(opts \\ []) do
     Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
@@ -19,8 +22,8 @@ defmodule Cybernetic.Integrations.Supervisor do
       # Registry for per-tenant integration processes
       {Registry, keys: :unique, name: Cybernetic.Integrations.Registry},
 
-      # Global integration services can be added here
-      # e.g., {Cybernetic.Integrations.MetricsAggregator, []}
+      # DynamicSupervisor for tenant integration services
+      {DynamicSupervisor, name: @dynamic_supervisor, strategy: :one_for_one}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -28,6 +31,8 @@ defmodule Cybernetic.Integrations.Supervisor do
 
   @doc """
   Start integration services for a tenant.
+
+  Returns a list of `{:ok, pid}` or `{:error, reason}` tuples.
   """
   def start_tenant_integrations(tenant_id, opts \\ []) do
     children = [
@@ -36,10 +41,8 @@ defmodule Cybernetic.Integrations.Supervisor do
       {Cybernetic.Integrations.OhMyOpencode.ContextGraph, Keyword.put(opts, :tenant_id, tenant_id)}
     ]
 
-    # Start each child under the main application supervisor
-    # In production, you might want a per-tenant DynamicSupervisor
     Enum.map(children, fn child_spec ->
-      DynamicSupervisor.start_child(Cybernetic.DynamicSupervisor, child_spec)
+      DynamicSupervisor.start_child(@dynamic_supervisor, child_spec)
     end)
   end
 
@@ -56,7 +59,7 @@ defmodule Cybernetic.Integrations.Supervisor do
     Enum.each(modules, fn module ->
       case Registry.lookup(Cybernetic.Integrations.Registry, {module, tenant_id}) do
         [{pid, _}] ->
-          DynamicSupervisor.terminate_child(Cybernetic.DynamicSupervisor, pid)
+          DynamicSupervisor.terminate_child(@dynamic_supervisor, pid)
 
         [] ->
           :ok

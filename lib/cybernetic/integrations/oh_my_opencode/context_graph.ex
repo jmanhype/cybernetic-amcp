@@ -279,10 +279,17 @@ defmodule Cybernetic.Integrations.OhMyOpencode.ContextGraph do
         new_nodes = Map.put(state.nodes, node_id, updated)
         new_belief_set = Map.put(state.belief_set, "node:#{node_id}", updated)
 
+        # Update indexes if name changed
+        new_indexes =
+          state.indexes
+          |> update_indexes(:remove, existing)
+          |> update_indexes(:add, updated)
+
         new_state = %{
           state
           | nodes: new_nodes,
             belief_set: new_belief_set,
+            indexes: new_indexes,
             stats: update_stats(state.stats, :node_updated)
         }
 
@@ -505,8 +512,9 @@ defmodule Cybernetic.Integrations.OhMyOpencode.ContextGraph do
 
   @impl true
   def handle_call({:merge_subgraph, subgraph}, _from, state) do
-    # Merge nodes
-    incoming_nodes = Map.get(subgraph, :nodes, %{}) |> Map.get("nodes", %{})
+    # Merge nodes - handle both atom and string keys (atom from export_subgraph, string from JSON)
+    incoming_nodes =
+      Map.get(subgraph, :nodes) || Map.get(subgraph, "nodes", %{})
 
     new_nodes =
       Enum.reduce(incoming_nodes, state.nodes, fn {node_id, node}, acc ->
@@ -527,8 +535,9 @@ defmodule Cybernetic.Integrations.OhMyOpencode.ContextGraph do
         end
       end)
 
-    # Merge edges
-    incoming_edges = Map.get(subgraph, :edges, %{}) |> Map.get("edges", %{})
+    # Merge edges - handle both atom and string keys
+    incoming_edges =
+      Map.get(subgraph, :edges) || Map.get(subgraph, "edges", %{})
 
     new_edges =
       Enum.reduce(incoming_edges, state.edges, fn {edge_key, edge}, acc ->

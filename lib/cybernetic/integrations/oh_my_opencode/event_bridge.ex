@@ -305,21 +305,69 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
     {:reply, {:ok, stats}, state}
   end
 
+  # Handle VSM Bridge events (from vsm_bridge:events:tenant_id topic)
   @impl true
-  def handle_info({:internal_event, topic, event}, state) do
-    # Relay internal Cybernetic events to oh-my-opencode
-    event_type = topic_to_event_type(topic)
-
-    if event_type in @outbound_event_types do
-      handle_cast({:emit, event_type, event, []}, state)
-    else
-      {:noreply, state}
-    end
+  def handle_info({:vsm_event, event}, state) do
+    relay_internal_event("vsm.state_changed", event, state)
   end
 
   @impl true
+  def handle_info({:remote_vsm_event, event}, state) do
+    relay_internal_event("vsm.state_changed", event, state)
+  end
+
+  # Handle VSM state broadcasts (from vsm_bridge:state:tenant_id topic)
+  @impl true
+  def handle_info({:state_updated, system, _new_state}, state) do
+    relay_internal_event("vsm.state_changed", %{system: system}, state)
+  end
+
+  # Handle episode events
+  @impl true
+  def handle_info({:episode_created, episode}, state) do
+    relay_internal_event("episode.created", episode, state)
+  end
+
+  @impl true
+  def handle_info({:episode_completed, episode}, state) do
+    relay_internal_event("episode.completed", episode, state)
+  end
+
+  # Handle policy events
+  @impl true
+  def handle_info({:policy_evaluated, result}, state) do
+    relay_internal_event("policy.evaluated", result, state)
+  end
+
+  # Handle capability events
+  @impl true
+  def handle_info({:capability_registered, capability}, state) do
+    relay_internal_event("capability.discovered", capability, state)
+  end
+
+  # Catch-all for unhandled PubSub messages
+  @impl true
   def handle_info(_msg, state) do
     {:noreply, state}
+  end
+
+  defp relay_internal_event(event_type, payload, state) do
+    if event_type in @outbound_event_types do
+      # Build and buffer the event
+      event = build_event(event_type, payload, state.tenant_id, :outbound, [])
+      new_buffer = buffer_event(state.event_buffer, event)
+
+      # Invoke handlers
+      invoke_handlers(state.event_handlers, event)
+
+      # Broadcast externally
+      broadcast_event(state.tenant_id, event, :outbound)
+
+      new_stats = Map.update!(state.stats, :events_emitted, &(&1 + 1))
+      {:noreply, %{state | event_buffer: new_buffer, stats: new_stats}}
+    else
+      {:noreply, state}
+    end
   end
 
   # Private helpers
@@ -330,8 +378,10 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
 
   defp subscribe_to_internal_events(tenant_id) do
     # Subscribe to internal Cybernetic PubSub topics
+    # Topics must match what VSMBridge and other modules actually broadcast to
     internal_topics = [
-      "vsm.state:#{tenant_id}",
+      "vsm_bridge:state:#{tenant_id}",
+      "vsm_bridge:events:#{tenant_id}",
       "episode:#{tenant_id}",
       "policy:#{tenant_id}",
       "capability:#{tenant_id}"
@@ -342,6 +392,8 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
         Phoenix.PubSub.subscribe(@pubsub, topic)
       rescue
         _ -> :ok
+      catch
+        :exit, _ -> :ok
       end
     end)
   end
@@ -465,13 +517,5 @@ defmodule Cybernetic.Integrations.OhMyOpencode.EventBridge do
 
       after_since? and type_match?
     end)
-  end
-
-  defp topic_to_event_type(topic) do
-    topic
-    |> String.split(":")
-    |> List.first()
-    |> String.replace(".", "_")
-    |> then(&"#{&1}.updated")
   end
 end
