@@ -17,6 +17,7 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   ETS tables:
   - `:policy_pipeline_policies` - `{policy_id, version}` → policy AST
   - `:policy_pipeline_active` - `policy_id` → active version number
+  - `:policy_pipeline_latest` - `policy_id` → latest version number
   - `:policy_pipeline_stats` - atomic counters for metrics
   """
 
@@ -31,6 +32,7 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   # ETS table names
   @policies_table :policy_pipeline_policies
   @active_table :policy_pipeline_active
+  @latest_table :policy_pipeline_latest
   @stats_table :policy_pipeline_stats
 
   # Public API
@@ -138,11 +140,8 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   """
   @spec list_versions(String.t()) :: [version()]
   def list_versions(policy_id) when is_binary(policy_id) do
-    # Match all entries for this policy_id
-    pattern = {{policy_id, :_}, :_}
-
-    :ets.match(@policies_table, pattern)
-    |> Enum.map(fn [{_policy_id, version}, _policy] -> version end)
+    :ets.match_object(@policies_table, {{policy_id, :_}, :_})
+    |> Enum.map(fn {{^policy_id, version}, _policy} -> version end)
     |> Enum.sort()
   rescue
     _ -> []
@@ -209,6 +208,13 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
     ])
 
     :ets.new(@active_table, [
+      :set,
+      :protected,
+      :named_table,
+      read_concurrency: true
+    ])
+
+    :ets.new(@latest_table, [
       :set,
       :protected,
       :named_table,
@@ -292,6 +298,8 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
     :ets.match_delete(@policies_table, {{policy_id, :_}, :_})
     # Delete active version entry
     :ets.delete(@active_table, policy_id)
+    # Delete latest version entry
+    :ets.delete(@latest_table, policy_id)
     Logger.info("Policy deleted: #{policy_id}")
     {:reply, :ok, state}
   end
@@ -312,18 +320,20 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   end
 
   defp add_policy_to_ets(policy_id, policy) do
-    # Determine next version
-    current_version =
-      case :ets.lookup(@active_table, policy_id) do
-        [{^policy_id, v}] -> v
+    latest_version =
+      case :ets.lookup(@latest_table, policy_id) do
+        [{^policy_id, v}] when is_integer(v) -> v
         [] -> 0
       end
 
-    next_version = current_version + 1
+    next_version = latest_version + 1
 
     # Add policy with version info
     policy_with_version = Map.put(policy, :version, next_version)
     :ets.insert(@policies_table, {{policy_id, next_version}, policy_with_version})
+
+    # Track latest version independently from active version (supports rollback)
+    :ets.insert(@latest_table, {policy_id, next_version})
 
     # Set as active version
     :ets.insert(@active_table, {policy_id, next_version})
