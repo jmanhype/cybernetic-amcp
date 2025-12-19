@@ -383,20 +383,30 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
       :ok
   end
 
-  # Tenant filtering - prevent cross-tenant event leakage
+  # Tenant filtering - prevent cross-tenant event leakage (fail-closed)
   # Events are matched if:
-  # 1. Connection has no tenant (global/anonymous) - receives all events
-  # 2. Event has no tenant_id field - broadcast to all tenants
-  # 3. Event tenant_id matches connection tenant_id
+  # 1. Event tenant_id is "__global__" - explicitly broadcast to all
+  # 2. Event tenant_id matches connection tenant_id exactly
+  # 
+  # SECURITY: In production, events without tenant_id are dropped (fail-closed)
+  # to prevent accidental cross-tenant leakage. Use "__global__" for broadcasts.
   @spec event_matches_tenant?(map(), String.t() | nil) :: boolean()
-  defp event_matches_tenant?(_data, nil), do: true
-
-  defp event_matches_tenant?(data, tenant_id) do
+  defp event_matches_tenant?(data, conn_tenant_id) do
     event_tenant = Map.get(data, :tenant_id) || Map.get(data, "tenant_id")
+    env = Application.get_env(:cybernetic, :environment, :prod)
 
-    case event_tenant do
-      nil -> true
-      ^tenant_id -> true
+    case {event_tenant, conn_tenant_id, env} do
+      # Explicit global broadcast - always allowed
+      {"__global__", _, _} -> true
+      
+      # Event tenant matches connection tenant - allowed
+      {tenant, tenant, _} when is_binary(tenant) -> true
+      
+      # In dev/test: missing tenant_id on event OR connection = broadcast
+      {nil, _, env} when env in [:dev, :test] -> true
+      {_, nil, env} when env in [:dev, :test] -> true
+      
+      # In production: fail-closed - drop events without explicit tenant match
       _ -> false
     end
   end

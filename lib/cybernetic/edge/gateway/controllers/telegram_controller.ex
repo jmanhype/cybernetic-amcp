@@ -318,7 +318,7 @@ defmodule Cybernetic.Edge.Gateway.TelegramController do
   # Map Telegram chat_id to a tenant_id for isolation
   @spec tenant_for_chat(chat_id() | nil) :: String.t()
   defp tenant_for_chat(nil), do: "__system_telegram__"
-  defp tenant_for_chat(chat_id), do: "telegram:#{chat_id}"
+  defp tenant_for_chat(chat_id), do: "telegram-#{chat_id}"
 
   # Get webhook secret from config
   @spec get_webhook_secret() :: String.t() | nil

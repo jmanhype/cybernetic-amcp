@@ -125,10 +125,13 @@ defmodule Cybernetic.Security.AuthManager do
 
   @doc """
   Authenticate with username/password and get JWT token.
+
+  Optionally accepts a tenant_id to associate with the session.
+  In production, tenant_id should be provided for proper tenant isolation.
   """
-  @spec authenticate(String.t(), String.t()) :: {:ok, map()} | {:error, atom()}
-  def authenticate(username, password) do
-    GenServer.call(__MODULE__, {:authenticate, username, password})
+  @spec authenticate(String.t(), String.t(), String.t() | nil) :: {:ok, map()} | {:error, atom()}
+  def authenticate(username, password, tenant_id \\ nil) do
+    GenServer.call(__MODULE__, {:authenticate, username, password, tenant_id})
   end
 
   @doc """
@@ -171,6 +174,7 @@ defmodule Cybernetic.Security.AuthManager do
              permissions: expand_permissions(session.roles),
              metadata: %{
                username: session.username,
+               tenant_id: session.tenant_id,
                auth_method: :jwt
              }
            }}
@@ -228,7 +232,7 @@ defmodule Cybernetic.Security.AuthManager do
   # ========== CALLBACKS ==========
 
   @impl true
-  def handle_call({:authenticate, username, password}, _from, state) do
+  def handle_call({:authenticate, username, password, tenant_id}, _from, state) do
     # Check rate limiting
     case check_rate_limit(username, state) do
       {:ok, state} ->
@@ -239,11 +243,12 @@ defmodule Cybernetic.Security.AuthManager do
             jwt = generate_jwt(user)
             refresh = generate_refresh_token(user)
 
-            # Store session
+            # Store session with tenant_id for isolation
             session = %{
               user_id: user.id,
               username: username,
               roles: user.roles,
+              tenant_id: tenant_id,
               jwt: jwt,
               refresh_token: refresh,
               created_at: DateTime.utc_now(),
@@ -295,7 +300,10 @@ defmodule Cybernetic.Security.AuthManager do
             user_id: key_data.name,
             roles: key_data.roles,
             permissions: expand_permissions(key_data.roles),
-            metadata: %{auth_method: :api_key}
+            metadata: %{
+              tenant_id: Map.get(key_data, :tenant_id),
+              auth_method: :api_key
+            }
           }
 
           Logger.info("API key authenticated: #{key_data.name}")
@@ -437,6 +445,7 @@ defmodule Cybernetic.Security.AuthManager do
 
     key_data = %{
       name: name,
+      tenant_id: Keyword.get(opts, :tenant_id),
       roles: roles,
       created_at: DateTime.utc_now(),
       expires_at: expires_at,
