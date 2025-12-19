@@ -7,6 +7,17 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   - Version rollback
   - A/B testing with policy variants
   - Audit logging
+
+  ## Performance
+
+  Policies are stored in ETS for lock-free concurrent reads. The GenServer
+  handles writes (register, delete, set_version) while evaluations read
+  directly from ETS without GenServer involvement.
+
+  ETS tables:
+  - `:policy_pipeline_policies` - `{policy_id, version}` → policy AST
+  - `:policy_pipeline_active` - `policy_id` → active version number
+  - `:policy_pipeline_stats` - atomic counters for metrics
   """
 
   use GenServer
@@ -17,11 +28,10 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   @type policy_id :: String.t()
   @type version :: pos_integer()
 
-  defstruct [
-    :policies,
-    :active_versions,
-    :stats
-  ]
+  # ETS table names
+  @policies_table :policy_pipeline_policies
+  @active_table :policy_pipeline_active
+  @stats_table :policy_pipeline_stats
 
   # Public API
 
@@ -50,18 +60,58 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
 
   @doc """
   Evaluate a policy.
+
+  Reads directly from ETS - no GenServer call, fully concurrent.
   """
   @spec evaluate(String.t(), Runtime.eval_context(), keyword()) :: Runtime.result()
   def evaluate(policy_id, eval_context, opts \\ []) when is_binary(policy_id) do
-    GenServer.call(__MODULE__, {:evaluate, policy_id, eval_context, opts})
+    start_time = System.monotonic_time(:microsecond)
+
+    result =
+      case get_policy_from_ets(policy_id) do
+        {:ok, policy} ->
+          Runtime.evaluate(policy, eval_context, opts)
+
+        {:error, _} = error ->
+          error
+      end
+
+    elapsed_us = System.monotonic_time(:microsecond) - start_time
+    update_stats_atomic(result, elapsed_us)
+
+    result
   end
 
   @doc """
   Evaluate multiple policies.
+
+  Reads directly from ETS - no GenServer call, fully concurrent.
   """
   @spec evaluate_all([String.t()], Runtime.eval_context(), keyword()) :: Runtime.result()
   def evaluate_all(policy_ids, eval_context, opts \\ []) when is_list(policy_ids) do
-    GenServer.call(__MODULE__, {:evaluate_all, policy_ids, eval_context, opts})
+    start_time = System.monotonic_time(:microsecond)
+
+    policies =
+      Enum.reduce_while(policy_ids, [], fn policy_id, acc ->
+        case get_policy_from_ets(policy_id) do
+          {:ok, policy} -> {:cont, [policy | acc]}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    result =
+      case policies do
+        {:error, _} = error ->
+          error
+
+        policies when is_list(policies) ->
+          Runtime.evaluate_all(Enum.reverse(policies), eval_context, opts)
+      end
+
+    elapsed_us = System.monotonic_time(:microsecond) - start_time
+    update_stats_atomic(result, elapsed_us)
+
+    result
   end
 
   @doc """
@@ -69,7 +119,10 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   """
   @spec get_active_version(String.t()) :: {:ok, version()} | {:error, :not_found}
   def get_active_version(policy_id) when is_binary(policy_id) do
-    GenServer.call(__MODULE__, {:get_active_version, policy_id})
+    case :ets.lookup(@active_table, policy_id) do
+      [{^policy_id, version}] -> {:ok, version}
+      [] -> {:error, :not_found}
+    end
   end
 
   @doc """
@@ -85,7 +138,14 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   """
   @spec list_versions(String.t()) :: [version()]
   def list_versions(policy_id) when is_binary(policy_id) do
-    GenServer.call(__MODULE__, {:list_versions, policy_id})
+    # Match all entries for this policy_id
+    pattern = {{policy_id, :_}, :_}
+
+    :ets.match(@policies_table, pattern)
+    |> Enum.map(fn [{_policy_id, version}, _policy] -> version end)
+    |> Enum.sort()
+  rescue
+    _ -> []
   end
 
   @doc """
@@ -101,7 +161,27 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   """
   @spec stats() :: map()
   def stats do
-    GenServer.call(__MODULE__, :stats)
+    evaluations = get_counter(:evaluations)
+    allows = get_counter(:allows)
+    denies = get_counter(:denies)
+    errors = get_counter(:errors)
+    total_time_us = get_counter(:total_time_us)
+
+    avg_time =
+      if evaluations > 0 do
+        total_time_us / evaluations
+      else
+        0.0
+      end
+
+    %{
+      evaluations: evaluations,
+      allows: allows,
+      denies: denies,
+      errors: errors,
+      avg_eval_time_us: avg_time,
+      wasm_available: Runtime.wasm_available?()
+    }
   end
 
   @doc """
@@ -109,27 +189,49 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   """
   @spec list_policies() :: [String.t()]
   def list_policies do
-    GenServer.call(__MODULE__, :list_policies)
+    :ets.tab2list(@active_table)
+    |> Enum.map(fn {policy_id, _version} -> policy_id end)
+  rescue
+    _ -> []
   end
 
   # GenServer callbacks
 
   @impl true
   def init(_opts) do
-    state = %__MODULE__{
-      policies: %{},
-      active_versions: %{},
-      stats: %{
-        evaluations: 0,
-        allows: 0,
-        denies: 0,
-        errors: 0,
-        avg_eval_time_us: 0
-      }
-    }
+    # Create ETS tables for concurrent reads
+    # :protected = GenServer writes, anyone reads
+    :ets.new(@policies_table, [
+      :set,
+      :protected,
+      :named_table,
+      read_concurrency: true
+    ])
+
+    :ets.new(@active_table, [
+      :set,
+      :protected,
+      :named_table,
+      read_concurrency: true
+    ])
+
+    # Stats table uses :public + write_concurrency for atomic updates
+    :ets.new(@stats_table, [
+      :set,
+      :public,
+      :named_table,
+      write_concurrency: true
+    ])
+
+    # Initialize stat counters
+    :ets.insert(@stats_table, {:evaluations, 0})
+    :ets.insert(@stats_table, {:allows, 0})
+    :ets.insert(@stats_table, {:denies, 0})
+    :ets.insert(@stats_table, {:errors, 0})
+    :ets.insert(@stats_table, {:total_time_us, 0})
 
     Logger.info("Policy pipeline started")
-    {:ok, state}
+    {:ok, %{}}
   end
 
   @impl true
@@ -138,9 +240,9 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
       {:ok, policy} ->
         case DSL.validate(policy) do
           :ok ->
-            {version, new_state} = add_policy_version(state, policy_id, policy)
+            version = add_policy_to_ets(policy_id, policy)
             Logger.info("Policy registered: #{policy_id} v#{version}")
-            {:reply, {:ok, version}, new_state}
+            {:reply, {:ok, version}, state}
 
           {:error, reason} ->
             {:reply, {:error, {:validation_failed, reason}}, state}
@@ -157,9 +259,9 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
       {:ok, policy} ->
         case DSL.validate(policy) do
           :ok ->
-            {version, new_state} = add_policy_version(state, policy_id, policy)
+            version = add_policy_to_ets(policy_id, policy)
             Logger.info("Policy registered from rules: #{policy_id} v#{version}")
-            {:reply, {:ok, version}, new_state}
+            {:reply, {:ok, version}, state}
 
           {:error, reason} ->
             {:reply, {:error, {:validation_failed, reason}}, state}
@@ -171,175 +273,85 @@ defmodule Cybernetic.Intelligence.Policy.Pipeline do
   end
 
   @impl true
-  def handle_call({:evaluate, policy_id, eval_context, opts}, _from, state) do
-    start_time = System.monotonic_time(:microsecond)
-
-    result =
-      case get_policy(state, policy_id) do
-        {:ok, policy} ->
-          Runtime.evaluate(policy, eval_context, opts)
-
-        {:error, _} = error ->
-          error
-      end
-
-    elapsed_us = System.monotonic_time(:microsecond) - start_time
-    new_state = update_stats(state, result, elapsed_us)
-
-    {:reply, result, new_state}
-  end
-
-  @impl true
-  def handle_call({:evaluate_all, policy_ids, eval_context, opts}, _from, state) do
-    start_time = System.monotonic_time(:microsecond)
-
-    policies =
-      Enum.reduce_while(policy_ids, [], fn policy_id, acc ->
-        case get_policy(state, policy_id) do
-          {:ok, policy} -> {:cont, [policy | acc]}
-          {:error, _} = error -> {:halt, error}
-        end
-      end)
-
-    result =
-      case policies do
-        {:error, _} = error ->
-          error
-
-        policies when is_list(policies) ->
-          Runtime.evaluate_all(Enum.reverse(policies), eval_context, opts)
-      end
-
-    elapsed_us = System.monotonic_time(:microsecond) - start_time
-    new_state = update_stats(state, result, elapsed_us)
-
-    {:reply, result, new_state}
-  end
-
-  @impl true
-  def handle_call({:get_active_version, policy_id}, _from, state) do
-    result =
-      case Map.get(state.active_versions, policy_id) do
-        nil -> {:error, :not_found}
-        version -> {:ok, version}
-      end
-
-    {:reply, result, state}
-  end
-
-  @impl true
   def handle_call({:set_active_version, policy_id, version}, _from, state) do
-    versions = Map.get(state.policies, policy_id, %{})
+    # Check if version exists
+    case :ets.lookup(@policies_table, {policy_id, version}) do
+      [{_key, _policy}] ->
+        :ets.insert(@active_table, {policy_id, version})
+        Logger.info("Policy #{policy_id} active version set to v#{version}")
+        {:reply, :ok, state}
 
-    if Map.has_key?(versions, version) do
-      new_state = %{state | active_versions: Map.put(state.active_versions, policy_id, version)}
-      Logger.info("Policy #{policy_id} active version set to v#{version}")
-      {:reply, :ok, new_state}
-    else
-      {:reply, {:error, :version_not_found}, state}
+      [] ->
+        {:reply, {:error, :version_not_found}, state}
     end
-  end
-
-  @impl true
-  def handle_call({:list_versions, policy_id}, _from, state) do
-    versions =
-      state.policies
-      |> Map.get(policy_id, %{})
-      |> Map.keys()
-      |> Enum.sort()
-
-    {:reply, versions, state}
   end
 
   @impl true
   def handle_call({:delete, policy_id}, _from, state) do
-    new_state = %{
-      state
-      | policies: Map.delete(state.policies, policy_id),
-        active_versions: Map.delete(state.active_versions, policy_id)
-    }
-
+    # Delete all versions
+    :ets.match_delete(@policies_table, {{policy_id, :_}, :_})
+    # Delete active version entry
+    :ets.delete(@active_table, policy_id)
     Logger.info("Policy deleted: #{policy_id}")
-    {:reply, :ok, new_state}
+    {:reply, :ok, state}
   end
 
-  @impl true
-  def handle_call(:stats, _from, state) do
-    stats =
-      Map.merge(state.stats, %{
-        policy_count: map_size(state.policies),
-        wasm_available: Runtime.wasm_available?()
-      })
+  # Private helpers - ETS operations
 
-    {:reply, stats, state}
-  end
-
-  @impl true
-  def handle_call(:list_policies, _from, state) do
-    {:reply, Map.keys(state.policies), state}
-  end
-
-  # Private helpers
-
-  defp add_policy_version(state, policy_id, policy) do
-    versions = Map.get(state.policies, policy_id, %{})
-    next_version = if map_size(versions) == 0, do: 1, else: Enum.max(Map.keys(versions)) + 1
-
-    policy_with_version = %{policy | version: next_version}
-
-    new_policies =
-      Map.update(state.policies, policy_id, %{next_version => policy_with_version}, fn versions ->
-        Map.put(versions, next_version, policy_with_version)
-      end)
-
-    new_active_versions = Map.put(state.active_versions, policy_id, next_version)
-
-    new_state = %{state | policies: new_policies, active_versions: new_active_versions}
-
-    {next_version, new_state}
-  end
-
-  defp get_policy(state, policy_id) do
-    case Map.get(state.active_versions, policy_id) do
-      nil ->
-        {:error, :policy_not_found}
-
-      version ->
-        case get_in(state.policies, [policy_id, version]) do
-          nil -> {:error, :version_not_found}
-          policy -> {:ok, policy}
+  defp get_policy_from_ets(policy_id) do
+    case :ets.lookup(@active_table, policy_id) do
+      [{^policy_id, version}] ->
+        case :ets.lookup(@policies_table, {policy_id, version}) do
+          [{_key, policy}] -> {:ok, policy}
+          [] -> {:error, :version_not_found}
         end
+
+      [] ->
+        {:error, :policy_not_found}
     end
   end
 
-  defp update_stats(state, result, elapsed_us) do
-    stats = state.stats
-
-    new_stats =
-      case result do
-        :allow ->
-          %{stats | evaluations: stats.evaluations + 1, allows: stats.allows + 1}
-
-        :deny ->
-          %{stats | evaluations: stats.evaluations + 1, denies: stats.denies + 1}
-
-        {:error, _} ->
-          %{stats | evaluations: stats.evaluations + 1, errors: stats.errors + 1}
+  defp add_policy_to_ets(policy_id, policy) do
+    # Determine next version
+    current_version =
+      case :ets.lookup(@active_table, policy_id) do
+        [{^policy_id, v}] -> v
+        [] -> 0
       end
 
-    # Update running average
-    n = new_stats.evaluations
-    old_avg = stats.avg_eval_time_us
+    next_version = current_version + 1
 
-    new_avg =
-      if n == 1 do
-        elapsed_us * 1.0
-      else
-        old_avg + (elapsed_us - old_avg) / n
-      end
+    # Add policy with version info
+    policy_with_version = Map.put(policy, :version, next_version)
+    :ets.insert(@policies_table, {{policy_id, next_version}, policy_with_version})
 
-    new_stats = %{new_stats | avg_eval_time_us: new_avg}
+    # Set as active version
+    :ets.insert(@active_table, {policy_id, next_version})
 
-    %{state | stats: new_stats}
+    next_version
+  end
+
+  defp update_stats_atomic(result, elapsed_us) do
+    # Atomic counter updates - no locking needed
+    :ets.update_counter(@stats_table, :evaluations, 1)
+    :ets.update_counter(@stats_table, :total_time_us, elapsed_us)
+
+    case result do
+      :allow -> :ets.update_counter(@stats_table, :allows, 1)
+      :deny -> :ets.update_counter(@stats_table, :denies, 1)
+      {:error, _} -> :ets.update_counter(@stats_table, :errors, 1)
+    end
+  rescue
+    # ETS table might not exist in tests
+    ArgumentError -> :ok
+  end
+
+  defp get_counter(key) do
+    case :ets.lookup(@stats_table, key) do
+      [{^key, value}] -> value
+      [] -> 0
+    end
+  rescue
+    ArgumentError -> 0
   end
 end
