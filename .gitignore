@@ -60,4 +60,4 @@ secrets/
 # Temporary files
 *.tmp
 /tmp/
-EOF < /dev/null
+EOF < /dev/null.swarm/
