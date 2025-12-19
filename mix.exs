@@ -41,13 +41,19 @@ defmodule Cybernetic.MixProject do
       {:rustler, ">= 0.0.0"},
       {:gen_stage, "~> 1.2"},
 
-      # MCP integration
-      {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main"},
+      # MCP integration (pinned to SHA for reproducible builds)
+      {:hermes_mcp,
+       git: "https://github.com/cloudwalk/hermes-mcp",
+       ref: "97a3dd7e4b6907cc79136da7999b4f51af4834eb"},
 
-      # Goldrush branches for reactive stream processing
-      {:goldrush, git: "https://github.com/DeadZen/goldrush", branch: "master"},
+      # Goldrush branches for reactive stream processing (pinned to SHA)
+      {:goldrush,
+       git: "https://github.com/DeadZen/goldrush",
+       ref: "57e71f2789632a085f0963e1244644fdcb1941b9"},
       {:goldrush_elixir,
-       git: "https://github.com/DeadZen/goldrush", branch: "develop-elixir", app: false},
+       git: "https://github.com/DeadZen/goldrush",
+       ref: "1d39c73c5ec2409f6866933b5af6bda3138d9fad",
+       app: false},
 
       # Telegram bot integration
       # More modern Telegram bot library
@@ -60,6 +66,10 @@ defmodule Cybernetic.MixProject do
       {:nanoid, "~> 2.0"},
       # UUID generation
       {:elixir_uuid, "~> 1.2"},
+      # JWT/JWK verification (OIDC/JWKS support)
+      {:jose, "~> 1.11"},
+      # Password hashing (Argon2id)
+      {:argon2_elixir, "~> 4.0"},
 
       # HTTP clients
       # For Claude API

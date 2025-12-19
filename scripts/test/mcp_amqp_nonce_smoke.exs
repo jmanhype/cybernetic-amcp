@@ -2,8 +2,9 @@
 
 # MCP + AMQP + NonceBloom Integration Smoke Test
 # Tests the complete integration of MCP tools, AMQP messaging, and NonceBloom security
-
-Code.require_file("../../lib/cybernetic.ex", __DIR__)
+#
+# Run with:
+#   mix run scripts/test/mcp_amqp_nonce_smoke.exs
 
 defmodule MCPAMQPNonceSmokeTest do
   require Logger
@@ -238,7 +239,4 @@ defmodule MCPAMQPNonceSmokeTest do
   end
 end
 
-# Run the test if this file is executed directly
-if __ENV__.file == Path.absname(System.argv() |> List.first() || __ENV__.file) do
-  MCPAMQPNonceSmokeTest.run()
-end
+MCPAMQPNonceSmokeTest.run()

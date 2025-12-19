@@ -70,10 +70,16 @@ defmodule Cybernetic.Security.AuthManager do
     # Start session cleanup timer
     Process.send_after(self(), :cleanup_sessions, 60_000)
 
+    env = Application.get_env(:cybernetic, :environment, :prod)
+    users = load_users(env)
+    users_by_id = Map.new(users, fn {_username, user} -> {user.id, user} end)
+
     state = %{
       sessions: %{},
       api_keys: %{},
       refresh_tokens: %{},
+      users: users,
+      users_by_id: users_by_id,
       # Track failed auth attempts
       failed_attempts: %{},
       rate_limits: %{}
@@ -150,7 +156,7 @@ defmodule Cybernetic.Security.AuthManager do
     case check_rate_limit(username, state) do
       {:ok, state} ->
         # Verify credentials (in production, check against secure store)
-        case verify_credentials(username, password) do
+        case verify_credentials(username, password, state.users) do
           {:ok, user} ->
             # Generate tokens
             jwt = generate_jwt(user)
@@ -250,8 +256,17 @@ defmodule Cybernetic.Security.AuthManager do
         end
 
       [] ->
-        # Token not found in sessions - it's invalid/revoked
-        {:reply, {:error, :invalid_token}, state}
+        # Not a local session token; try verifying it as a real JWT (OIDC/JWKS).
+        case Cybernetic.Security.JWT.verify(token) do
+          {:ok, claims} ->
+            {:reply, {:ok, auth_context_from_claims(claims)}, state}
+
+          {:error, :token_expired} ->
+            {:reply, {:error, :token_expired}, state}
+
+          _ ->
+            {:reply, {:error, :invalid_token}, state}
+        end
     end
   end
 
@@ -260,7 +275,14 @@ defmodule Cybernetic.Security.AuthManager do
     case :ets.lookup(:refresh_tokens, refresh_token) do
       [{^refresh_token, user_id}] ->
         # Generate new tokens
-        user = get_user(user_id)
+        user =
+          Map.get(state.users_by_id, user_id) ||
+            %{
+              id: user_id,
+              username: user_id,
+              roles: [:viewer]
+            }
+
         new_jwt = generate_jwt(user)
         new_refresh = generate_refresh_token(user)
 
@@ -428,39 +450,7 @@ defmodule Cybernetic.Security.AuthManager do
 
   # ========== PRIVATE FUNCTIONS ==========
 
-  defp verify_credentials(username, password) do
-    # Load users from environment or secure store
-    users = get_configured_users()
-
-    # If no users configured, create default users for test environment
-    env = Application.get_env(:cybernetic, :environment, :prod)
-
-    users =
-      if map_size(users) == 0 and env in [:dev, :test] do
-        %{
-          "admin" => %{
-            id: "user_admin",
-            username: "admin",
-            password_hash: hash_password("admin123"),
-            roles: [:admin]
-          },
-          "operator" => %{
-            id: "user_operator",
-            username: "operator",
-            password_hash: hash_password("operator123"),
-            roles: [:operator]
-          },
-          "viewer" => %{
-            id: "user_viewer",
-            username: "viewer",
-            password_hash: hash_password("viewer123"),
-            roles: [:viewer]
-          }
-        }
-      else
-        users
-      end
-
+  defp verify_credentials(username, password, users) when is_map(users) do
     case Map.get(users, username) do
       nil ->
         {:error, :user_not_found}
@@ -474,6 +464,35 @@ defmodule Cybernetic.Security.AuthManager do
     end
   end
 
+  defp load_users(env) do
+    users = get_configured_users()
+
+    if map_size(users) == 0 and env in [:dev, :test] do
+      %{
+        "admin" => %{
+          id: "user_admin",
+          username: "admin",
+          password_hash: hash_password("admin123"),
+          roles: [:admin]
+        },
+        "operator" => %{
+          id: "user_operator",
+          username: "operator",
+          password_hash: hash_password("operator123"),
+          roles: [:operator]
+        },
+        "viewer" => %{
+          id: "user_viewer",
+          username: "viewer",
+          password_hash: hash_password("viewer123"),
+          roles: [:viewer]
+        }
+      }
+    else
+      users
+    end
+  end
+
   defp generate_jwt(user) do
     claims = %{
       "sub" => user.id,
@@ -483,14 +502,12 @@ defmodule Cybernetic.Security.AuthManager do
       "exp" => DateTime.to_unix(DateTime.add(DateTime.utc_now(), @jwt_ttl_seconds, :second))
     }
 
-    # In production, use proper JWT library like Joken
-    # For now, simple encoded JSON with signature
-    payload = Jason.encode!(claims)
+    jwk = JOSE.JWK.from_oct(get_jwt_secret())
 
-    signature =
-      :crypto.mac(:hmac, :sha256, get_jwt_secret(), payload) |> Base.encode64(padding: false)
-
-    Base.encode64(payload, padding: false) <> "." <> signature
+    jwk
+    |> JOSE.JWT.sign(%{"alg" => "HS256"}, claims)
+    |> JOSE.JWS.compact()
+    |> elem(1)
   end
 
   # Unused function - kept for future JWT validation needs
@@ -536,31 +553,30 @@ defmodule Cybernetic.Security.AuthManager do
   end
 
   defp hash_password(password) do
-    # In production, use Argon2 or bcrypt with proper salt
-    # For now, using stronger hashing with random salt
-    salt = System.get_env("PASSWORD_SALT", "cybernetic_default_salt_change_in_prod")
-    :crypto.hash(:sha256, password <> salt) |> Base.encode16()
+    pepper = System.get_env("PASSWORD_SALT", "")
+    opts = argon2_opts()
+    Argon2.hash_pwd_salt(password <> pepper, opts)
   end
 
   defp verify_password(password, hash) do
-    # P0 Security: Use constant-time comparison to prevent timing attacks
-    computed_hash = hash_password(password)
-    secure_compare(computed_hash, hash)
+    pepper = System.get_env("PASSWORD_SALT", "")
+    Argon2.verify_pass(password <> pepper, hash)
   end
 
-  # P0 Security: Constant-time string comparison to prevent timing attacks
-  defp secure_compare(a, b) when byte_size(a) != byte_size(b), do: false
+  # Argon2 params from config or secure defaults
+  # See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+  # Note: m_cost is 2^N KiB (16 = 64MB, 17 = 128MB)
+  defp argon2_opts do
+    config = Application.get_env(:cybernetic, :argon2, [])
 
-  defp secure_compare(a, b) do
-    # XOR all bytes and accumulate - timing is constant regardless of where mismatch occurs
-    a_bytes = :binary.bin_to_list(a)
-    b_bytes = :binary.bin_to_list(b)
-
-    result =
-      Enum.zip(a_bytes, b_bytes)
-      |> Enum.reduce(0, fn {x, y}, acc -> Bitwise.bor(acc, Bitwise.bxor(x, y)) end)
-
-    result == 0
+    [
+      # Time cost (iterations) - higher is more secure but slower
+      t_cost: Keyword.get(config, :t_cost, 3),
+      # Memory cost as power of 2 (2^16 = 64MB, 2^17 = 128MB)
+      m_cost: Keyword.get(config, :m_cost, 16),
+      # Parallelism - number of threads
+      parallelism: Keyword.get(config, :parallelism, 4)
+    ]
   end
 
   defp expand_permissions(roles) do
@@ -569,6 +585,41 @@ defmodule Cybernetic.Security.AuthManager do
       Map.get(@role_permissions, role, [])
     end)
     |> Enum.uniq()
+  end
+
+  defp auth_context_from_claims(claims) when is_map(claims) do
+    roles =
+      case claims["roles"] do
+        roles when is_list(roles) ->
+          roles
+          |> Enum.map(&to_string/1)
+          |> Enum.map(&String.downcase/1)
+          |> Enum.map(&parse_role/1)
+          |> Enum.reject(&is_nil/1)
+
+        role when is_binary(role) ->
+          role
+          |> String.split(",", trim: true)
+          |> Enum.map(&String.downcase/1)
+          |> Enum.map(&parse_role/1)
+          |> Enum.reject(&is_nil/1)
+
+        _ ->
+          []
+      end
+
+    roles = if roles == [], do: [:viewer], else: roles
+
+    %{
+      user_id: claims["sub"] || claims["user_id"] || claims["uid"] || "unknown",
+      roles: roles,
+      permissions: expand_permissions(roles),
+      metadata: %{
+        username: claims["username"] || claims["preferred_username"] || claims["email"],
+        tenant_id: claims["tenant_id"] || claims["tid"],
+        auth_method: :jwt
+      }
+    }
   end
 
   defp check_permission(permissions, resource, action) do
@@ -622,15 +673,6 @@ defmodule Cybernetic.Security.AuthManager do
     end)
     |> Enum.reject(fn {_username, attempts} -> Enum.empty?(attempts) end)
     |> Map.new()
-  end
-
-  defp get_user(user_id) do
-    # In production, fetch from database
-    %{
-      id: user_id,
-      username: "user",
-      roles: [:operator]
-    }
   end
 
   # Unused function - kept for future IP tracking needs

@@ -4,6 +4,9 @@ defmodule Cybernetic.Integration.VSMPathTest do
   Validates that operational signals flow correctly through the hierarchy.
   """
   use ExUnit.Case, async: false
+
+  @moduletag :integration
+
   import ExUnit.CaptureLog
   alias Cybernetic.Core.Transport.AMQP.Publisher
   alias Cybernetic.VSM.System1.Agents.TelegramAgent

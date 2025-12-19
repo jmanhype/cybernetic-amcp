@@ -82,6 +82,10 @@ defmodule Cybernetic.Security.AuthManagerTest do
       assert is_binary(new_token)
       assert is_binary(new_refresh)
       assert new_refresh != refresh
+
+      assert {:ok, context} = AuthManager.validate_token(new_token)
+      assert context.user_id == "user_admin"
+      assert :admin in context.roles
     end
 
     test "rejects invalid refresh token" do

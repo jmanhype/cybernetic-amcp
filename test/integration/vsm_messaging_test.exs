@@ -4,6 +4,9 @@ defmodule Cybernetic.Integration.VSMMessagingTest do
   Tests actual message flow without relying on telemetry.
   """
   use ExUnit.Case, async: false
+
+  @moduletag :integration
+
   alias Cybernetic.Core.Transport.AMQP.Publisher
   alias Cybernetic.VSM.System1.MessageHandler, as: S1Handler
   alias Cybernetic.VSM.System2.MessageHandler, as: S2Handler

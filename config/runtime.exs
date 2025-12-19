@@ -120,6 +120,55 @@ config :cybernetic, :security,
   bloom_size: 100_000,
   bloom_error_rate: 0.001
 
+# OIDC/JWT verification (optional)
+oidc_jwk_cache_ttl_ms =
+  case System.get_env("OIDC_JWK_CACHE_TTL_MS") do
+    nil ->
+      :timer.minutes(5)
+
+    value ->
+      case Integer.parse(value) do
+        {i, ""} when i > 0 -> i
+        _ -> :timer.minutes(5)
+      end
+  end
+
+oidc_clock_skew_sec =
+  case System.get_env("OIDC_CLOCK_SKEW_SEC") do
+    nil ->
+      60
+
+    value ->
+      case Integer.parse(value) do
+        {i, ""} when i >= 0 -> i
+        _ -> 60
+      end
+  end
+
+oidc_allowed_algs =
+  case System.get_env("OIDC_ALLOWED_ALGS") do
+    nil ->
+      ["RS256", "HS256"]
+
+    value ->
+      value
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+      |> then(fn
+        [] -> ["RS256", "HS256"]
+        list -> list
+      end)
+  end
+
+config :cybernetic, :oidc,
+  issuer: System.get_env("OIDC_ISSUER"),
+  jwks_url: System.get_env("OIDC_JWKS_URL"),
+  audience: System.get_env("OIDC_AUDIENCE"),
+  allowed_algs: oidc_allowed_algs,
+  jwk_cache_ttl_ms: oidc_jwk_cache_ttl_ms,
+  clock_skew_sec: oidc_clock_skew_sec
+
 # Telegram configuration (optional)
 config :cybernetic, :telegram,
   bot_token: {:system, "TELEGRAM_BOT_TOKEN"},
@@ -209,21 +258,26 @@ config :cybernetic, Cybernetic.VSM.System4.Providers.Together,
   temperature: 0.1
 
 # OpenTelemetry Configuration
-config :opentelemetry,
-  span_processor: :batch,
-  traces_exporter: :otlp,
-  resource: [
-    service: %{
-      name: "cybernetic",
-      version: "0.1.0"
-    }
-  ]
+if config_env() == :test do
+  # Keep test output clean and avoid external network dependencies.
+  config :opentelemetry, traces_exporter: :none
+else
+  config :opentelemetry,
+    span_processor: :batch,
+    traces_exporter: :otlp,
+    resource: [
+      service: %{
+        name: "cybernetic",
+        version: "0.1.0"
+      }
+    ]
 
-config :opentelemetry_exporter,
-  otlp_protocol: :grpc,
-  otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") || "http://localhost:4317",
-  otlp_headers: System.get_env("OTEL_EXPORTER_OTLP_HEADERS") || "",
-  otlp_compression: :gzip
+  config :opentelemetry_exporter,
+    otlp_protocol: :grpc,
+    otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") || "http://localhost:4317",
+    otlp_headers: System.get_env("OTEL_EXPORTER_OTLP_HEADERS") || "",
+    otlp_compression: :gzip
+end
 
 # Prometheus metrics exporter
 config :telemetry_metrics_prometheus_core,

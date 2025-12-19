@@ -11,12 +11,18 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
   end
 
   def init(_opts) do
+    # Configurable sync intervals - defaults are production-appropriate
+    config = Application.get_env(:cybernetic, :crdt, [])
+    sync_interval = Keyword.get(config, :sync_interval, 1000)
+    ship_interval = Keyword.get(config, :ship_interval, 1000)
+    ship_debounce = Keyword.get(config, :ship_debounce, 100)
+
     {:ok, crdt} =
       DeltaCrdt.start_link(
         DeltaCrdt.AWLWWMap,
-        sync_interval: 50,
-        ship_interval: 50,
-        ship_debounce: 10
+        sync_interval: sync_interval,
+        ship_interval: ship_interval,
+        ship_debounce: ship_debounce
       )
 
     # Monitor node connections for distributed sync
@@ -99,17 +105,20 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
     nodes = Node.list()
     Logger.info("Wiring CRDT neighbors: #{inspect(nodes)}")
 
-    # Wire each node as a neighbor for the CRDT
+    # Build the full list of neighbor PIDs first
     neighbors =
-      Enum.map(nodes, fn node ->
+      nodes
+      |> Enum.map(fn node ->
         pid = :rpc.call(node, Process, :whereis, [__MODULE__])
-
-        if pid && pid != :undefined do
-          DeltaCrdt.set_neighbours(crdt, [pid])
-          pid
-        end
+        if pid && pid != :undefined, do: pid, else: nil
       end)
       |> Enum.filter(& &1)
+
+    # Set all neighbors in a single call (not one-by-one)
+    if neighbors != [] do
+      DeltaCrdt.set_neighbours(crdt, neighbors)
+      Logger.debug("Set #{length(neighbors)} CRDT neighbors")
+    end
 
     {:noreply, %{state | neighbors: neighbors}}
   end

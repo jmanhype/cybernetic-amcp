@@ -15,7 +15,10 @@ end
 config :cybernetic,
   transport: Cybernetic.Transport.InMemory,
   test_mode: true,
-  environment: :test
+  environment: :test,
+  # Keep unit tests fast and quiet by default; integration tests can re-enable as needed.
+  enable_telemetry: false,
+  enable_health_monitoring: false
 
 # Disable AMQP during tests
 config :cybernetic, :amqp, enabled: false

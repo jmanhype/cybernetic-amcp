@@ -64,24 +64,28 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
 
   @doc "Wait for registry to be ready with builtin tools"
   def await_ready(timeout \\ 2_000) do
-    ref = make_ref()
-    parent = self()
+    if registry_ready?() do
+      :ok
+    else
+      ref = make_ref()
+      parent = self()
 
-    :telemetry.attach(
-      {:mcp_ready, ref},
-      @ready_event,
-      &__MODULE__.handle_mcp_ready/4,
-      parent
-    )
+      :telemetry.attach(
+        {:mcp_ready, ref},
+        @ready_event,
+        &__MODULE__.handle_mcp_ready/4,
+        parent
+      )
 
-    receive do
-      {:mcp_ready, _count} ->
-        :telemetry.detach({:mcp_ready, ref})
-        :ok
-    after
-      timeout ->
-        :telemetry.detach({:mcp_ready, ref})
-        {:error, :timeout}
+      receive do
+        {:mcp_ready, _count} ->
+          :telemetry.detach({:mcp_ready, ref})
+          :ok
+      after
+        timeout ->
+          :telemetry.detach({:mcp_ready, ref})
+          {:error, :timeout}
+      end
     end
   end
 
@@ -212,6 +216,18 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   end
 
   # Private functions
+
+  defp registry_ready? do
+    case :ets.whereis(@registry_table) do
+      :undefined ->
+        false
+
+      _ ->
+        :ets.info(@registry_table, :size) > 0
+    end
+  rescue
+    ArgumentError -> false
+  end
 
   defp register_builtin_tools do
     tools = [
