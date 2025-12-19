@@ -12,6 +12,7 @@ defmodule Cybernetic.Security.JWKSCache do
   """
 
   use GenServer
+  import Bitwise
   require Logger
 
   @cache_table :cybernetic_jwks_cache
@@ -241,20 +242,36 @@ defmodule Cybernetic.Security.JWKSCache do
   end
 
   defp resolve_and_check_private(host) do
-    # Resolve hostname to IP addresses
-    case :inet.getaddr(String.to_charlist(host), :inet) do
-      {:ok, ip_tuple} ->
-        ip_in_private_range?(ip_tuple)
+    host_charlist = String.to_charlist(host)
+
+    # Fast path: literal IPs (no DNS)
+    case :inet.parse_address(host_charlist) do
+      {:ok, {_, _, _, _} = ip} ->
+        ip_in_private_range?(ip)
+
+      {:ok, {_, _, _, _, _, _, _, _} = ip} ->
+        ipv6_is_private?(ip)
 
       {:error, _} ->
-        # If resolution fails, also check IPv6
-        case :inet.getaddr(String.to_charlist(host), :inet6) do
-          {:ok, ip_tuple} ->
-            ipv6_is_private?(ip_tuple)
+        # DNS resolution check - block if ANY resolved address is private/reserved
+        ipv4_addrs =
+          case :inet.getaddrs(host_charlist, :inet) do
+            {:ok, addrs} when is_list(addrs) -> addrs
+            _ -> []
+          end
 
-          {:error, _} ->
-            # Can't resolve - block in prod as suspicious
-            true
+        ipv6_addrs =
+          case :inet.getaddrs(host_charlist, :inet6) do
+            {:ok, addrs} when is_list(addrs) -> addrs
+            _ -> []
+          end
+
+        if ipv4_addrs == [] and ipv6_addrs == [] do
+          # Can't resolve - block in prod as suspicious
+          true
+        else
+          Enum.any?(ipv4_addrs, &ip_in_private_range?/1) or
+            Enum.any?(ipv6_addrs, &ipv6_is_private?/1)
         end
     end
   end
@@ -271,12 +288,15 @@ defmodule Cybernetic.Security.JWKSCache do
 
   # ::1 (loopback)
   defp ipv6_is_private?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
-  # fe80::/10 (link-local)
-  defp ipv6_is_private?({0xFE80, _, _, _, _, _, _, _}), do: true
-  # fc00::/7 (unique local)
-  defp ipv6_is_private?({0xFC00, _, _, _, _, _, _, _}), do: true
-  # fd00::/8 (unique local)
-  defp ipv6_is_private?({0xFD00, _, _, _, _, _, _, _}), do: true
+  # IPv4-mapped IPv6 (::ffff:x.x.x.x)
+  defp ipv6_is_private?({0, 0, 0, 0, 0, 0xFFFF, hi, lo}) do
+    ip_in_private_range?({hi >>> 8, hi &&& 0xFF, lo >>> 8, lo &&& 0xFF})
+  end
+
+  # fe80::/10 (link-local) = fe80..febf
+  defp ipv6_is_private?({a, _, _, _, _, _, _, _}) when a >= 0xFE80 and a <= 0xFEBF, do: true
+  # fc00::/7 (unique local) = fc00..fdff
+  defp ipv6_is_private?({a, _, _, _, _, _, _, _}) when a >= 0xFC00 and a <= 0xFDFF, do: true
   defp ipv6_is_private?(_), do: false
 
   defp decode_json(body) when is_binary(body) do

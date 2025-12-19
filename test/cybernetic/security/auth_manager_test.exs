@@ -1,17 +1,20 @@
 defmodule Cybernetic.Security.AuthManagerTest do
   use ExUnit.Case, async: false
   alias Cybernetic.Security.AuthManager
+  alias Cybernetic.Security.JWKSCache
 
   setup do
-    # Start AuthManager for each test (handle already_started case)
-    pid =
+    # Ensure AuthManager is running (prefer the supervised instance started by the app)
+    {pid, started_by_test?} =
       case AuthManager.start_link() do
-        {:ok, pid} -> pid
-        {:error, {:already_started, pid}} -> pid
+        {:ok, pid} -> {pid, true}
+        {:error, {:already_started, pid}} -> {pid, false}
       end
 
+    reset_auth_manager_state(pid)
+
     on_exit(fn ->
-      if Process.alive?(pid), do: GenServer.stop(pid)
+      if started_by_test? and Process.alive?(pid), do: GenServer.stop(pid)
     end)
 
     {:ok, %{pid: pid}}
@@ -68,6 +71,24 @@ defmodule Cybernetic.Security.AuthManagerTest do
       # For now, test with invalid token
       assert {:error, :invalid_token} =
                AuthManager.validate_token("expired.token")
+    end
+
+    test "rejects external JWTs missing required sub claim" do
+      {:ok, jwks_url, kid, jwk} = start_local_jwks_server()
+
+      original_oidc = Application.get_env(:cybernetic, :oidc, [])
+      Application.put_env(:cybernetic, :oidc, Keyword.put(original_oidc, :jwks_url, jwks_url))
+      JWKSCache.clear()
+
+      on_exit(fn ->
+        Application.put_env(:cybernetic, :oidc, original_oidc)
+        JWKSCache.clear()
+      end)
+
+      # Missing "sub" claim should be rejected by AuthManager
+      token = create_rs256_token(jwk, kid, %{"exp" => future_exp()})
+
+      assert {:error, :invalid_token} = AuthManager.validate_token(token)
     end
   end
 
@@ -193,5 +214,74 @@ defmodule Cybernetic.Security.AuthManagerTest do
 
       assert token1 != token2
     end
+  end
+
+  # Test helpers
+
+  defp reset_auth_manager_state(pid) do
+    # Clear ETS-backed state between tests (prevents cross-test coupling).
+    for table <- [:auth_sessions, :auth_session_expiry, :api_keys, :refresh_tokens] do
+      try do
+        :ets.delete_all_objects(table)
+      rescue
+        ArgumentError -> :ok
+      end
+    end
+
+    # Reset in-process rate limiting counters.
+    :sys.replace_state(pid, fn state ->
+      state
+      |> Map.put(:failed_attempts, %{})
+      |> Map.put(:rate_limits, %{})
+    end)
+  end
+
+  defp start_local_jwks_server do
+    kid = "test-kid"
+    jwk = JOSE.JWK.generate_key({:rsa, 2048})
+
+    {_fields, public_key_map} = jwk |> JOSE.JWK.to_public() |> JOSE.JWK.to_map()
+    jwks = %{"keys" => [Map.put(public_key_map, "kid", kid)]}
+
+    child_spec =
+      Plug.Cowboy.child_spec(
+        scheme: :http,
+        plug: {__MODULE__.JWKSPlug, jwks: jwks},
+        options: [port: 0]
+      )
+
+    _pid = start_supervised!(child_spec)
+    port = :ranch.get_port(__MODULE__.JWKSPlug.HTTP)
+
+    {:ok, "http://127.0.0.1:#{port}/jwks", kid, jwk}
+  end
+
+  defmodule JWKSPlug do
+    import Plug.Conn
+
+    def init(opts), do: opts
+
+    def call(%Plug.Conn{request_path: "/jwks"} = conn, opts) do
+      jwks = Keyword.fetch!(opts, :jwks)
+
+      conn
+      |> put_resp_content_type("application/json")
+      |> send_resp(200, Jason.encode!(jwks))
+    end
+
+    def call(conn, _opts) do
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  defp create_rs256_token(jwk, kid, claims) do
+    jwt = JOSE.JWT.from_map(claims)
+    jws = %{"alg" => "RS256", "kid" => kid}
+    {_, token} = JOSE.JWT.sign(jwk, jws, jwt) |> JOSE.JWS.compact()
+    token
+  end
+
+  defp future_exp(seconds_from_now \\ 3600) do
+    System.system_time(:second) + seconds_from_now
   end
 end

@@ -279,7 +279,18 @@ defmodule Cybernetic.Security.AuthManager do
     # HS256 tokens must be in ETS (session tokens don't survive restart).
     case Cybernetic.Security.JWT.verify_external(token) do
       {:ok, claims} ->
-        {:reply, {:ok, auth_context_from_claims(claims)}, state}
+        case auth_context_from_claims(claims) do
+          {:ok, auth_context} ->
+            {:reply, {:ok, auth_context}, state}
+
+          {:error, :missing_sub} ->
+            Logger.warning("External JWT missing required sub claim")
+            {:reply, {:error, :invalid_token}, state}
+
+          {:error, reason} ->
+            Logger.warning("External JWT claims rejected", reason: inspect(reason))
+            {:reply, {:error, :invalid_token}, state}
+        end
 
       {:error, :token_expired} ->
         {:reply, {:error, :token_expired}, state}
@@ -622,38 +633,45 @@ defmodule Cybernetic.Security.AuthManager do
   end
 
   defp auth_context_from_claims(claims) when is_map(claims) do
-    roles =
-      case claims["roles"] do
-        roles when is_list(roles) ->
-          roles
-          |> Enum.map(&to_string/1)
-          |> Enum.map(&String.downcase/1)
-          |> Enum.map(&parse_role/1)
-          |> Enum.reject(&is_nil/1)
+    sub = claims["sub"]
 
-        role when is_binary(role) ->
-          role
-          |> String.split(",", trim: true)
-          |> Enum.map(&String.downcase/1)
-          |> Enum.map(&parse_role/1)
-          |> Enum.reject(&is_nil/1)
+    if not (is_binary(sub) and sub != "") do
+      {:error, :missing_sub}
+    else
+      roles =
+        case claims["roles"] do
+          roles when is_list(roles) ->
+            roles
+            |> Enum.map(&to_string/1)
+            |> Enum.map(&String.downcase/1)
+            |> Enum.map(&parse_role/1)
+            |> Enum.reject(&is_nil/1)
 
-        _ ->
-          []
-      end
+          role when is_binary(role) ->
+            role
+            |> String.split(",", trim: true)
+            |> Enum.map(&String.downcase/1)
+            |> Enum.map(&parse_role/1)
+            |> Enum.reject(&is_nil/1)
 
-    roles = if roles == [], do: [:viewer], else: roles
+          _ ->
+            []
+        end
 
-    %{
-      user_id: claims["sub"] || claims["user_id"] || claims["uid"] || "unknown",
-      roles: roles,
-      permissions: expand_permissions(roles),
-      metadata: %{
-        username: claims["username"] || claims["preferred_username"] || claims["email"],
-        tenant_id: claims["tenant_id"] || claims["tid"],
-        auth_method: :jwt
-      }
-    }
+      roles = if roles == [], do: [:viewer], else: roles
+
+      {:ok,
+       %{
+         user_id: sub,
+         roles: roles,
+         permissions: expand_permissions(roles),
+         metadata: %{
+           username: claims["username"] || claims["preferred_username"] || claims["email"],
+           tenant_id: claims["tenant_id"] || claims["tid"],
+           auth_method: :jwt
+         }
+       }}
+    end
   end
 
   defp check_permission(permissions, resource, action) do

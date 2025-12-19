@@ -26,7 +26,13 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   Start the RateLimiter.
   """
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    case Keyword.get(opts, :name, __MODULE__) do
+      nil ->
+        GenServer.start_link(__MODULE__, opts)
+
+      name ->
+        GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
 
   @doc """
@@ -43,28 +49,62 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   :ok | {:error, :rate_limited}
   """
   def request_tokens(budget_key, resource_type, priority \\ :normal) do
-    GenServer.call(__MODULE__, {:request_tokens, budget_key, resource_type, priority}, 5_000)
+    request_tokens(__MODULE__, budget_key, resource_type, priority)
+  end
+
+  @doc """
+  Request tokens from a budget on a specific RateLimiter instance.
+  """
+  @spec request_tokens(GenServer.server(), budget_key(), term(), priority()) ::
+          :ok | {:error, term()}
+  def request_tokens(server, budget_key, resource_type, priority)
+      when is_atom(budget_key) do
+    GenServer.call(server, {:request_tokens, budget_key, resource_type, priority}, 5_000)
   end
 
   @doc """
   Get current budget status.
   """
   def budget_status(budget_key) do
-    GenServer.call(__MODULE__, {:budget_status, budget_key}, 5_000)
+    budget_status(__MODULE__, budget_key)
+  end
+
+  @doc """
+  Get current budget status from a specific RateLimiter instance.
+  """
+  @spec budget_status(GenServer.server(), budget_key()) :: map()
+  def budget_status(server, budget_key) when is_atom(budget_key) do
+    GenServer.call(server, {:budget_status, budget_key}, 5_000)
   end
 
   @doc """
   Get all budget statuses.
   """
   def all_budgets do
-    GenServer.call(__MODULE__, :all_budgets, 5_000)
+    all_budgets(__MODULE__)
+  end
+
+  @doc """
+  Get all budget statuses from a specific RateLimiter instance.
+  """
+  @spec all_budgets(GenServer.server()) :: map()
+  def all_budgets(server) do
+    GenServer.call(server, :all_budgets, 5_000)
   end
 
   @doc """
   Reset a budget (for testing or emergency situations).
   """
   def reset_budget(budget_key) do
-    GenServer.call(__MODULE__, {:reset_budget, budget_key}, 5_000)
+    reset_budget(__MODULE__, budget_key)
+  end
+
+  @doc """
+  Reset a budget on a specific RateLimiter instance.
+  """
+  @spec reset_budget(GenServer.server(), budget_key()) :: :ok
+  def reset_budget(server, budget_key) when is_atom(budget_key) do
+    GenServer.call(server, {:reset_budget, budget_key}, 5_000)
   end
 
   # GenServer callbacks
@@ -153,6 +193,8 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
         {{:error, :unknown_budget}, state}
 
       budget ->
+        budget = normalize_budget_window(budget)
+
         case check_budget_limits(budget, resource_type, priority) do
           :ok ->
             new_budget = consume_tokens(budget, resource_type, priority)
@@ -161,23 +203,25 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
             {:ok, new_state}
 
           {:error, reason} ->
-            {{:error, reason}, state}
+            # Persist any window reset even when denying the request.
+            new_state = %{state | budgets: Map.put(state.budgets, budget_key, budget)}
+            {{:error, reason}, new_state}
         end
     end
   end
 
-  defp check_budget_limits(budget, _resource_type, priority) do
+  defp normalize_budget_window(budget) do
     current_time = current_time()
     window_start = current_time - budget.window_ms
 
-    # Reset budget if window has passed
-    budget =
-      if budget.last_reset < window_start do
-        %{budget | consumed: 0, last_reset: current_time}
-      else
-        budget
-      end
+    if budget.last_reset < window_start do
+      %{budget | consumed: 0, last_reset: current_time}
+    else
+      budget
+    end
+  end
 
+  defp check_budget_limits(budget, _resource_type, priority) do
     # Calculate priority multiplier
     multiplier =
       case priority do
