@@ -10,19 +10,35 @@ defmodule Cybernetic.Edge.Gateway.Plugs.OIDC do
   - Allows unauthenticated access (assigns a default tenant)
   - Still accepts auth headers if provided
   """
+  @behaviour Plug
   import Plug.Conn
   require Logger
 
+  @doc """
+  Initialize the OIDC authentication plug.
+  """
+  @spec init(keyword()) :: keyword()
   def init(opts), do: opts
 
+  @doc """
+  Authenticate requests using Bearer token or API key.
+  """
+  @spec call(Plug.Conn.t(), keyword()) :: Plug.Conn.t()
   def call(conn, _opts) do
     env = Application.get_env(:cybernetic, :environment, :prod)
 
     case authenticate(conn) do
       {:ok, auth_context} ->
-        conn
-        |> assign(:auth_context, auth_context)
-        |> assign(:tenant_id, tenant_id_from_auth(auth_context))
+        case tenant_id_from_auth(auth_context) do
+          {:ok, tenant_id} ->
+            conn
+            |> assign(:auth_context, auth_context)
+            |> assign(:tenant_id, tenant_id)
+
+          {:error, :missing_tenant_context} ->
+            Logger.error("P0 Security: Auth succeeded but missing tenant context in production")
+            reject(conn, 401, "missing_tenant", "Authentication requires tenant context")
+        end
 
       {:error, :missing_credentials} when env in [:dev, :test] ->
         Logger.debug("Edge auth: dev/test mode - assigning default tenant")
@@ -49,14 +65,18 @@ defmodule Cybernetic.Edge.Gateway.Plugs.OIDC do
         {:error, :missing_credentials}
     end
   rescue
-    e ->
+    # Handle specific known exceptions to avoid masking programming errors
+    e in [ArgumentError, RuntimeError, ErlangError] ->
+      Logger.warning("Authentication raised exception", error: inspect(e))
       {:error, {:exception, e}}
   end
 
   # Tenant isolation: Extract tenant_id from auth context
   # In production, explicit tenant_id is required to prevent cross-tenant access
+  # Returns {:ok, tenant_id} or {:error, :missing_tenant_context}
+  @spec tenant_id_from_auth(map()) :: {:ok, String.t()} | {:error, :missing_tenant_context}
   defp tenant_id_from_auth(%{metadata: %{tenant_id: tenant_id}}) when is_binary(tenant_id),
-    do: tenant_id
+    do: {:ok, tenant_id}
 
   defp tenant_id_from_auth(%{user_id: user_id}) when is_binary(user_id) do
     env = Application.get_env(:cybernetic, :environment, :prod)
@@ -70,7 +90,7 @@ defmodule Cybernetic.Edge.Gateway.Plugs.OIDC do
     end
 
     # Fall back to user_id (single-tenant mode or legacy)
-    user_id
+    {:ok, user_id}
   end
 
   defp tenant_id_from_auth(_) do
@@ -78,10 +98,10 @@ defmodule Cybernetic.Edge.Gateway.Plugs.OIDC do
 
     if env == :prod do
       Logger.error("Auth context missing both tenant_id and user_id in production")
-      # Return a clearly invalid tenant to prevent accidental data access
-      "__invalid_tenant__"
+      # P0 Security: Reject instead of returning fake tenant
+      {:error, :missing_tenant_context}
     else
-      "unknown"
+      {:ok, "unknown"}
     end
   end
 

@@ -12,7 +12,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
 
   @exchange "cyb.events"
   @queue "cyb.consumer"
-  @prefetch_count Application.compile_env(:cybernetic, :amqp_prefetch, 50)
+  @default_prefetch_count 50
 
   # P0 Security: Whitelist of valid VSM system identifiers to prevent atom exhaustion
   @vsm_system_whitelist %{
@@ -23,10 +23,18 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
     "5" => Cybernetic.VSM.System5
   }
 
+  @doc """
+  Starts the AMQP consumer GenServer.
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc """
+  Initialize the AMQP consumer state.
+  """
+  @impl true
   def init(opts) do
     send(self(), :connect)
 
@@ -41,12 +49,13 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
      }}
   end
 
+  @impl true
   def handle_info(:connect, state) do
     case Connection.get_channel() do
       {:ok, channel} ->
         setup_queue(channel)
         {:ok, consumer_tag} = Basic.consume(channel, @queue)
-        Basic.qos(channel, prefetch_count: @prefetch_count)
+        Basic.qos(channel, prefetch_count: Application.get_env(:cybernetic, :amqp_prefetch, @default_prefetch_count))
         {:noreply, %{state | channel: channel, consumer_tag: consumer_tag}}
 
       {:error, reason} ->
@@ -56,12 +65,20 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
     end
   end
 
+  @impl true
   def handle_info({:basic_deliver, payload, meta}, state) do
     # Normalize message shape for consistent processing
+    # P2 Security: Log decode failures for monitoring/debugging
     normalized_message =
       case Jason.decode(payload) do
-        {:ok, decoded} -> Message.normalize(decoded)
-        {:error, _} -> Message.normalize(payload)
+        {:ok, decoded} -> 
+          Message.normalize(decoded)
+        {:error, reason} -> 
+          Logger.warning("Failed to decode AMQP message as JSON", 
+            error: inspect(reason), 
+            payload_size: byte_size(payload),
+            routing_key: meta.routing_key)
+          Message.normalize(%{"_raw_payload" => true, "_decode_error" => inspect(reason)})
       end
 
     with {:ok, _validated} <- validate_and_process(normalized_message, meta) do
@@ -82,20 +99,24 @@ defmodule Cybernetic.Core.Transport.AMQP.Consumer do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info({:basic_consume_ok, %{consumer_tag: consumer_tag}}, state) do
     Logger.info("Consumer registered: #{consumer_tag}")
     {:noreply, state}
   end
 
+  @impl true
   def handle_info({:basic_cancel, _}, state) do
     Logger.warning("Consumer cancelled")
     {:stop, :normal, state}
   end
 
+  @impl true
   def handle_info({:basic_cancel_ok, _}, state) do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info({:DOWN, _, :process, _pid, reason}, state) do
     Logger.error("Channel down: #{inspect(reason)}")
     send(self(), :connect)

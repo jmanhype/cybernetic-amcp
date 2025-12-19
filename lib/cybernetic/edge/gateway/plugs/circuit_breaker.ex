@@ -8,11 +8,20 @@ defmodule Cybernetic.Edge.Gateway.Plugs.CircuitBreaker do
   Dev/test behavior:
   - Passes through
   """
+  @behaviour Plug
   import Plug.Conn
   require Logger
 
+  @doc """
+  Initialize the circuit breaker plug.
+  """
+  @spec init(keyword()) :: keyword()
   def init(opts), do: opts
 
+  @doc """
+  Check circuit breaker state and reject if open in production.
+  """
+  @spec call(Plug.Conn.t(), keyword()) :: Plug.Conn.t()
   def call(conn, _opts) do
     env = Application.get_env(:cybernetic, :environment, :prod)
 
@@ -45,9 +54,18 @@ defmodule Cybernetic.Edge.Gateway.Plugs.CircuitBreaker do
           conn
       end
     rescue
-      e ->
-        Logger.debug("Edge gateway circuit breaker check failed", error: inspect(e))
-        conn
+      # Handle specific known exceptions - avoid masking programming errors
+      e in [ArgumentError, RuntimeError, ErlangError, FunctionClauseError] ->
+        # P1 Security: Fail safe in production instead of failing open
+        env = Application.get_env(:cybernetic, :environment, :prod)
+        
+        if env == :prod do
+          Logger.error("Edge gateway circuit breaker unavailable - failing safe", error: inspect(e))
+          reject(conn)
+        else
+          Logger.debug("Edge gateway circuit breaker check failed", error: inspect(e))
+          conn
+        end
     end
   end
 

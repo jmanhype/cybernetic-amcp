@@ -12,15 +12,19 @@ defmodule Cybernetic.Security.AuthManager do
 
   use GenServer
   require Logger
-  # alias Cybernetic.Security.Crypto  # Not used yet
-  # alias Cybernetic.Core.CRDT.ContextGraph  # Not used yet
 
+  @typedoc "User role for RBAC authorization"
   @type role :: :admin | :operator | :viewer | :agent | :system
+  @typedoc "Permission atom for fine-grained access control"
   @type permission :: atom()
+  @typedoc "JWT authentication token string"
   @type auth_token :: String.t()
+  @typedoc "API key for programmatic access"
   @type api_key :: String.t()
+  @typedoc "Unique user identifier"
   @type user_id :: String.t()
 
+  @typedoc "Authentication context returned after successful authentication"
   @type auth_context :: %{
           user_id: user_id(),
           roles: [role()],
@@ -28,16 +32,38 @@ defmodule Cybernetic.Security.AuthManager do
           metadata: map()
         }
 
-  # JWT configuration
-  # P0 Fix: Read JWT secret at runtime, not compile time
-  # @jwt_algorithm :HS256  # Not used yet
-  # 1 hour
+  # JWT configuration - TTL in seconds
   @jwt_ttl_seconds 3600
-  # @refresh_ttl_seconds 86400 # 24 hours  # Not used yet
 
   # P0 Security: Get JWT secret at runtime from environment
+  # Raises in production if not set or too short
+  @spec get_jwt_secret() :: String.t()
   defp get_jwt_secret do
-    System.get_env("JWT_SECRET", "dev-secret-change-in-production")
+    case System.get_env("JWT_SECRET") do
+      nil ->
+        env = Application.get_env(:cybernetic, :environment, :prod)
+
+        if env == :prod do
+          raise "JWT_SECRET environment variable is required in production"
+        else
+          "dev-secret-change-in-production"
+        end
+
+      "" ->
+        raise "JWT_SECRET cannot be empty"
+
+      secret when byte_size(secret) < 32 ->
+        env = Application.get_env(:cybernetic, :environment, :prod)
+
+        if env == :prod do
+          raise "JWT_SECRET must be at least 32 bytes in production"
+        else
+          secret
+        end
+
+      secret ->
+        secret
+    end
   end
 
   # Role definitions with permissions
@@ -50,8 +76,9 @@ defmodule Cybernetic.Security.AuthManager do
   }
 
   @doc """
-  Starts the Authentication Manager
+  Starts the Authentication Manager GenServer.
   """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -97,15 +124,17 @@ defmodule Cybernetic.Security.AuthManager do
   # ========== PUBLIC API ==========
 
   @doc """
-  Authenticate with username/password and get JWT token
+  Authenticate with username/password and get JWT token.
   """
+  @spec authenticate(String.t(), String.t()) :: {:ok, map()} | {:error, atom()}
   def authenticate(username, password) do
     GenServer.call(__MODULE__, {:authenticate, username, password})
   end
 
   @doc """
-  Authenticate with API key
+  Authenticate with API key.
   """
+  @spec authenticate_api_key(String.t()) :: {:ok, auth_context()} | {:error, atom()}
   def authenticate_api_key(api_key) do
     GenServer.call(__MODULE__, {:authenticate_api_key, api_key})
   end
@@ -117,6 +146,7 @@ defmodule Cybernetic.Security.AuthManager do
   GenServer call for JWT verification (slow path). This allows high throughput
   for repeated validations of the same session token.
   """
+  @spec validate_token(String.t()) :: {:ok, auth_context()} | {:error, atom()}
   def validate_token(token) do
     # Guard: ensure ETS table exists (handles startup/restart race)
     case :ets.whereis(:auth_sessions) do
@@ -156,36 +186,41 @@ defmodule Cybernetic.Security.AuthManager do
   end
 
   @doc """
-  Refresh an expired token using refresh token
+  Refresh an expired token using refresh token.
   """
+  @spec refresh_token(String.t()) :: {:ok, map()} | {:error, atom()}
   def refresh_token(refresh_token) do
     GenServer.call(__MODULE__, {:refresh_token, refresh_token})
   end
 
   @doc """
-  Authorize an action based on auth context
+  Authorize an action based on auth context.
   """
+  @spec authorize(auth_context(), atom(), atom()) :: :ok | {:error, :unauthorized}
   def authorize(auth_context, resource, action) do
     GenServer.call(__MODULE__, {:authorize, auth_context, resource, action})
   end
 
   @doc """
-  Create a new API key with specified permissions
+  Create a new API key with specified permissions.
   """
+  @spec create_api_key(String.t(), [role()], keyword()) :: {:ok, String.t()}
   def create_api_key(name, roles, opts \\ []) do
     GenServer.call(__MODULE__, {:create_api_key, name, roles, opts})
   end
 
   @doc """
-  Revoke an API key or JWT token
+  Revoke an API key or JWT token.
   """
+  @spec revoke(String.t()) :: :ok | {:error, :not_found}
   def revoke(token_or_key) do
     GenServer.call(__MODULE__, {:revoke, token_or_key})
   end
 
   @doc """
-  List active sessions
+  List active sessions.
   """
+  @spec list_sessions() :: [map()]
   def list_sessions do
     GenServer.call(__MODULE__, :list_sessions)
   end
@@ -465,39 +500,49 @@ defmodule Cybernetic.Security.AuthManager do
   @impl true
   def handle_info(:cleanup_sessions, state) do
     # P1 Performance: Use expiry index for O(log n) cleanup instead of O(n) scan
-    now_unix = DateTime.to_unix(DateTime.utc_now())
+    # P2 Resilience: Wrap in try/rescue to prevent cleanup failures from crashing GenServer
+    state =
+      try do
+        now_unix = DateTime.to_unix(DateTime.utc_now())
 
-    # Select all expired entries: keys where expiry_timestamp <= now
-    # The :ordered_set is sorted by key, so we select from start to now
-    expired =
-      :ets.select(
-        :auth_session_expiry,
-        [{{{:"$1", :"$2"}, :"$3"}, [{:"=<", :"$1", now_unix}], [{{:"$2", :"$3"}}]}]
-      )
+        # Select all expired entries: keys where expiry_timestamp <= now
+        # The :ordered_set is sorted by key, so we select from start to now
+        expired =
+          :ets.select(
+            :auth_session_expiry,
+            [{{{:"$1", :"$2"}, :"$3"}, [{:"=<", :"$1", now_unix}], [{{:"$2", :"$3"}}]}]
+          )
 
-    # Delete each expired session
-    Enum.each(expired, fn {token, refresh_token} ->
-      :ets.delete(:auth_sessions, token)
-      :ets.delete(:refresh_tokens, refresh_token)
-      Logger.debug("Cleaned up expired session", token_prefix: String.slice(token, 0, 8))
-    end)
+        # Delete each expired session
+        Enum.each(expired, fn {token, refresh_token} ->
+          :ets.delete(:auth_sessions, token)
+          :ets.delete(:refresh_tokens, refresh_token)
+          Logger.debug("Cleaned up expired session", token_prefix: String.slice(token, 0, 8))
+        end)
 
-    # Delete from expiry index using range delete
-    if length(expired) > 0 do
-      :ets.select_delete(
-        :auth_session_expiry,
-        [{{{:"$1", :_}, :_}, [{:"=<", :"$1", now_unix}], [true]}]
-      )
+        # Delete from expiry index using range delete
+        if length(expired) > 0 do
+          :ets.select_delete(
+            :auth_session_expiry,
+            [{{{:"$1", :_}, :_}, [{:"=<", :"$1", now_unix}], [true]}]
+          )
 
-      Logger.debug("Session cleanup complete", expired_count: length(expired))
-    end
+          Logger.debug("Session cleanup complete", expired_count: length(expired))
+        end
 
-    # Reset rate limit counters older than 1 hour
-    state = %{
-      state
-      | failed_attempts: clean_old_attempts(state.failed_attempts),
-        rate_limits: %{}
-    }
+        # Reset rate limit counters older than 1 hour
+        %{
+          state
+          | failed_attempts: clean_old_attempts(state.failed_attempts),
+            rate_limits: %{}
+        }
+      rescue
+        e ->
+          Logger.error("Session cleanup failed, will retry next interval", 
+            error: inspect(e), 
+            stacktrace: Exception.format_stacktrace(__STACKTRACE__))
+          state
+      end
 
     # Schedule next cleanup
     Process.send_after(self(), :cleanup_sessions, 60_000)
@@ -567,35 +612,6 @@ defmodule Cybernetic.Security.AuthManager do
     |> elem(1)
   end
 
-  # Unused function - kept for future JWT validation needs
-  # defp verify_jwt(token) do
-  #   case String.split(token, ".") do
-  #     [payload_b64, signature_b64] ->
-  #       case Base.decode64(payload_b64, padding: false) do
-  #         {:ok, payload} ->
-  #           expected_signature = :crypto.mac(:hmac, :sha256, @jwt_secret, payload) |> Base.encode64(padding: false)
-  #       
-  #           if signature_b64 == expected_signature do
-  #             claims = Jason.decode!(payload)
-  #             
-  #             # Check expiration
-  #             if claims["exp"] > DateTime.to_unix(DateTime.utc_now()) do
-  #               {:ok, claims}
-  #             else
-  #               {:error, :expired}
-  #             end
-  #           else
-  #             {:error, :invalid_signature}
-  #           end
-  #         
-  #         :error ->
-  #           {:error, :invalid_format}
-  #       end
-  #     
-  #     _ ->
-  #       {:error, :invalid_format}
-  #   end
-  # end
 
   defp generate_refresh_token(_user) do
     :crypto.strong_rand_bytes(32) |> Base.encode64()
@@ -760,12 +776,6 @@ defmodule Cybernetic.Security.AuthManager do
     |> Enum.reject(fn {_username, attempts} -> Enum.empty?(attempts) end)
     |> Map.new()
   end
-
-  # Unused function - kept for future IP tracking needs
-  # defp get_caller_ip do
-  #   # In production, extract from connection metadata
-  #   "127.0.0.1"
-  # end
 
   defp get_configured_users do
     # Load users from environment variables

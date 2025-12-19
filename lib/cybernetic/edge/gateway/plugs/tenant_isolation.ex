@@ -9,11 +9,20 @@ defmodule Cybernetic.Edge.Gateway.Plugs.TenantIsolation do
   Dev/test behavior:
   - Passes through
   """
+  @behaviour Plug
   import Plug.Conn
   require Logger
 
+  @doc """
+  Initialize the tenant isolation plug.
+  """
+  @spec init(keyword()) :: keyword()
   def init(opts), do: opts
 
+  @doc """
+  Enforce tenant isolation in production.
+  """
+  @spec call(Plug.Conn.t(), keyword()) :: Plug.Conn.t()
   def call(conn, _opts) do
     env = Application.get_env(:cybernetic, :environment, :prod)
 
@@ -48,11 +57,29 @@ defmodule Cybernetic.Edge.Gateway.Plugs.TenantIsolation do
     end
   end
 
+  # P2 Security: Validate tenant ID format to prevent injection
+  @tenant_id_max_length 128
+  @tenant_id_pattern ~r/^[a-zA-Z0-9_-]+$/
+
   defp requested_tenant(conn) do
     case get_req_header(conn, "x-tenant-id") do
-      [tenant] when is_binary(tenant) and tenant != "" -> tenant
-      _ -> nil
+      [tenant] when is_binary(tenant) and tenant != "" ->
+        if valid_tenant_id?(tenant) do
+          tenant
+        else
+          Logger.warning("TenantIsolation: invalid tenant ID format in header", 
+            tenant_preview: String.slice(tenant, 0, 20))
+          nil
+        end
+      _ -> 
+        nil
     end
+  end
+
+  @spec valid_tenant_id?(String.t()) :: boolean()
+  defp valid_tenant_id?(tenant_id) do
+    byte_size(tenant_id) <= @tenant_id_max_length and
+      Regex.match?(@tenant_id_pattern, tenant_id)
   end
 
   defp reject(conn, status, error, message) do

@@ -16,9 +16,19 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   @cleanup_interval 60_000
   @telemetry_ns [:cybernetic, :security, :nonce_bloom]
 
+  @type t :: %__MODULE__{
+          bloom: term(),
+          seen_nonces: map(),
+          last_cleanup: integer()
+        }
   defstruct [:bloom, :seen_nonces, :last_cleanup]
 
   # Client API
+
+  @doc """
+  Starts the NonceBloom GenServer.
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -27,6 +37,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   @doc """
   Generate a new cryptographic nonce
   """
+  @spec generate_nonce() :: String.t()
   def generate_nonce do
     # 21 chars = 126 bits of entropy
     Nanoid.generate(21)
@@ -36,6 +47,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   Check if a nonce has been seen before (replay detection)
   Returns {:ok, :new} if nonce is new, {:error, :replay} if seen before
   """
+  @spec check_nonce(String.t()) :: {:ok, :new} | {:error, :replay}
   def check_nonce(nonce) do
     GenServer.call(__MODULE__, {:check_nonce, nonce})
   end
@@ -43,11 +55,13 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   @doc """
   Get the TTL for nonces in milliseconds
   """
+  @spec ttl_ms() :: non_neg_integer()
   def ttl_ms, do: @nonce_ttl
 
   @doc """
   Manually trigger cleanup of expired nonces
   """
+  @spec prune() :: :ok
   def prune do
     GenServer.cast(__MODULE__, :prune)
   end
@@ -55,6 +69,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   @doc """
   Enrich a message with security headers (nonce, timestamp, signature)
   """
+  @spec enrich_message(map(), keyword()) :: map()
   def enrich_message(payload, opts \\ []) do
     nonce = generate_nonce()
     timestamp = System.system_time(:millisecond)
@@ -79,6 +94,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   @doc """
   Validate an incoming message's security headers
   """
+  @spec validate_message(map()) :: {:ok, map()} | {:error, atom()}
   def validate_message(message) do
     OTEL.with_span "nonce_bloom.validate", %{"message.size" => byte_size(inspect(message))} do
       with {:ok, :has_headers} <- check_headers(message),
@@ -236,6 +252,7 @@ defmodule Cybernetic.Core.Security.NonceBloom do
   Generate canonical string for signing - deterministic order
   Includes routing metadata to prevent cross-topic replay
   """
+  @spec canonical_string(map(), String.t(), integer(), atom() | nil, map()) :: String.t()
   def canonical_string(payload, nonce, timestamp, site \\ nil, meta \\ %{}) do
     # Deterministic order for signing - includes routing keys
     # Safely encode payload - handle any data type
@@ -334,11 +351,28 @@ defmodule Cybernetic.Core.Security.NonceBloom do
     end
   end
 
+  @spec get_hmac_secret() :: String.t()
   defp get_hmac_secret do
+    # P0 Security: Require HMAC secret in production, no insecure fallback
     # In production, rotate this secret regularly and store securely
-    Application.get_env(:cybernetic, :security)[:hmac_secret] ||
-      System.get_env("CYBERNETIC_HMAC_SECRET") ||
-      "default-insecure-key-change-in-production"
+    config_secret = Application.get_env(:cybernetic, :security)[:hmac_secret]
+    env_secret = System.get_env("CYBERNETIC_HMAC_SECRET")
+    env = Application.get_env(:cybernetic, :environment, :prod)
+
+    cond do
+      is_binary(config_secret) and config_secret != "" ->
+        config_secret
+
+      is_binary(env_secret) and env_secret != "" ->
+        env_secret
+
+      env == :prod ->
+        raise "CYBERNETIC_HMAC_SECRET is required in production"
+
+      true ->
+        Logger.warning("Using insecure default HMAC secret - NOT for production use")
+        "dev-only-insecure-hmac-secret-not-for-production"
+    end
   end
 
   defp strip_security_headers(message) do
