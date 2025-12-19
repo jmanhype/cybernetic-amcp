@@ -31,15 +31,20 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
   alias Cybernetic.Config
   alias Cybernetic.Validation
 
+  # Module attributes
   @telemetry_prefix [:cybernetic, :sse]
+  @connection_table :sse_connections
 
+  # Type definitions
+  @typedoc "Topic pattern for SSE subscriptions (e.g., 'vsm.*', 'episode.created')"
   @type topic :: String.t()
-  @type connection_state :: %{
-          topics: [topic()],
-          tenant_id: String.t() | nil,
-          started_at: integer(),
-          event_count: non_neg_integer()
-        }
+
+  @typep connection_state :: %{
+           topics: [topic()],
+           tenant_id: String.t() | nil,
+           started_at: integer(),
+           event_count: non_neg_integer()
+         }
 
   @doc """
   Stream SSE events to the client.
@@ -305,9 +310,9 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
   end
 
   # Connection limit management using ETS
-  # In production, use Redis or a distributed counter
+  # The ETS table is owned by SSESupervisor for stability across request processes.
+  # In production, consider using Redis for distributed deployments.
 
-  @connection_table :sse_connections
 
   @spec check_connection_limit(String.t() | nil) :: :ok | {:error, :limit_exceeded}
   defp check_connection_limit(nil), do: :ok
@@ -346,7 +351,9 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
 
     :ok
   rescue
-    ArgumentError -> :ok
+    ArgumentError ->
+      Logger.debug("ETS update_counter failed during unregister")
+      :ok
   end
 
   @spec get_connection_count(String.t()) :: non_neg_integer()
@@ -356,9 +363,12 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
       [] -> 0
     end
   rescue
-    ArgumentError -> 0
+    ArgumentError ->
+      Logger.debug("ETS lookup failed during get_connection_count")
+      0
   end
 
+  @spec ensure_table_exists() :: :ok
   defp ensure_table_exists do
     case :ets.whereis(@connection_table) do
       :undefined ->
@@ -368,7 +378,9 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
         :ok
     end
   rescue
-    ArgumentError -> :ok
+    ArgumentError ->
+      Logger.debug("ETS table creation race condition handled")
+      :ok
   end
 
   # Tenant filtering - prevent cross-tenant event leakage
@@ -390,12 +402,14 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
   end
   # Configuration helpers
 
+  @spec trust_proxy?() :: boolean()
   defp trust_proxy? do
     Application.get_env(:cybernetic, :trust_proxy, false)
   end
 
   # Telemetry
 
+  @spec emit_telemetry(atom(), map(), map()) :: :ok
   defp emit_telemetry(event, measurements, metadata) do
     :telemetry.execute(@telemetry_prefix ++ [event], measurements, metadata)
   end

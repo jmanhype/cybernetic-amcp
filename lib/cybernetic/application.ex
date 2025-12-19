@@ -11,6 +11,8 @@ defmodule Cybernetic.Application do
   use Application
   require Logger
 
+  @impl Application
+  @spec start(Application.start_type(), term()) :: {:ok, pid()} | {:error, term()}
   def start(_type, _args) do
     # Validate critical configuration before starting
     with :ok <- validate_configuration() do

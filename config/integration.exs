@@ -5,17 +5,27 @@ import Config
 # This config enables full system integration tests with real services.
 # Run with: MIX_ENV=integration mix test --include integration
 #
+# IMPORTANT: This configuration is for LOCAL DEVELOPMENT AND CI ONLY.
+# DO NOT use this configuration in production environments.
+#
 # Prerequisites:
-# - PostgreSQL running
-# - RabbitMQ running
+# - PostgreSQL running (or DATABASE_URL set)
+# - RabbitMQ running (or RABBITMQ_URL set)
 # - Redis running (optional)
+#
+# The .env file parsing below is a simple implementation for local development.
+# For production, use proper environment variable management (e.g., Docker, systemd).
 
-# Load environment variables from .env file
+# Load environment variables from .env file (local development only)
+# Note: This is a simple parser that handles KEY=value format.
+# It does NOT handle quoted values or multiline values.
+# For complex .env needs, consider using the `dotenvy` library.
 if File.exists?(".env") do
   for line <- File.stream!(".env"),
+      line = String.trim(line),
+      line != "",
       not String.starts_with?(line, "#"),
       String.contains?(line, "=") do
-    line = String.trim(line)
     [key, value] = String.split(line, "=", parts: 2)
     System.put_env(String.trim(key), String.trim(value))
   end
