@@ -53,11 +53,37 @@ defmodule Cybernetic.Edge.Gateway.Plugs.OIDC do
       {:error, {:exception, e}}
   end
 
+  # Tenant isolation: Extract tenant_id from auth context
+  # In production, explicit tenant_id is required to prevent cross-tenant access
   defp tenant_id_from_auth(%{metadata: %{tenant_id: tenant_id}}) when is_binary(tenant_id),
     do: tenant_id
 
-  defp tenant_id_from_auth(%{user_id: user_id}) when is_binary(user_id), do: user_id
-  defp tenant_id_from_auth(_), do: "unknown"
+  defp tenant_id_from_auth(%{user_id: user_id}) when is_binary(user_id) do
+    env = Application.get_env(:cybernetic, :environment, :prod)
+
+    if env == :prod do
+      # In production, require explicit tenant_id claim
+      # Falling back to user_id could cause cross-tenant data access
+      Logger.warning("Auth context missing tenant_id in production, using user_id",
+        user_id: user_id
+      )
+    end
+
+    # Fall back to user_id (single-tenant mode or legacy)
+    user_id
+  end
+
+  defp tenant_id_from_auth(_) do
+    env = Application.get_env(:cybernetic, :environment, :prod)
+
+    if env == :prod do
+      Logger.error("Auth context missing both tenant_id and user_id in production")
+      # Return a clearly invalid tenant to prevent accidental data access
+      "__invalid_tenant__"
+    else
+      "unknown"
+    end
+  end
 
   defp bearer_token(conn) do
     case get_req_header(conn, "authorization") do

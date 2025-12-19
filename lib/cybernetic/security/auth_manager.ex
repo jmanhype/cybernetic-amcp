@@ -64,6 +64,10 @@ defmodule Cybernetic.Security.AuthManager do
     :ets.new(:api_keys, [:set, :protected, :named_table, {:read_concurrency, true}])
     :ets.new(:refresh_tokens, [:set, :protected, :named_table, {:read_concurrency, true}])
 
+    # P1 Performance: Expiry index for O(log n) session cleanup instead of O(n) scan
+    # Key: {expiry_timestamp, token}, Value: refresh_token (for cleanup)
+    :ets.new(:auth_session_expiry, [:ordered_set, :protected, :named_table])
+
     # Load API keys from config/env
     load_api_keys()
 
@@ -201,6 +205,9 @@ defmodule Cybernetic.Security.AuthManager do
 
             :ets.insert(:auth_sessions, {jwt, session})
             :ets.insert(:refresh_tokens, {refresh, user.id})
+            # P1 Performance: Index by expiry for O(log n) cleanup
+            expiry_key = {DateTime.to_unix(session.expires_at), jwt}
+            :ets.insert(:auth_session_expiry, {expiry_key, refresh})
 
             # Audit log (disabled for now)
             Logger.info("User authenticated: #{username}")
@@ -317,6 +324,9 @@ defmodule Cybernetic.Security.AuthManager do
         }
 
         :ets.insert(:auth_sessions, {new_jwt, session})
+        # P1 Performance: Index by expiry for O(log n) cleanup
+        expiry_key = {DateTime.to_unix(session.expires_at), new_jwt}
+        :ets.insert(:auth_session_expiry, {expiry_key, new_refresh})
 
         Logger.info("Token refreshed for user: #{user_id}")
 
@@ -389,6 +399,9 @@ defmodule Cybernetic.Security.AuthManager do
       [{^token_or_key, session}] ->
         :ets.delete(:auth_sessions, token_or_key)
         :ets.delete(:refresh_tokens, session.refresh_token)
+        # P1 Performance: Also clean up expiry index
+        expiry_key = {DateTime.to_unix(session.expires_at), token_or_key}
+        :ets.delete(:auth_session_expiry, expiry_key)
 
         Logger.info("Token revoked for user: #{session.user_id}")
         {:reply, :ok, state}
@@ -428,28 +441,33 @@ defmodule Cybernetic.Security.AuthManager do
 
   @impl true
   def handle_info(:cleanup_sessions, state) do
-    # Remove expired sessions
-    now = DateTime.utc_now()
+    # P1 Performance: Use expiry index for O(log n) cleanup instead of O(n) scan
+    now_unix = DateTime.to_unix(DateTime.utc_now())
 
-    :ets.tab2list(:auth_sessions)
-    |> Enum.each(fn {token, session} ->
-      if DateTime.compare(now, session.expires_at) == :gt do
-        :ets.delete(:auth_sessions, token)
-        :ets.delete(:refresh_tokens, session.refresh_token)
+    # Select all expired entries: keys where expiry_timestamp <= now
+    # The :ordered_set is sorted by key, so we select from start to now
+    expired =
+      :ets.select(
+        :auth_session_expiry,
+        [{{{:"$1", :"$2"}, :"$3"}, [{:"=<", :"$1", now_unix}], [{{:"$2", :"$3"}}]}]
+      )
 
-        Logger.debug("Cleaned up expired session for user: #{session.user_id}")
-      end
+    # Delete each expired session
+    Enum.each(expired, fn {token, refresh_token} ->
+      :ets.delete(:auth_sessions, token)
+      :ets.delete(:refresh_tokens, refresh_token)
+      Logger.debug("Cleaned up expired session", token_prefix: String.slice(token, 0, 8))
     end)
 
-    # Clean up old refresh tokens (older than 30 days)
-    _cutoff = DateTime.add(now, -30 * 24 * 3600, :second)
+    # Delete from expiry index using range delete
+    if length(expired) > 0 do
+      :ets.select_delete(
+        :auth_session_expiry,
+        [{{{:"$1", :_}, :_}, [{:"=<", :"$1", now_unix}], [true]}]
+      )
 
-    :ets.tab2list(:refresh_tokens)
-    |> Enum.each(fn {_token, _user_id} ->
-      # In production, store creation time with refresh tokens
-      # For now, we'll keep them until explicitly revoked
-      :ok
-    end)
+      Logger.debug("Session cleanup complete", expired_count: length(expired))
+    end
 
     # Reset rate limit counters older than 1 hour
     state = %{

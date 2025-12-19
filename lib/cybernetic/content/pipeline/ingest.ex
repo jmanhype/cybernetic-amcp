@@ -406,11 +406,21 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   defp stage_fetch(_), do: {:error, :invalid_source}
 
+  # HTTP timeouts for SSRF protection (consistent with JWKSCache)
+  @http_connect_timeout_ms 5_000
+
   @spec fetch_url(String.t()) :: {:ok, binary(), String.t()} | {:error, term()}
   defp fetch_url(url) do
     # P0 Security: Validate URL to prevent SSRF attacks
     with :ok <- validate_url(url) do
-      case Req.get(url, receive_timeout: @fetch_timeout, max_redirects: 3) do
+      # Disable redirects to prevent SSRF bypass via redirect to internal host
+      # Each redirect would need revalidation, so we disable them entirely
+      case Req.get(url,
+             receive_timeout: @fetch_timeout,
+             connect_options: [timeout: @http_connect_timeout_ms],
+             max_redirects: 0,
+             retry: false
+           ) do
         {:ok, %{status: 200, body: body, headers: headers}} ->
           content_type = get_content_type_header(headers)
 
@@ -419,6 +429,10 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
           else
             {:ok, body, content_type}
           end
+
+        {:ok, %{status: status}} when status in [301, 302, 303, 307, 308] ->
+          # Redirect blocked - return specific error
+          {:error, {:redirect_blocked, status}}
 
         {:ok, %{status: status}} ->
           {:error, {:http_error, status}}
