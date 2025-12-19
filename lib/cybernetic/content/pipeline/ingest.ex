@@ -22,7 +22,6 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
   require Logger
 
   alias Cybernetic.Content.SemanticContainer
-  alias Cybernetic.Capabilities.Validation, as: CapValidation
 
   # Types
   @type source :: %{
@@ -445,22 +444,31 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   @spec validate_url(String.t()) :: :ok | {:error, term()}
   defp validate_url(url) do
-    # Use capabilities validation if available, otherwise basic checks
-    if Code.ensure_loaded?(CapValidation) and function_exported?(CapValidation, :validate_url, 1) do
-      CapValidation.validate_url(url)
-    else
-      # Fallback: basic URL validation
-      case URI.parse(url) do
-        %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) ->
-          if blocked_host?(host) do
-            {:error, :blocked_host}
-          else
-            :ok
-          end
+    # SECURITY: Always do our own SSRF checks with DNS resolution
+    # Do NOT delegate to CapValidation which only does string checks
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) and host != "" ->
+        env = Application.get_env(:cybernetic, :environment, :prod)
 
-        _ ->
-          {:error, :invalid_url}
-      end
+        cond do
+          # Quick string checks
+          blocked_host?(host) ->
+            {:error, :blocked_host}
+
+          # In prod, resolve DNS and verify not private (SSRF protection)
+          env == :prod ->
+            if resolve_and_check_private(host) do
+              {:error, :blocked_host}
+            else
+              :ok
+            end
+
+          true ->
+            :ok
+        end
+
+      _ ->
+        {:error, :invalid_url}
     end
   end
 
@@ -485,19 +493,10 @@ defmodule Cybernetic.Content.Pipeline.Ingest do
 
   @spec blocked_host?(String.t()) :: boolean()
   defp blocked_host?(host) do
-    # Quick string checks first
-    cond do
-      host in @blocked_hosts ->
-        true
-
-      Enum.any?(@blocked_suffixes, &String.ends_with?(host, &1)) ->
-        true
-
-      true ->
-        # DNS resolution check - resolve and verify IPs are not private
-        # This catches "evil.com" → "10.0.0.1" SSRF attacks
-        resolve_and_check_private(host)
-    end
+    # String-only checks (fast path)
+    # DNS resolution is done separately in validate_url/1 for prod
+    host in @blocked_hosts or
+      Enum.any?(@blocked_suffixes, &String.ends_with?(host, &1))
   end
 
   defp resolve_and_check_private(host) do

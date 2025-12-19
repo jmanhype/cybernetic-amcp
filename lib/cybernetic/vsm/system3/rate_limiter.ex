@@ -4,6 +4,27 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
 
   Provides budget management and rate limiting capabilities to prevent
   system overload and manage costs across different services.
+
+  ## Budget Isolation
+
+  Rate limits are enforced per `budget_key` (e.g., `:s4_llm`, `:api_gateway`).
+  All requests to the same budget_key share the same counter within a time window.
+
+  **Important**: For tenant isolation, use distinct budget_keys per tenant:
+  - `{:s4_llm, tenant_id}` for per-tenant LLM budgets
+  - `{:api_gateway, tenant_id}` for per-tenant API rate limits
+
+  The `resource_type` parameter is for telemetry/logging only and does NOT
+  create separate rate limit counters.
+
+  ## Priority Multipliers
+
+  Requests consume tokens based on priority:
+  - `:critical` / `:high` - 1 token
+  - `:normal` - 2 tokens
+  - `:low` - 4 tokens
+
+  This allows high-priority requests to succeed when budgets are near limits.
   """
 
   use GenServer
@@ -17,7 +38,7 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
     :config
   ]
 
-  @type budget_key :: atom()
+  @type budget_key :: atom() | {atom(), term()}
   @type priority :: :low | :normal | :high | :critical
 
   # Public API
@@ -54,11 +75,14 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
 
   @doc """
   Request tokens from a budget on a specific RateLimiter instance.
+
+  Budget keys can be atoms (`:s4_llm`) or tuples (`{:s4_llm, tenant_id}`)
+  for tenant-isolated rate limiting.
   """
   @spec request_tokens(GenServer.server(), budget_key(), term(), priority()) ::
           :ok | {:error, term()}
   def request_tokens(server, budget_key, resource_type, priority)
-      when is_atom(budget_key) do
+      when is_atom(budget_key) or is_tuple(budget_key) do
     GenServer.call(server, {:request_tokens, budget_key, resource_type, priority}, 5_000)
   end
 
@@ -73,7 +97,7 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   Get current budget status from a specific RateLimiter instance.
   """
   @spec budget_status(GenServer.server(), budget_key()) :: map()
-  def budget_status(server, budget_key) when is_atom(budget_key) do
+  def budget_status(server, budget_key) when is_atom(budget_key) or is_tuple(budget_key) do
     GenServer.call(server, {:budget_status, budget_key}, 5_000)
   end
 
@@ -103,7 +127,7 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
   Reset a budget on a specific RateLimiter instance.
   """
   @spec reset_budget(GenServer.server(), budget_key()) :: :ok
-  def reset_budget(server, budget_key) when is_atom(budget_key) do
+  def reset_budget(server, budget_key) when is_atom(budget_key) or is_tuple(budget_key) do
     GenServer.call(server, {:reset_budget, budget_key}, 5_000)
   end
 

@@ -118,6 +118,18 @@ defmodule Cybernetic.Security.AuthManager do
   for repeated validations of the same session token.
   """
   def validate_token(token) do
+    # Guard: ensure ETS table exists (handles startup/restart race)
+    case :ets.whereis(:auth_sessions) do
+      :undefined ->
+        # Table not ready - fall back to GenServer (will queue until init completes)
+        GenServer.call(__MODULE__, {:validate_external_token, token})
+
+      _tid ->
+        validate_token_fast_path(token)
+    end
+  end
+
+  defp validate_token_fast_path(token) do
     # Fast path: direct ETS read for session tokens
     case :ets.lookup(:auth_sessions, token) do
       [{^token, session}] ->
@@ -594,7 +606,28 @@ defmodule Cybernetic.Security.AuthManager do
   end
 
   defp hash_api_key(key) do
-    :crypto.hash(:sha256, key) |> Base.encode16()
+    # Use HMAC-SHA256 with a secret (keyed hash prevents rainbow table attacks)
+    hmac_secret = get_hmac_secret()
+    :crypto.mac(:hmac, :sha256, hmac_secret, key) |> Base.encode16()
+  end
+
+  defp get_hmac_secret do
+    # Runtime secret - required in prod, defaults to dev value otherwise
+    case System.get_env("CYBERNETIC_HMAC_SECRET") do
+      nil ->
+        env = Application.get_env(:cybernetic, :environment, :prod)
+        if env == :prod do
+          raise "CYBERNETIC_HMAC_SECRET is required in production"
+        else
+          "dev-hmac-secret-not-for-production-use"
+        end
+
+      secret when byte_size(secret) < 32 ->
+        raise "CYBERNETIC_HMAC_SECRET must be at least 32 bytes"
+
+      secret ->
+        secret
+    end
   end
 
   defp hash_password(password) do

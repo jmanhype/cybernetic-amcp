@@ -189,13 +189,44 @@ defmodule Cybernetic.Security.JWKSCache do
     end
   end
 
+  # DNS rebinding protection: resolve once, connect to resolved IP
+  # This prevents TOCTOU attacks where DNS resolves to public IP during validation
+  # but to internal IP at connect time.
   defp safe_get(url) do
-    Req.get(url,
-      receive_timeout: @http_timeout_ms,
-      connect_options: [timeout: @http_connect_timeout_ms],
-      max_redirects: @max_redirects,
-      retry: false
-    )
+    uri = URI.parse(url)
+    host = uri.host
+    host_charlist = String.to_charlist(host)
+
+    # Resolve to a specific IP address to pin the connection
+    resolved_ip =
+      case :inet.getaddr(host_charlist, :inet) do
+        {:ok, ip} -> ip
+        {:error, _} ->
+          case :inet.getaddr(host_charlist, :inet6) do
+            {:ok, ip} -> ip
+            {:error, _} -> nil
+          end
+      end
+
+    case resolved_ip do
+      nil ->
+        {:error, :dns_resolution_failed}
+
+      ip_tuple ->
+        # Convert IP tuple to string for Req's ip option
+        ip_string = :inet.ntoa(ip_tuple) |> to_string()
+
+        Req.get(url,
+          receive_timeout: @http_timeout_ms,
+          connect_options: [
+            timeout: @http_connect_timeout_ms,
+            # Pin to resolved IP (prevents DNS rebinding)
+            hostname: ip_string
+          ],
+          max_redirects: @max_redirects,
+          retry: false
+        )
+    end
   rescue
     e -> {:error, {:request_error, Exception.message(e)}}
   end
