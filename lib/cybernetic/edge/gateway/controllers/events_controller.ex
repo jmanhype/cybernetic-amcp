@@ -206,10 +206,20 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
 
       receive do
         {:event, event_type, data} ->
-          handle_event(conn, state, event_type, data)
+          # Filter by tenant to prevent cross-tenant leakage
+          if event_matches_tenant?(data, state.tenant_id) do
+            handle_event(conn, state, event_type, data)
+          else
+            stream_loop(conn, state)
+          end
 
         {:broadcast, event_type, data, _from} ->
-          handle_event(conn, state, event_type, data)
+          # Filter by tenant to prevent cross-tenant leakage
+          if event_matches_tenant?(data, state.tenant_id) do
+            handle_event(conn, state, event_type, data)
+          else
+            stream_loop(conn, state)
+          end
 
         :close ->
           Logger.info("SSE connection closed by server", tenant_id: state.tenant_id)
@@ -361,6 +371,23 @@ defmodule Cybernetic.Edge.Gateway.EventsController do
     ArgumentError -> :ok
   end
 
+  # Tenant filtering - prevent cross-tenant event leakage
+  # Events are matched if:
+  # 1. Connection has no tenant (global/anonymous) - receives all events
+  # 2. Event has no tenant_id field - broadcast to all tenants
+  # 3. Event tenant_id matches connection tenant_id
+  @spec event_matches_tenant?(map(), String.t() | nil) :: boolean()
+  defp event_matches_tenant?(_data, nil), do: true
+
+  defp event_matches_tenant?(data, tenant_id) do
+    event_tenant = Map.get(data, :tenant_id) || Map.get(data, "tenant_id")
+
+    case event_tenant do
+      nil -> true
+      ^tenant_id -> true
+      _ -> false
+    end
+  end
   # Configuration helpers
 
   defp trust_proxy? do

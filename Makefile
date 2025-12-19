@@ -34,8 +34,8 @@ test: ## Run tests
 test-coverage: ## Run tests with coverage
 	MIX_ENV=test mix coveralls.html
 
-test-integration: ## Run integration tests
-	MIX_ENV=test mix test --include integration
+test-integration: ## Run integration tests (requires services: PostgreSQL, RabbitMQ)
+	MIX_ENV=integration mix test --include integration
 
 format: ## Format code
 	mix format
