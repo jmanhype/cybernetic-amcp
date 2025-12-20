@@ -106,4 +106,50 @@ defmodule Cybernetic.Intelligence.Policy.DSLTest do
       assert formatted =~ "allow"
     end
   end
+
+  describe "operator precedence safety" do
+    test "rejects ambiguous AND/OR expressions" do
+      # Mixing AND and OR without parentheses is ambiguous and rejected
+      dsl = "allow when: role == :admin or status == :draft and owner_id == user_id"
+
+      assert_raise ArgumentError, ~r/Ambiguous condition/, fn ->
+        DSL.parse(dsl, name: "test")
+      end
+    end
+
+    test "allows pure AND expressions" do
+      dsl = "allow when: role == :admin and status == :draft and tenant_id == context.tenant"
+
+      assert {:ok, policy} = DSL.parse(dsl, name: "test")
+      assert [{:allow, {:and, conditions}}] = rules!(policy)
+      assert length(conditions) == 3
+    end
+
+    test "allows pure OR expressions" do
+      dsl = "allow when: role == :admin or role == :editor or role == :owner"
+
+      assert {:ok, policy} = DSL.parse(dsl, name: "test")
+      assert [{:allow, {:or, conditions}}] = rules!(policy)
+      assert length(conditions) == 3
+    end
+
+    test "separate rules can express OR logic safely" do
+      # This is the recommended pattern instead of mixing AND/OR
+      dsl = """
+      allow when: role == :admin
+      allow when: status == :draft and owner_id == context.user_id
+      """
+
+      assert {:ok, policy} = DSL.parse(dsl, name: "test")
+      rules = rules!(policy)
+      assert length(rules) == 2
+    end
+
+    test "NOT operator works with simple conditions" do
+      dsl = "deny when: not role == :admin"
+
+      assert {:ok, policy} = DSL.parse(dsl, name: "test")
+      assert [{:deny, {:not, {:eq, ["role"], :admin}}}] = rules!(policy)
+    end
+  end
 end
