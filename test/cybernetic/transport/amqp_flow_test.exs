@@ -5,9 +5,7 @@ defmodule Cybernetic.Transport.AMQPFlowTest do
   @moduletag :amqp_required
   @moduletag :skip
 
-  alias Cybernetic.Core.Transport.AMQP.Topology
   alias Cybernetic.Transport.Message
-  alias Cybernetic.Core.Security.NonceBloom
 
   @test_exchange "cyb.test.flow"
   @test_queue "cyb.test.flow.queue"
@@ -114,7 +112,7 @@ defmodule Cybernetic.Transport.AMQPFlowTest do
         2_000 -> flunk("No message received")
       end
 
-    {decoded, meta} = received
+    {decoded, _meta} = received
 
     # Verify payload is intact
     assert decoded["payload"]["hello"] == "world"

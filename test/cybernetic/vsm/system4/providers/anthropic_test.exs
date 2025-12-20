@@ -3,8 +3,6 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
   alias Cybernetic.VSM.System4.Providers.Anthropic
   alias Cybernetic.VSM.System4.Episode
 
-  import ExUnit.CaptureLog
-
   describe "new/1" do
     test "creates provider with API key from options" do
       {:ok, provider} = Anthropic.new(api_key: "test-key")
@@ -57,7 +55,7 @@ defmodule Cybernetic.VSM.System4.Providers.AnthropicTest do
 
   describe "analyze_episode/2" do
     test "function exists and has correct arity" do
-      episode = Episode.new(:test, "Test Episode", %{})
+      _episode = Episode.new(:test, "Test Episode", %{})
 
       # Test that the function exists - this will fail if not called with actual API key
       # but that's expected since we're testing without mocking library

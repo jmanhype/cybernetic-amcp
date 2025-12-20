@@ -2,10 +2,6 @@ defmodule Cybernetic.Core.Security.NonceBloomTTLTest do
   use ExUnit.Case, async: true
   alias Cybernetic.Core.Security.NonceBloom
 
-  @headers fn nonce ->
-    %{"_nonce" => nonce, "_timestamp" => System.system_time(:millisecond), "_site" => node()}
-  end
-
   setup do
     # Ensure NonceBloom is started
     case GenServer.whereis(NonceBloom) do

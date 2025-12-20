@@ -269,15 +269,4 @@ defmodule Cybernetic.Core.Security.NonceBloomTest do
       assert Process.alive?(Process.whereis(NonceBloom))
     end
   end
-
-  # Test helper to generate valid signatures
-  defp generate_test_signature(payload, nonce, timestamp) do
-    secret =
-      Application.get_env(:cybernetic, :security)[:hmac_secret] ||
-        System.get_env("CYBERNETIC_HMAC_SECRET") ||
-        "default-insecure-key-change-in-production"
-
-    data = Jason.encode!({payload, nonce, timestamp})
-    :crypto.mac(:hmac, :sha256, secret, data) |> Base.encode16(case: :lower)
-  end
 end
