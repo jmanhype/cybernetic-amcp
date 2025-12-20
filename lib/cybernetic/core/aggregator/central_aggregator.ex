@@ -17,6 +17,8 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
   @table :cyb_agg_window
   @counts_table :cyb_agg_counts
+  # Rolling totals table for O(labels) summarize instead of O(buckets * labels)
+  @totals_table :cyb_agg_totals
   @emit_every_ms 5_000
   @window_ms 60_000
   # Bucket counts by second to avoid scanning the full window table on every emit.
@@ -50,6 +52,18 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
       _ ->
         :ets.delete_all_objects(@counts_table)
+    end
+
+    # Rolling totals for O(labels) summarize - keyed by {source, severity, labels}
+    case :ets.whereis(@totals_table) do
+      :undefined ->
+        :ets.new(
+          @totals_table,
+          [:set, :public, :named_table, read_concurrency: true, write_concurrency: true]
+        )
+
+      _ ->
+        :ets.delete_all_objects(@totals_table)
     end
 
     attach_sources()
@@ -118,14 +132,23 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
         bucket = div(entry.at, @bucket_ms)
         count_key = {bucket, entry.source, entry.severity, entry.labels}
+        totals_key = {entry.source, entry.severity, entry.labels}
 
-        _new_count =
-          :ets.update_counter(
-            @counts_table,
-            count_key,
-            {2, 1},
-            {count_key, 0}
-          )
+        # Increment bucket count
+        :ets.update_counter(
+          @counts_table,
+          count_key,
+          {2, 1},
+          {count_key, 0}
+        )
+
+        # Increment rolling totals for O(labels) summarize
+        :ets.update_counter(
+          @totals_table,
+          totals_key,
+          {2, 1},
+          {totals_key, 0}
+        )
     end
   end
 
@@ -174,23 +197,56 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregator do
 
       _ ->
         cutoff_bucket = div(cutoff_ms, @bucket_ms)
+
+        # First, subtract pruned bucket counts from totals
+        subtract_pruned_from_totals(cutoff_bucket)
+
+        # Then delete the pruned buckets
         match_spec = [{{{:"$1", :_, :_, :_}, :_}, [{:<, :"$1", cutoff_bucket}], [true]}]
         :ets.select_delete(@counts_table, match_spec)
     end
   end
 
-  defp summarize do
+  # Subtract counts from buckets being pruned from rolling totals
+  defp subtract_pruned_from_totals(cutoff_bucket) do
+    # Match buckets older than cutoff
+    match_spec = [{{{:"$1", :"$2", :"$3", :"$4"}, :"$5"}, [{:<, :"$1", cutoff_bucket}], [{{{{:"$2", :"$3", :"$4"}}, :"$5"}}]}]
+
     case :ets.whereis(@counts_table) do
       :undefined ->
-        Logger.warning("CentralAggregator: ETS table #{@counts_table} not found during summarize")
-        []
+        :ok
 
       _ ->
         @counts_table
-        |> :ets.tab2list()
-        |> Enum.reduce(%{}, fn {{_bucket, src, sev, labels}, count}, acc ->
-          Map.update(acc, {src, sev, labels}, count, &(&1 + count))
+        |> :ets.select(match_spec)
+        |> Enum.each(fn {{totals_key}, count} ->
+          # Subtract count from totals, with floor at 0
+          case :ets.whereis(@totals_table) do
+            :undefined ->
+              :ok
+
+            _ ->
+              :ets.update_counter(
+                @totals_table,
+                totals_key,
+                {2, -count, 0, 0}
+              )
+          end
         end)
+    end
+  end
+
+  defp summarize do
+    # O(labels) instead of O(buckets * labels) - read directly from rolling totals
+    case :ets.whereis(@totals_table) do
+      :undefined ->
+        Logger.warning("CentralAggregator: ETS table #{@totals_table} not found during summarize")
+        []
+
+      _ ->
+        @totals_table
+        |> :ets.tab2list()
+        |> Enum.filter(fn {_key, count} -> count > 0 end)
         |> Enum.map(fn {{src, sev, labels}, count} ->
           %{
             "source" => Enum.join(Enum.map(src, &inspect/1), "/"),
