@@ -46,6 +46,7 @@ defmodule Cybernetic.MixProject do
       {:delta_crdt, ">= 0.0.0"},
       {:rustler, ">= 0.0.0"},
       {:gen_stage, "~> 1.2"},
+      {:fuse, "~> 2.5"},
 
       # MCP integration (pinned to SHA for reproducible builds)
       {:hermes_mcp,
