@@ -15,6 +15,8 @@ defmodule Cybernetic.Security.AuthManager do
 
   alias Cybernetic.Security.RBAC
   alias Cybernetic.Security.Passwords
+  alias Cybernetic.Security.ApiKeys
+  alias Cybernetic.Security.Sessions
 
   @typedoc "User role for RBAC authorization"
   @type role :: :admin | :operator | :viewer | :agent | :system
@@ -36,9 +38,6 @@ defmodule Cybernetic.Security.AuthManager do
         }
 
   # ========== CONFIGURATION CONSTANTS ==========
-  # JWT configuration - TTL in seconds
-  @jwt_ttl_seconds 3600
-
   # Session cleanup interval in milliseconds
   @cleanup_interval_ms 60_000
 
@@ -47,9 +46,6 @@ defmodule Cybernetic.Security.AuthManager do
   @max_failed_attempts 5
   @failed_attempts_history_size 10
   @attempt_cleanup_seconds 3600
-
-  # API key expiry (1 year in seconds)
-  @api_key_ttl_seconds 365 * 24 * 3600
 
   # Circuit breaker for external JWT verification (JWKS fetches)
   # Trips after 5 failures in 60s, resets after 30s
@@ -72,18 +68,12 @@ defmodule Cybernetic.Security.AuthManager do
 
   @impl true
   def init(_opts) do
-    # P0 Security: Use :protected instead of :public to restrict ETS access
-    # Only the owning process (this GenServer) can write; other processes can read
-    :ets.new(:auth_sessions, [:set, :protected, :named_table, {:read_concurrency, true}])
-    :ets.new(:api_keys, [:set, :protected, :named_table, {:read_concurrency, true}])
-    :ets.new(:refresh_tokens, [:set, :protected, :named_table, {:read_concurrency, true}])
+    # Initialize ETS tables via focused modules
+    Sessions.init_tables()
+    ApiKeys.init_table()
 
-    # P1 Performance: Expiry index for O(log n) session cleanup instead of O(n) scan
-    # Key: {expiry_timestamp, token}, Value: refresh_token (for cleanup)
-    :ets.new(:auth_session_expiry, [:ordered_set, :protected, :named_table])
-
-    # Load API keys from config/env
-    load_api_keys()
+    # Load API keys from environment
+    ApiKeys.load_from_env()
 
     # Install circuit breaker for external JWT verification
     :fuse.install(@jwt_verify_fuse, @jwt_verify_fuse_opts)
@@ -142,38 +132,25 @@ defmodule Cybernetic.Security.AuthManager do
   @spec validate_token(String.t()) :: {:ok, auth_context()} | {:error, atom()}
   def validate_token(token) do
     # Guard: ensure ETS table exists (handles startup/restart race)
-    case :ets.whereis(:auth_sessions) do
-      :undefined ->
-        # Table not ready - fall back to GenServer (will queue until init completes)
-        GenServer.call(__MODULE__, {:validate_external_token, token})
-
-      _tid ->
-        validate_token_fast_path(token)
+    if not Sessions.table_exists?() do
+      # Table not ready - fall back to GenServer (will queue until init completes)
+      GenServer.call(__MODULE__, {:validate_external_token, token})
+    else
+      validate_token_fast_path(token)
     end
   end
 
   defp validate_token_fast_path(token) do
-    # Fast path: direct ETS read for session tokens
-    case :ets.lookup(:auth_sessions, token) do
-      [{^token, session}] ->
-        if DateTime.compare(DateTime.utc_now(), session.expires_at) == :lt do
-          {:ok,
-           %{
-             user_id: session.user_id,
-             roles: session.roles,
-             permissions: RBAC.expand_permissions(session.roles),
-             metadata: %{
-               username: session.username,
-               tenant_id: Map.get(session, :tenant_id),
-               auth_method: :jwt
-             }
-           }}
-        else
-          # Expired - need GenServer to delete from ETS
-          GenServer.call(__MODULE__, {:validate_expired_token, token})
-        end
+    # Fast path: direct ETS read via Sessions module
+    case Sessions.lookup(token) do
+      {:ok, session} ->
+        {:ok, Sessions.to_auth_context(session)}
 
-      [] ->
+      {:error, :expired} ->
+        # Expired - need GenServer to delete from ETS
+        GenServer.call(__MODULE__, {:validate_expired_token, token})
+
+      {:error, :not_found} ->
         # Not in ETS - need GenServer for JWT verification (may need rate limiting)
         GenServer.call(__MODULE__, {:validate_external_token, token})
     end
@@ -233,23 +210,8 @@ defmodule Cybernetic.Security.AuthManager do
             jwt = generate_jwt(user)
             refresh = generate_refresh_token(user)
 
-            # Store session with tenant_id for isolation
-            session = %{
-              user_id: user.id,
-              username: username,
-              roles: user.roles,
-              tenant_id: tenant_id,
-              jwt: jwt,
-              refresh_token: refresh,
-              created_at: DateTime.utc_now(),
-              expires_at: DateTime.add(DateTime.utc_now(), @jwt_ttl_seconds, :second)
-            }
-
-            :ets.insert(:auth_sessions, {jwt, session})
-            :ets.insert(:refresh_tokens, {refresh, {user.id, tenant_id}})
-            # P1 Performance: Index by expiry for O(log n) cleanup
-            expiry_key = {DateTime.to_unix(session.expires_at), jwt}
-            :ets.insert(:auth_session_expiry, {expiry_key, refresh})
+            # Store session via Sessions module
+            Sessions.create(user, jwt, refresh, tenant_id)
 
             # Audit log (disabled for now)
             Logger.info("User authenticated: #{username}")
@@ -261,7 +223,7 @@ defmodule Cybernetic.Security.AuthManager do
               %{user: username, method: :password}
             )
 
-            {:reply, {:ok, %{token: jwt, refresh_token: refresh, expires_in: @jwt_ttl_seconds}},
+            {:reply, {:ok, %{token: jwt, refresh_token: refresh, expires_in: Sessions.jwt_ttl_seconds()}},
              state}
 
           {:error, reason} ->
@@ -295,38 +257,14 @@ defmodule Cybernetic.Security.AuthManager do
 
   @impl true
   def handle_call({:authenticate_api_key, api_key}, _from, state) do
-    case :ets.lookup(:api_keys, hash_api_key(api_key)) do
-      [{_hash, key_data}] ->
-        # Check if key is expired
-        if DateTime.compare(DateTime.utc_now(), key_data.expires_at) == :lt do
-          auth_context = %{
-            user_id: key_data.name,
-            roles: key_data.roles,
-            permissions: RBAC.expand_permissions(key_data.roles),
-            metadata: %{
-              tenant_id: Map.get(key_data, :tenant_id),
-              auth_method: :api_key
-            }
-          }
-
-          Logger.info("API key authenticated: #{key_data.name}")
-
-          {:reply, {:ok, auth_context}, state}
-        else
-          Logger.warning("API key expired: #{key_data.name}")
-          {:reply, {:error, :expired_key}, state}
-        end
-
-      [] ->
-        Logger.warning("Invalid API key attempt")
-        {:reply, {:error, :invalid_key}, state}
-    end
+    # Delegate to ApiKeys module
+    {:reply, ApiKeys.authenticate(api_key), state}
   end
 
   # Handle expired token - delete from ETS and return error
   @impl true
   def handle_call({:validate_expired_token, token}, _from, state) do
-    :ets.delete(:auth_sessions, token)
+    Sessions.delete(token)
     {:reply, {:error, :token_expired}, state}
   end
 
@@ -336,63 +274,14 @@ defmodule Cybernetic.Security.AuthManager do
     # Not a local session token; try verifying it as an external JWT (RS256 only).
     # HS256 tokens must be in ETS (session tokens don't survive restart).
     # Circuit breaker protects against JWKS endpoint failures.
-    case :fuse.ask(@jwt_verify_fuse, :sync) do
-      :ok ->
-        case Cybernetic.Security.JWT.verify_external(token) do
-          {:ok, claims} ->
-            case auth_context_from_claims(claims) do
-              {:ok, auth_context} ->
-                {:reply, {:ok, auth_context}, state}
-
-              {:error, :missing_sub} ->
-                Logger.warning("External JWT missing required sub claim")
-                {:reply, {:error, :invalid_token}, state}
-
-              {:error, reason} ->
-                Logger.warning("External JWT claims rejected", reason: inspect(reason))
-                {:reply, {:error, :invalid_token}, state}
-            end
-
-          {:error, :token_expired} ->
-            {:reply, {:error, :token_expired}, state}
-
-          {:error, {:unsupported_alg, "HS256"}} ->
-            # HS256 session token not in ETS - likely expired or server restarted
-            {:reply, {:error, :session_expired}, state}
-
-          {:error, {:jwks_fetch_failed, _} = reason} ->
-            # JWKS fetch failed - melt the fuse
-            :fuse.melt(@jwt_verify_fuse)
-            Logger.warning("JWKS fetch failed, circuit breaker triggered", reason: inspect(reason))
-            {:reply, {:error, :service_unavailable}, state}
-
-          _ ->
-            {:reply, {:error, :invalid_token}, state}
-        end
-
-      :blown ->
-        Logger.warning("External JWT verification circuit breaker open")
-        {:reply, {:error, :service_unavailable}, state}
-
-      {:error, :not_found} ->
-        # Fuse not installed (shouldn't happen after init), fall back to direct call
-        case Cybernetic.Security.JWT.verify_external(token) do
-          {:ok, claims} ->
-            case auth_context_from_claims(claims) do
-              {:ok, auth_context} -> {:reply, {:ok, auth_context}, state}
-              {:error, _} -> {:reply, {:error, :invalid_token}, state}
-            end
-          {:error, :token_expired} -> {:reply, {:error, :token_expired}, state}
-          {:error, {:unsupported_alg, "HS256"}} -> {:reply, {:error, :session_expired}, state}
-          _ -> {:reply, {:error, :invalid_token}, state}
-        end
-    end
+    result = verify_external_with_circuit_breaker(token)
+    {:reply, result, state}
   end
 
   @impl true
   def handle_call({:refresh_token, refresh_token}, _from, state) do
-    case :ets.lookup(:refresh_tokens, refresh_token) do
-      [{^refresh_token, {user_id, tenant_id}}] ->
+    case Sessions.lookup_refresh_token(refresh_token) do
+      {:ok, {user_id, tenant_id}} ->
         # Generate new tokens
         user =
           Map.get(state.users_by_id, user_id) ||
@@ -405,72 +294,17 @@ defmodule Cybernetic.Security.AuthManager do
         new_jwt = generate_jwt(user)
         new_refresh = generate_refresh_token(user)
 
-        # Update sessions
-        :ets.delete(:refresh_tokens, refresh_token)
-        :ets.insert(:refresh_tokens, {new_refresh, {user_id, tenant_id}})
-
-        session = %{
-          user_id: user.id,
-          username: user.username,
-          roles: user.roles,
-          tenant_id: tenant_id,
-          jwt: new_jwt,
-          refresh_token: new_refresh,
-          created_at: DateTime.utc_now(),
-          expires_at: DateTime.add(DateTime.utc_now(), @jwt_ttl_seconds, :second)
-        }
-
-        :ets.insert(:auth_sessions, {new_jwt, session})
-        # P1 Performance: Index by expiry for O(log n) cleanup
-        expiry_key = {DateTime.to_unix(session.expires_at), new_jwt}
-        :ets.insert(:auth_session_expiry, {expiry_key, new_refresh})
+        # Delete old refresh token and create new session
+        Sessions.delete_refresh_token(refresh_token)
+        Sessions.create(user, new_jwt, new_refresh, tenant_id)
 
         Logger.info("Token refreshed for user: #{user_id}")
 
         {:reply,
-         {:ok, %{token: new_jwt, refresh_token: new_refresh, expires_in: @jwt_ttl_seconds}},
+         {:ok, %{token: new_jwt, refresh_token: new_refresh, expires_in: Sessions.jwt_ttl_seconds()}},
          state}
 
-      [{^refresh_token, user_id}] ->
-        # Backwards-compatible shape: refresh token stored without tenant_id
-        tenant_id = nil
-
-        user =
-          Map.get(state.users_by_id, user_id) ||
-            %{
-              id: user_id,
-              username: user_id,
-              roles: [:viewer]
-            }
-
-        new_jwt = generate_jwt(user)
-        new_refresh = generate_refresh_token(user)
-
-        :ets.delete(:refresh_tokens, refresh_token)
-        :ets.insert(:refresh_tokens, {new_refresh, {user_id, tenant_id}})
-
-        session = %{
-          user_id: user.id,
-          username: user.username,
-          roles: user.roles,
-          tenant_id: tenant_id,
-          jwt: new_jwt,
-          refresh_token: new_refresh,
-          created_at: DateTime.utc_now(),
-          expires_at: DateTime.add(DateTime.utc_now(), @jwt_ttl_seconds, :second)
-        }
-
-        :ets.insert(:auth_sessions, {new_jwt, session})
-        expiry_key = {DateTime.to_unix(session.expires_at), new_jwt}
-        :ets.insert(:auth_session_expiry, {expiry_key, new_refresh})
-
-        Logger.info("Token refreshed for user: #{user_id}")
-
-        {:reply,
-         {:ok, %{token: new_jwt, refresh_token: new_refresh, expires_in: @jwt_ttl_seconds}},
-         state}
-
-      [] ->
+      {:error, :not_found} ->
         {:reply, {:error, :invalid_refresh_token}, state}
     end
   end
@@ -509,125 +343,40 @@ defmodule Cybernetic.Security.AuthManager do
 
   @impl true
   def handle_call({:create_api_key, name, roles, opts}, _from, state) do
-    # Generate secure API key
-    key = generate_api_key()
-    key_hash = hash_api_key(key)
-
-    expires_at =
-      case Keyword.get(opts, :expires_in) do
-        # 1 year default
-        nil -> DateTime.add(DateTime.utc_now(), @api_key_ttl_seconds, :second)
-        seconds -> DateTime.add(DateTime.utc_now(), seconds, :second)
-      end
-
-    key_data = %{
-      name: name,
-      tenant_id: Keyword.get(opts, :tenant_id),
-      roles: roles,
-      created_at: DateTime.utc_now(),
-      expires_at: expires_at,
-      metadata: Keyword.get(opts, :metadata, %{})
-    }
-
-    :ets.insert(:api_keys, {key_hash, key_data})
-
-    Logger.info("API key created: #{name} with roles #{inspect(roles)}")
-
-    {:reply, {:ok, key}, state}
+    # Delegate to ApiKeys module
+    {:reply, ApiKeys.create(name, roles, opts), state}
   end
 
   @impl true
   def handle_call({:revoke, token_or_key}, _from, state) do
-    # Try as JWT token first
-    case :ets.lookup(:auth_sessions, token_or_key) do
-      [{^token_or_key, session}] ->
-        :ets.delete(:auth_sessions, token_or_key)
-        :ets.delete(:refresh_tokens, session.refresh_token)
-        # P1 Performance: Also clean up expiry index
-        expiry_key = {DateTime.to_unix(session.expires_at), token_or_key}
-        :ets.delete(:auth_session_expiry, expiry_key)
-
-        Logger.info("Token revoked for user: #{session.user_id}")
+    # Try as JWT session first, then as API key
+    case Sessions.delete(token_or_key) do
+      :ok ->
         {:reply, :ok, state}
 
-      [] ->
+      {:error, :not_found} ->
         # Try as API key
-        key_hash = hash_api_key(token_or_key)
-
-        case :ets.lookup(:api_keys, key_hash) do
-          [{^key_hash, key_data}] ->
-            :ets.delete(:api_keys, key_hash)
-
-            Logger.info("API key revoked: #{key_data.name}")
-            {:reply, :ok, state}
-
-          [] ->
-            {:reply, {:error, :not_found}, state}
-        end
+        {:reply, ApiKeys.revoke(token_or_key), state}
     end
   end
 
   @impl true
   def handle_call(:list_sessions, _from, state) do
-    sessions =
-      :ets.tab2list(:auth_sessions)
-      |> Enum.map(fn {_token, session} ->
-        %{
-          user_id: session.user_id,
-          username: session.username,
-          created_at: session.created_at,
-          expires_at: session.expires_at
-        }
-      end)
-
-    {:reply, sessions, state}
+    # Delegate to Sessions module
+    {:reply, Sessions.list(), state}
   end
 
   @impl true
   def handle_info(:cleanup_sessions, state) do
-    # P1 Performance: Use expiry index for O(log n) cleanup instead of O(n) scan
-    # P2 Resilience: Wrap in try/rescue to prevent cleanup failures from crashing GenServer
-    state =
-      try do
-        now_unix = DateTime.to_unix(DateTime.utc_now())
+    # Delegate session cleanup to Sessions module
+    Sessions.cleanup_expired()
 
-        # Select all expired entries: keys where expiry_timestamp <= now
-        # The :ordered_set is sorted by key, so we select from start to now
-        expired =
-          :ets.select(
-            :auth_session_expiry,
-            [{{{:"$1", :"$2"}, :"$3"}, [{:"=<", :"$1", now_unix}], [{{:"$2", :"$3"}}]}]
-          )
-
-        # Delete each expired session
-        Enum.each(expired, fn {token, refresh_token} ->
-          :ets.delete(:auth_sessions, token)
-          :ets.delete(:refresh_tokens, refresh_token)
-          Logger.debug("Cleaned up expired session", token_prefix: String.slice(token, 0, 8))
-        end)
-
-        # Delete from expiry index using range delete
-        if length(expired) > 0 do
-          :ets.select_delete(
-            :auth_session_expiry,
-            [{{{:"$1", :_}, :_}, [{:"=<", :"$1", now_unix}], [true]}]
-          )
-
-          Logger.debug("Session cleanup complete", expired_count: length(expired))
-        end
-
-        # Reset rate limit counters older than 1 hour
-        %{
-          state
-          | failed_attempts: clean_old_attempts(state.failed_attempts),
-            rate_limits: %{}
-        }
-      rescue
-        e in [ErlangError, ArgumentError, MatchError] ->
-          Logger.error("Session cleanup failed, will retry next interval",
-            error: Exception.message(e))
-          state
-      end
+    # Reset rate limit counters older than 1 hour
+    state = %{
+      state
+      | failed_attempts: clean_old_attempts(state.failed_attempts),
+        rate_limits: %{}
+    }
 
     # Schedule next cleanup
     Process.send_after(self(), :cleanup_sessions, @cleanup_interval_ms)
@@ -637,6 +386,53 @@ defmodule Cybernetic.Security.AuthManager do
 
   # ========== PRIVATE FUNCTIONS ==========
 
+  @spec verify_external_with_circuit_breaker(String.t()) :: {:ok, map()} | {:error, atom()}
+  defp verify_external_with_circuit_breaker(token) do
+    with :ok <- check_circuit_breaker(),
+         {:ok, claims} <- verify_external_jwt(token),
+         {:ok, auth_context} <- auth_context_from_claims(claims) do
+      {:ok, auth_context}
+    else
+      :blown ->
+        Logger.warning("External JWT verification circuit breaker open")
+        {:error, :service_unavailable}
+
+      {:error, :token_expired} ->
+        {:error, :token_expired}
+
+      {:error, {:unsupported_alg, "HS256"}} ->
+        {:error, :session_expired}
+
+      {:error, {:jwks_fetch_failed, _} = reason} ->
+        :fuse.melt(@jwt_verify_fuse)
+        Logger.warning("JWKS fetch failed, circuit breaker triggered", reason: inspect(reason))
+        {:error, :service_unavailable}
+
+      {:error, :missing_sub} ->
+        Logger.warning("External JWT missing required sub claim")
+        {:error, :invalid_token}
+
+      {:error, reason} ->
+        Logger.warning("External JWT validation failed", reason: inspect(reason))
+        {:error, :invalid_token}
+    end
+  end
+
+  @spec check_circuit_breaker() :: :ok | :blown
+  defp check_circuit_breaker do
+    case :fuse.ask(@jwt_verify_fuse, :sync) do
+      :ok -> :ok
+      :blown -> :blown
+      {:error, :not_found} -> :ok  # Fuse not installed, allow through
+    end
+  end
+
+  @spec verify_external_jwt(String.t()) :: {:ok, map()} | {:error, term()}
+  defp verify_external_jwt(token) do
+    Cybernetic.Security.JWT.verify_external(token)
+  end
+
+  @spec verify_credentials(String.t(), String.t(), map()) :: {:ok, map()} | {:error, atom()}
   defp verify_credentials(username, password, users) when is_map(users) do
     case Map.get(users, username) do
       nil ->
@@ -651,6 +447,7 @@ defmodule Cybernetic.Security.AuthManager do
     end
   end
 
+  @spec load_users(atom()) :: map()
   defp load_users(env) do
     users = get_configured_users()
 
@@ -680,13 +477,14 @@ defmodule Cybernetic.Security.AuthManager do
     end
   end
 
+  @spec generate_jwt(map()) :: String.t()
   defp generate_jwt(user) do
     claims = %{
       "sub" => user.id,
       "username" => user.username,
       "roles" => user.roles,
       "iat" => DateTime.to_unix(DateTime.utc_now()),
-      "exp" => DateTime.to_unix(DateTime.add(DateTime.utc_now(), @jwt_ttl_seconds, :second))
+      "exp" => DateTime.to_unix(DateTime.add(DateTime.utc_now(), Sessions.jwt_ttl_seconds(), :second))
     }
 
     jwk = JOSE.JWK.from_oct(get_jwt_secret())
@@ -697,23 +495,13 @@ defmodule Cybernetic.Security.AuthManager do
     |> elem(1)
   end
 
+  @spec generate_refresh_token(map()) :: String.t()
   defp generate_refresh_token(_user) do
     :crypto.strong_rand_bytes(32) |> Base.encode64()
   end
 
-  defp generate_api_key do
-    "cyb_" <> (:crypto.strong_rand_bytes(32) |> Base.encode64(padding: false))
-  end
 
-  defp hash_api_key(key) do
-    # Use HMAC-SHA256 with a secret (keyed hash prevents rainbow table attacks)
-    hmac_secret = get_hmac_secret()
-    :crypto.mac(:hmac, :sha256, hmac_secret, key) |> Base.encode16()
-  end
-
-  # Delegate to centralized Secrets module for consistent validation
-  defp get_hmac_secret, do: Cybernetic.Security.Secrets.hmac_secret()
-
+  @spec auth_context_from_claims(map()) :: {:ok, auth_context()} | {:error, :missing_sub}
   defp auth_context_from_claims(claims) when is_map(claims) do
     sub = claims["sub"]
 
@@ -771,6 +559,7 @@ defmodule Cybernetic.Security.AuthManager do
     end)
   end
 
+  @spec check_rate_limit(String.t(), map()) :: {:ok, map()} | {:error, :rate_limited}
   defp check_rate_limit(username, state) do
     attempts = Map.get(state.failed_attempts, username, [])
 
@@ -788,6 +577,7 @@ defmodule Cybernetic.Security.AuthManager do
     end
   end
 
+  @spec track_failed_attempt(String.t(), map()) :: map()
   defp track_failed_attempt(username, state) do
     attempts = Map.get(state.failed_attempts, username, [])
     new_attempts = [DateTime.utc_now() | attempts] |> Enum.take(@failed_attempts_history_size)
@@ -795,6 +585,7 @@ defmodule Cybernetic.Security.AuthManager do
     %{state | failed_attempts: Map.put(state.failed_attempts, username, new_attempts)}
   end
 
+  @spec clean_old_attempts(map()) :: map()
   defp clean_old_attempts(failed_attempts) do
     cutoff = DateTime.add(DateTime.utc_now(), -@attempt_cleanup_seconds, :second)
 
@@ -811,6 +602,7 @@ defmodule Cybernetic.Security.AuthManager do
     |> Map.new()
   end
 
+  @spec get_configured_users() :: map()
   defp get_configured_users do
     # Load users from environment variables
     # Format: CYBERNETIC_USER_<USERNAME>=<password>:<role1,role2>
@@ -851,21 +643,4 @@ defmodule Cybernetic.Security.AuthManager do
     end)
   end
 
-  defp load_api_keys do
-    # Load any pre-configured API keys from environment
-    if key = System.get_env("CYBERNETIC_SYSTEM_API_KEY") do
-      key_hash = hash_api_key(key)
-
-      key_data = %{
-        name: "system",
-        roles: [:system],
-        created_at: DateTime.utc_now(),
-        expires_at: DateTime.add(DateTime.utc_now(), 10 * @api_key_ttl_seconds, :second),
-        metadata: %{source: "env"}
-      }
-
-      :ets.insert(:api_keys, {key_hash, key_data})
-      Logger.info("Loaded system API key from environment")
-    end
-  end
 end
