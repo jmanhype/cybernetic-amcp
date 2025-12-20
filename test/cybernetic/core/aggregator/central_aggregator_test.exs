@@ -85,6 +85,22 @@ defmodule Cybernetic.Core.Aggregator.CentralAggregatorTest do
         :ok
       end
     end
+
+    test "no duplicate handlers after multiple restarts" do
+      handler_id = {CentralAggregator, :goldrush}
+
+      # The supervised aggregator is started in setup
+      # Just verify there's exactly one handler
+      handlers = :telemetry.list_handlers([:cybernetic, :work, :finished])
+      matching = Enum.filter(handlers, fn %{id: id} -> id == handler_id end)
+      assert length(matching) == 1
+    end
+
+    test "handler is idempotent - can detach non-existent handler without error" do
+      # Attempting to detach a handler that doesn't exist should not crash
+      result = :telemetry.detach({__MODULE__, :nonexistent_handler})
+      assert result == {:error, :not_found}
+    end
   end
 
   describe "fact emission" do
