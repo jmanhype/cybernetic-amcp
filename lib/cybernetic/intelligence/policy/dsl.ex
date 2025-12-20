@@ -21,6 +21,25 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
   - Membership: `in`
   - Existence: `present?`, `blank?`
 
+  ## Grammar Limitations
+
+  **Important**: The parser uses simple string splitting for logical operators.
+  To avoid subtle authorization bugs:
+
+  1. **No mixed AND/OR**: Expressions like `a or b and c` are rejected as ambiguous.
+     Split into separate rules instead:
+     ```
+     # Instead of: allow when: role == :admin or status == :draft and owner_id == user_id
+     # Use separate rules:
+     allow when: role == :admin
+     allow when: status == :draft and owner_id == user_id
+     ```
+
+  2. **No parentheses**: Grouping with `()` is not supported.
+
+  3. **AND has implicit precedence**: Within a single `and` or `or` expression,
+     all conditions are grouped together (left-to-right evaluation).
+
   ## Context Variables
 
   - `context` - Runtime context (user_id, roles, tenant_id, etc.)
@@ -283,12 +302,27 @@ defmodule Cybernetic.Intelligence.Policy.DSL do
   end
 
   defp parse_condition(expr) do
+    # SECURITY: Reject ambiguous expressions mixing AND/OR without parentheses.
+    # We intentionally RAISE here (not return {:error, _}) because:
+    # 1. This is a compile-time security check that must fail loudly
+    # 2. Silent errors could lead to deployed policies with bypass vulnerabilities
+    # 3. Policy authors must fix ambiguity before the policy can be used
+    # This follows the "fail fast" principle for security-critical code.
+    has_and = String.contains?(expr, " and ")
+    has_or = String.contains?(expr, " or ")
+
+    if has_and and has_or do
+      raise ArgumentError,
+            "Ambiguous condition: '#{expr}' mixes 'and' and 'or' without parentheses. " <>
+              "Use separate rules or explicit grouping to avoid precedence issues."
+    end
+
     cond do
-      String.contains?(expr, " and ") ->
+      has_and ->
         parts = String.split(expr, " and ")
         {:and, Enum.map(parts, &parse_condition/1)}
 
-      String.contains?(expr, " or ") ->
+      has_or ->
         parts = String.split(expr, " or ")
         {:or, Enum.map(parts, &parse_condition/1)}
 
