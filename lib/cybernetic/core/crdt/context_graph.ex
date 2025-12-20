@@ -6,6 +6,7 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
   use GenServer
   require Logger
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -37,11 +38,13 @@ defmodule Cybernetic.Core.CRDT.ContextGraph do
   @doc """
   Enable distributed sync with cluster nodes
   """
+  @spec enable_sync() :: :ok
   def enable_sync, do: GenServer.cast(__MODULE__, :enable_sync)
 
   @doc """
   Get current neighbor nodes
   """
+  @spec get_neighbors() :: [pid()]
   def get_neighbors, do: GenServer.call(__MODULE__, :get_neighbors)
 
   @doc """

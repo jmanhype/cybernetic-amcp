@@ -8,6 +8,7 @@ defmodule Cybernetic.MCP.Core do
 
   alias Cybernetic.Core.MCP.Hermes.Registry
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -27,6 +28,7 @@ defmodule Cybernetic.MCP.Core do
   @doc """
   Call an MCP tool with parameters.
   """
+  @spec call_tool(String.t(), map(), timeout()) :: {:ok, map()} | {:error, term()}
   def call_tool(tool_name, params, timeout \\ 30_000) do
     GenServer.call(__MODULE__, {:call_tool, tool_name, params}, timeout)
   end
@@ -34,6 +36,7 @@ defmodule Cybernetic.MCP.Core do
   @doc """
   Send a prompt to the MCP server.
   """
+  @spec send_prompt(String.t(), map()) :: {:ok, map()} | {:error, term()}
   def send_prompt(prompt, context \\ %{}) do
     GenServer.call(__MODULE__, {:send_prompt, prompt, context})
   end
@@ -42,6 +45,7 @@ defmodule Cybernetic.MCP.Core do
   List available tools.
   Returns {:ok, tools} on success, {:error, reason} on failure.
   """
+  @spec list_tools() :: {:ok, [map()]} | {:error, term()}
   def list_tools do
     GenServer.call(__MODULE__, :list_tools)
   end
@@ -50,6 +54,7 @@ defmodule Cybernetic.MCP.Core do
   List available tools, raising on error.
   Returns tools list directly or raises on failure.
   """
+  @spec list_tools!() :: [map()]
   def list_tools! do
     case list_tools() do
       {:ok, tools} -> tools

@@ -12,6 +12,7 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   # 1 minute
   @cleanup_interval 60_000
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -35,6 +36,7 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   Check if a request is allowed for the given key.
   Returns {:ok, remaining_tokens} or {:error, :rate_limited}
   """
+  @spec check(term(), pos_integer()) :: {:ok, non_neg_integer()} | {:error, :rate_limited}
   def check(key, tokens \\ 1) do
     start_time = System.monotonic_time(:nanosecond)
     result = GenServer.call(__MODULE__, {:check, key, tokens})
@@ -60,6 +62,7 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   Consume tokens if available.
   Returns {:ok, remaining} or {:error, :rate_limited}
   """
+  @spec consume(term(), pos_integer()) :: {:ok, non_neg_integer()} | {:error, :rate_limited}
   def consume(key, tokens \\ 1) do
     start_time = System.monotonic_time(:nanosecond)
     result = GenServer.call(__MODULE__, {:consume, key, tokens})
@@ -84,6 +87,7 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   @doc """
   Get current bucket state for a key
   """
+  @spec get_bucket(term()) :: map()
   def get_bucket(key) do
     GenServer.call(__MODULE__, {:get_bucket, key})
   end
@@ -91,6 +95,7 @@ defmodule Cybernetic.Core.Security.RateLimiter do
   @doc """
   Reset a bucket to full capacity
   """
+  @spec reset(term()) :: :ok
   def reset(key) do
     GenServer.cast(__MODULE__, {:reset, key})
   end
