@@ -13,6 +13,9 @@ defmodule Cybernetic.Security.AuthManager do
   use GenServer
   require Logger
 
+  alias Cybernetic.Security.RBAC
+  alias Cybernetic.Security.Passwords
+
   @typedoc "User role for RBAC authorization"
   @type role :: :admin | :operator | :viewer | :agent | :system
   @typedoc "Permission atom for fine-grained access control"
@@ -52,14 +55,7 @@ defmodule Cybernetic.Security.AuthManager do
   @spec get_jwt_secret() :: String.t()
   defp get_jwt_secret, do: Cybernetic.Security.Secrets.jwt_secret()
 
-  # Role definitions with permissions
-  @role_permissions %{
-    admin: [:all],
-    operator: [:read, :write, :execute, :monitor],
-    viewer: [:read, :monitor],
-    agent: [:read, :write, :execute_limited],
-    system: [:all, :internal]
-  }
+  # Role definitions delegated to RBAC module
 
   @doc """
   Starts the Authentication Manager GenServer.
@@ -157,7 +153,7 @@ defmodule Cybernetic.Security.AuthManager do
            %{
              user_id: session.user_id,
              roles: session.roles,
-             permissions: expand_permissions(session.roles),
+             permissions: RBAC.expand_permissions(session.roles),
              metadata: %{
                username: session.username,
                tenant_id: Map.get(session, :tenant_id),
@@ -298,7 +294,7 @@ defmodule Cybernetic.Security.AuthManager do
           auth_context = %{
             user_id: key_data.name,
             roles: key_data.roles,
-            permissions: expand_permissions(key_data.roles),
+            permissions: RBAC.expand_permissions(key_data.roles),
             metadata: %{
               tenant_id: Map.get(key_data, :tenant_id),
               auth_method: :api_key
@@ -454,7 +450,7 @@ defmodule Cybernetic.Security.AuthManager do
         permissions ->
           # Check specific resource/action authorization
           # Check if user has the specific action permission
-          check_permission(permissions, resource, action) ||
+          RBAC.check_resource_permission(permissions, resource, action) ||
             action in permissions
       end
 
@@ -592,10 +588,9 @@ defmodule Cybernetic.Security.AuthManager do
             rate_limits: %{}
         }
       rescue
-        e ->
-          Logger.error("Session cleanup failed, will retry next interval", 
-            error: inspect(e), 
-            stacktrace: Exception.format_stacktrace(__STACKTRACE__))
+        e in [ErlangError, ArgumentError, MatchError] ->
+          Logger.error("Session cleanup failed, will retry next interval",
+            error: Exception.message(e))
           state
       end
 
@@ -613,7 +608,7 @@ defmodule Cybernetic.Security.AuthManager do
         {:error, :user_not_found}
 
       user ->
-        if verify_password(password, user.password_hash) do
+        if Passwords.verify(password, user.password_hash) do
           {:ok, user}
         else
           {:error, :invalid_password}
@@ -629,19 +624,19 @@ defmodule Cybernetic.Security.AuthManager do
         "admin" => %{
           id: "user_admin",
           username: "admin",
-          password_hash: hash_password("admin123"),
+          password_hash: Passwords.hash("admin123"),
           roles: [:admin]
         },
         "operator" => %{
           id: "user_operator",
           username: "operator",
-          password_hash: hash_password("operator123"),
+          password_hash: Passwords.hash("operator123"),
           roles: [:operator]
         },
         "viewer" => %{
           id: "user_viewer",
           username: "viewer",
-          password_hash: hash_password("viewer123"),
+          password_hash: Passwords.hash("viewer123"),
           roles: [:viewer]
         }
       }
@@ -667,7 +662,6 @@ defmodule Cybernetic.Security.AuthManager do
     |> elem(1)
   end
 
-
   defp generate_refresh_token(_user) do
     :crypto.strong_rand_bytes(32) |> Base.encode64()
   end
@@ -685,41 +679,6 @@ defmodule Cybernetic.Security.AuthManager do
   # Delegate to centralized Secrets module for consistent validation
   defp get_hmac_secret, do: Cybernetic.Security.Secrets.hmac_secret()
 
-  defp hash_password(password) do
-    pepper = System.get_env("PASSWORD_SALT", "")
-    opts = argon2_opts()
-    Argon2.hash_pwd_salt(password <> pepper, opts)
-  end
-
-  defp verify_password(password, hash) do
-    pepper = System.get_env("PASSWORD_SALT", "")
-    Argon2.verify_pass(password <> pepper, hash)
-  end
-
-  # Argon2 params from config or secure defaults
-  # See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
-  # Note: m_cost is 2^N KiB (16 = 64MB, 17 = 128MB)
-  defp argon2_opts do
-    config = Application.get_env(:cybernetic, :argon2, [])
-
-    [
-      # Time cost (iterations) - higher is more secure but slower
-      t_cost: Keyword.get(config, :t_cost, 3),
-      # Memory cost as power of 2 (2^16 = 64MB, 2^17 = 128MB)
-      m_cost: Keyword.get(config, :m_cost, 16),
-      # Parallelism - number of threads
-      parallelism: Keyword.get(config, :parallelism, 4)
-    ]
-  end
-
-  defp expand_permissions(roles) do
-    roles
-    |> Enum.flat_map(fn role ->
-      Map.get(@role_permissions, role, [])
-    end)
-    |> Enum.uniq()
-  end
-
   defp auth_context_from_claims(claims) when is_map(claims) do
     sub = claims["sub"]
 
@@ -732,14 +691,14 @@ defmodule Cybernetic.Security.AuthManager do
             roles
             |> Enum.map(&to_string/1)
             |> Enum.map(&String.downcase/1)
-            |> Enum.map(&parse_role/1)
+            |> Enum.map(&RBAC.parse_role/1)
             |> Enum.reject(&is_nil/1)
 
           role when is_binary(role) ->
             role
             |> String.split(",", trim: true)
             |> Enum.map(&String.downcase/1)
-            |> Enum.map(&parse_role/1)
+            |> Enum.map(&RBAC.parse_role/1)
             |> Enum.reject(&is_nil/1)
 
           _ ->
@@ -756,7 +715,7 @@ defmodule Cybernetic.Security.AuthManager do
        %{
          user_id: sub,
          roles: roles,
-         permissions: expand_permissions(roles),
+         permissions: RBAC.expand_permissions(roles),
          metadata: %{
            username: username,
            tenant_id: tenant_id,
@@ -775,19 +734,6 @@ defmodule Cybernetic.Security.AuthManager do
         _ -> nil
       end
     end)
-  end
-
-  defp check_permission(permissions, resource, action) do
-    # Resource-specific permission checking
-    # Format: "resource:action"
-    permission_atom =
-      try do
-        String.to_existing_atom("#{resource}:#{action}")
-      rescue
-        ArgumentError -> nil
-      end
-
-    permission_atom != nil and permission_atom in permissions
   end
 
   defp check_rate_limit(username, state) do
@@ -846,7 +792,7 @@ defmodule Cybernetic.Security.AuthManager do
             roles_str
             |> String.split(",", trim: true)
             |> Enum.map(&String.downcase/1)
-            |> Enum.map(&parse_role/1)
+            |> Enum.map(&RBAC.parse_role/1)
             |> Enum.reject(&is_nil/1)
 
           if roles == [] do
@@ -856,7 +802,7 @@ defmodule Cybernetic.Security.AuthManager do
             user = %{
               id: "user_#{username}",
               username: username,
-              password_hash: hash_password(password),
+              password_hash: Passwords.hash(password),
               roles: roles
             }
 
@@ -869,13 +815,6 @@ defmodule Cybernetic.Security.AuthManager do
       end
     end)
   end
-
-  defp parse_role("admin"), do: :admin
-  defp parse_role("operator"), do: :operator
-  defp parse_role("viewer"), do: :viewer
-  defp parse_role("agent"), do: :agent
-  defp parse_role("system"), do: :system
-  defp parse_role(_), do: nil
 
   defp load_api_keys do
     # Load any pre-configured API keys from environment
