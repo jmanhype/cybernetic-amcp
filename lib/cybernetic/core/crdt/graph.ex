@@ -8,8 +8,35 @@ defmodule Cybernetic.Core.CRDT.Graph do
 
   @table :crdt_graph
 
+  @typedoc "Node identifier (any term)"
+  @type node_id :: term()
+
+  @typedoc "Node metadata map"
+  @type node_metadata :: map()
+
+  @typedoc "Edge metadata map"
+  @type edge_metadata :: map()
+
+  @typedoc "Node structure with metadata and versioning"
+  @type node_t :: %{
+          id: node_id(),
+          metadata: node_metadata(),
+          timestamp: integer(),
+          version: pos_integer()
+        }
+
+  @typedoc "Edge structure connecting two nodes"
+  @type edge_t :: %{
+          from: node_id(),
+          to: node_id(),
+          metadata: edge_metadata(),
+          timestamp: integer(),
+          version: pos_integer()
+        }
+
   # Client API
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -29,6 +56,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   # Node operations
 
   @doc "Add a node to the graph"
+  @spec add_node(node_id(), node_metadata()) :: {:ok, node_t()}
   def add_node(node_id, metadata \\ %{}) do
     timestamp = System.system_time(:millisecond)
 
@@ -44,6 +72,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   end
 
   @doc "Get a node by ID"
+  @spec get_node(node_id()) :: {:ok, node_t()} | {:error, :not_found}
   def get_node(node_id) do
     case :ets.lookup(@table, {:node, node_id}) do
       [{_, node}] -> {:ok, node}
@@ -52,6 +81,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   end
 
   @doc "Get all nodes"
+  @spec get_all_nodes() :: [node_t()]
   def get_all_nodes do
     :ets.match(@table, {{:node, :"$1"}, :"$2"})
     |> Enum.map(fn [_id, node] -> node end)
@@ -60,6 +90,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   # Edge operations
 
   @doc "Add an edge between two nodes"
+  @spec add_edge(node_id(), node_id(), edge_metadata()) :: {:ok, edge_t()}
   def add_edge(from_id, to_id, metadata \\ %{}) do
     timestamp = System.system_time(:millisecond)
     edge_id = {from_id, to_id}
@@ -82,6 +113,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   end
 
   @doc "Get an edge between two nodes"
+  @spec get_edge(node_id(), node_id()) :: {:ok, edge_t()} | {:error, :not_found}
   def get_edge(from_id, to_id) do
     case :ets.lookup(@table, {:edge, {from_id, to_id}}) do
       [{_, edge}] -> {:ok, edge}
@@ -90,6 +122,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   end
 
   @doc "Get all edges from a node"
+  @spec get_outgoing_edges(node_id()) :: [edge_t()]
   def get_outgoing_edges(node_id) do
     pattern = {{:edge, {node_id, :"$1"}}, :"$2"}
 
@@ -98,6 +131,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   end
 
   @doc "Get all edges to a node"
+  @spec get_incoming_edges(node_id()) :: [edge_t()]
   def get_incoming_edges(node_id) do
     pattern = {{:edge, {:"$1", node_id}}, :"$2"}
 
@@ -108,6 +142,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   # Neighbor operations
 
   @doc "Get outgoing neighbors of a node"
+  @spec get_outgoing_neighbors(node_id()) :: [node_id()]
   def get_outgoing_neighbors(node_id) do
     case :ets.lookup(@table, {:adjacency, node_id, :outgoing}) do
       [{_, neighbors}] -> MapSet.to_list(neighbors)
@@ -116,6 +151,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   end
 
   @doc "Get incoming neighbors of a node"
+  @spec get_incoming_neighbors(node_id()) :: [node_id()]
   def get_incoming_neighbors(node_id) do
     case :ets.lookup(@table, {:adjacency, node_id, :incoming}) do
       [{_, neighbors}] -> MapSet.to_list(neighbors)
@@ -124,6 +160,7 @@ defmodule Cybernetic.Core.CRDT.Graph do
   end
 
   @doc "Get all neighbors (both incoming and outgoing)"
+  @spec get_all_neighbors(node_id()) :: [node_id()]
   def get_all_neighbors(node_id) do
     outgoing = get_outgoing_neighbors(node_id)
     incoming = get_incoming_neighbors(node_id)
@@ -133,11 +170,13 @@ defmodule Cybernetic.Core.CRDT.Graph do
   # CRDT Merge operations
 
   @doc "Merge another graph state into this one"
+  @spec merge(map()) :: {:ok, map()}
   def merge(remote_state) do
     GenServer.call(__MODULE__, {:merge, remote_state})
   end
 
   @doc "Get current graph state for replication"
+  @spec get_state() :: map()
   def get_state do
     GenServer.call(__MODULE__, :get_state)
   end
