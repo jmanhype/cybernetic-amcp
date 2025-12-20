@@ -88,6 +88,7 @@ defmodule Cybernetic.MixProject do
       # Database
       {:ecto_sql, "~> 3.11"},
       {:postgrex, "~> 0.18"},
+      {:pgvector, "~> 0.2"},
 
       # Background Jobs
       {:oban, "~> 2.17"},
