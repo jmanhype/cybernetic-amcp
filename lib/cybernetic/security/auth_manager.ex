@@ -51,6 +51,11 @@ defmodule Cybernetic.Security.AuthManager do
   # API key expiry (1 year in seconds)
   @api_key_ttl_seconds 365 * 24 * 3600
 
+  # Circuit breaker for external JWT verification (JWKS fetches)
+  # Trips after 5 failures in 60s, resets after 30s
+  @jwt_verify_fuse :auth_manager_jwt_verify_fuse
+  @jwt_verify_fuse_opts {{:standard, 5, 60_000}, {:reset, 30_000}}
+
   # Delegate to centralized Secrets module for consistent validation
   @spec get_jwt_secret() :: String.t()
   defp get_jwt_secret, do: Cybernetic.Security.Secrets.jwt_secret()
@@ -79,6 +84,9 @@ defmodule Cybernetic.Security.AuthManager do
 
     # Load API keys from config/env
     load_api_keys()
+
+    # Install circuit breaker for external JWT verification
+    :fuse.install(@jwt_verify_fuse, @jwt_verify_fuse_opts)
 
     # Start session cleanup timer
     Process.send_after(self(), :cleanup_sessions, @cleanup_interval_ms)
@@ -327,30 +335,57 @@ defmodule Cybernetic.Security.AuthManager do
   def handle_call({:validate_external_token, token}, _from, state) do
     # Not a local session token; try verifying it as an external JWT (RS256 only).
     # HS256 tokens must be in ETS (session tokens don't survive restart).
-    case Cybernetic.Security.JWT.verify_external(token) do
-      {:ok, claims} ->
-        case auth_context_from_claims(claims) do
-          {:ok, auth_context} ->
-            {:reply, {:ok, auth_context}, state}
+    # Circuit breaker protects against JWKS endpoint failures.
+    case :fuse.ask(@jwt_verify_fuse, :sync) do
+      :ok ->
+        case Cybernetic.Security.JWT.verify_external(token) do
+          {:ok, claims} ->
+            case auth_context_from_claims(claims) do
+              {:ok, auth_context} ->
+                {:reply, {:ok, auth_context}, state}
 
-          {:error, :missing_sub} ->
-            Logger.warning("External JWT missing required sub claim")
-            {:reply, {:error, :invalid_token}, state}
+              {:error, :missing_sub} ->
+                Logger.warning("External JWT missing required sub claim")
+                {:reply, {:error, :invalid_token}, state}
 
-          {:error, reason} ->
-            Logger.warning("External JWT claims rejected", reason: inspect(reason))
+              {:error, reason} ->
+                Logger.warning("External JWT claims rejected", reason: inspect(reason))
+                {:reply, {:error, :invalid_token}, state}
+            end
+
+          {:error, :token_expired} ->
+            {:reply, {:error, :token_expired}, state}
+
+          {:error, {:unsupported_alg, "HS256"}} ->
+            # HS256 session token not in ETS - likely expired or server restarted
+            {:reply, {:error, :session_expired}, state}
+
+          {:error, {:jwks_fetch_failed, _} = reason} ->
+            # JWKS fetch failed - melt the fuse
+            :fuse.melt(@jwt_verify_fuse)
+            Logger.warning("JWKS fetch failed, circuit breaker triggered", reason: inspect(reason))
+            {:reply, {:error, :service_unavailable}, state}
+
+          _ ->
             {:reply, {:error, :invalid_token}, state}
         end
 
-      {:error, :token_expired} ->
-        {:reply, {:error, :token_expired}, state}
+      :blown ->
+        Logger.warning("External JWT verification circuit breaker open")
+        {:reply, {:error, :service_unavailable}, state}
 
-      {:error, {:unsupported_alg, "HS256"}} ->
-        # HS256 session token not in ETS - likely expired or server restarted
-        {:reply, {:error, :session_expired}, state}
-
-      _ ->
-        {:reply, {:error, :invalid_token}, state}
+      {:error, :not_found} ->
+        # Fuse not installed (shouldn't happen after init), fall back to direct call
+        case Cybernetic.Security.JWT.verify_external(token) do
+          {:ok, claims} ->
+            case auth_context_from_claims(claims) do
+              {:ok, auth_context} -> {:reply, {:ok, auth_context}, state}
+              {:error, _} -> {:reply, {:error, :invalid_token}, state}
+            end
+          {:error, :token_expired} -> {:reply, {:error, :token_expired}, state}
+          {:error, {:unsupported_alg, "HS256"}} -> {:reply, {:error, :session_expired}, state}
+          _ -> {:reply, {:error, :invalid_token}, state}
+        end
     end
   end
 
