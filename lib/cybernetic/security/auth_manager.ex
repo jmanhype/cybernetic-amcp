@@ -32,8 +32,21 @@ defmodule Cybernetic.Security.AuthManager do
           metadata: map()
         }
 
+  # ========== CONFIGURATION CONSTANTS ==========
   # JWT configuration - TTL in seconds
   @jwt_ttl_seconds 3600
+
+  # Session cleanup interval in milliseconds
+  @cleanup_interval_ms 60_000
+
+  # Rate limiting configuration
+  @rate_limit_window_seconds 300
+  @max_failed_attempts 5
+  @failed_attempts_history_size 10
+  @attempt_cleanup_seconds 3600
+
+  # API key expiry (1 year in seconds)
+  @api_key_ttl_seconds 365 * 24 * 3600
 
   # Delegate to centralized Secrets module for consistent validation
   @spec get_jwt_secret() :: String.t()
@@ -72,7 +85,7 @@ defmodule Cybernetic.Security.AuthManager do
     load_api_keys()
 
     # Start session cleanup timer
-    Process.send_after(self(), :cleanup_sessions, 60_000)
+    Process.send_after(self(), :cleanup_sessions, @cleanup_interval_ms)
 
     env = Application.get_env(:cybernetic, :environment, :prod)
     users = load_users(env)
@@ -251,13 +264,26 @@ defmodule Cybernetic.Security.AuthManager do
             # Track failed attempt
             state = track_failed_attempt(username, state)
 
-            # Audit log (disabled for now)
+            # Telemetry for security monitoring (attack detection)
+            :telemetry.execute(
+              [:cybernetic, :auth, :login_failed],
+              %{count: 1},
+              %{user: username, reason: reason}
+            )
+
             Logger.warning("Authentication failed for #{username}: #{reason}")
 
             {:reply, {:error, :invalid_credentials}, state}
         end
 
       {:error, :rate_limited} ->
+        # Telemetry for rate limit monitoring (brute force detection)
+        :telemetry.execute(
+          [:cybernetic, :auth, :rate_limited],
+          %{count: 1},
+          %{user: username}
+        )
+
         Logger.warning("Rate limited: #{username}")
         {:reply, {:error, :too_many_attempts}, state}
     end
@@ -437,6 +463,13 @@ defmodule Cybernetic.Security.AuthManager do
 
       {:reply, :ok, state}
     else
+      # Telemetry for unauthorized access attempts (security monitoring)
+      :telemetry.execute(
+        [:cybernetic, :auth, :authorization_denied],
+        %{count: 1},
+        %{user: auth_context.user_id, resource: resource, action: action}
+      )
+
       Logger.warning("Authorization denied: #{auth_context.user_id} -> #{resource}:#{action}")
 
       {:reply, {:error, :unauthorized}, state}
@@ -452,7 +485,7 @@ defmodule Cybernetic.Security.AuthManager do
     expires_at =
       case Keyword.get(opts, :expires_in) do
         # 1 year default
-        nil -> DateTime.add(DateTime.utc_now(), 365 * 24 * 3600, :second)
+        nil -> DateTime.add(DateTime.utc_now(), @api_key_ttl_seconds, :second)
         seconds -> DateTime.add(DateTime.utc_now(), seconds, :second)
       end
 
@@ -567,7 +600,7 @@ defmodule Cybernetic.Security.AuthManager do
       end
 
     # Schedule next cleanup
-    Process.send_after(self(), :cleanup_sessions, 60_000)
+    Process.send_after(self(), :cleanup_sessions, @cleanup_interval_ms)
 
     {:noreply, state}
   end
@@ -715,18 +748,33 @@ defmodule Cybernetic.Security.AuthManager do
 
       roles = if roles == [], do: [:viewer], else: roles
 
+      # Type-safe extraction of username (validate all sources are strings)
+      username = extract_string_claim(claims, ["username", "preferred_username", "email"])
+      tenant_id = extract_string_claim(claims, ["tenant_id", "tid"])
+
       {:ok,
        %{
          user_id: sub,
          roles: roles,
          permissions: expand_permissions(roles),
          metadata: %{
-           username: claims["username"] || claims["preferred_username"] || claims["email"],
-           tenant_id: claims["tenant_id"] || claims["tid"],
+           username: username,
+           tenant_id: tenant_id,
            auth_method: :jwt
          }
        }}
     end
+  end
+
+  # Extract a string claim from multiple possible keys, validating type
+  @spec extract_string_claim(map(), [String.t()]) :: String.t() | nil
+  defp extract_string_claim(claims, keys) when is_map(claims) and is_list(keys) do
+    Enum.find_value(keys, fn key ->
+      case Map.get(claims, key) do
+        value when is_binary(value) and value != "" -> value
+        _ -> nil
+      end
+    end)
   end
 
   defp check_permission(permissions, resource, action) do
@@ -749,10 +797,10 @@ defmodule Cybernetic.Security.AuthManager do
       attempts
       |> Enum.filter(fn time ->
         # 5 minutes
-        DateTime.diff(DateTime.utc_now(), time, :second) < 300
+        DateTime.diff(DateTime.utc_now(), time, :second) < @rate_limit_window_seconds
       end)
 
-    if length(recent_attempts) >= 5 do
+    if length(recent_attempts) >= @max_failed_attempts do
       {:error, :rate_limited}
     else
       {:ok, state}
@@ -761,13 +809,13 @@ defmodule Cybernetic.Security.AuthManager do
 
   defp track_failed_attempt(username, state) do
     attempts = Map.get(state.failed_attempts, username, [])
-    new_attempts = [DateTime.utc_now() | attempts] |> Enum.take(10)
+    new_attempts = [DateTime.utc_now() | attempts] |> Enum.take(@failed_attempts_history_size)
 
     %{state | failed_attempts: Map.put(state.failed_attempts, username, new_attempts)}
   end
 
   defp clean_old_attempts(failed_attempts) do
-    cutoff = DateTime.add(DateTime.utc_now(), -3600, :second)
+    cutoff = DateTime.add(DateTime.utc_now(), -@attempt_cleanup_seconds, :second)
 
     failed_attempts
     |> Enum.map(fn {username, attempts} ->
@@ -838,7 +886,7 @@ defmodule Cybernetic.Security.AuthManager do
         name: "system",
         roles: [:system],
         created_at: DateTime.utc_now(),
-        expires_at: DateTime.add(DateTime.utc_now(), 10 * 365 * 24 * 3600, :second),
+        expires_at: DateTime.add(DateTime.utc_now(), 10 * @api_key_ttl_seconds, :second),
         metadata: %{source: "env"}
       }
 
