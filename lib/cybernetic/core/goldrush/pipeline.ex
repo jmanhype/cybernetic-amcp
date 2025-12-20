@@ -6,6 +6,7 @@ defmodule Cybernetic.Core.Goldrush.Pipeline do
   @in_evt [:cybernetic, :work, :finished]
   @out_evt [:cybernetic, :algedonic]
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -22,6 +23,8 @@ defmodule Cybernetic.Core.Goldrush.Pipeline do
     {:ok, %{plugins: load_plugins()}}
   end
 
+  @doc false
+  @spec handle_telemetry(list(), map(), map(), term()) :: :ok
   def handle_telemetry(event, meas, meta, _cfg) do
     # Forward to the GenServer for processing
     GenServer.cast(__MODULE__, {:telemetry_event, event, meas, meta})

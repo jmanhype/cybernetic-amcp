@@ -24,6 +24,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     ]
   end
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -52,6 +53,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
   @doc """
   Publish with confirms and causal headers
   """
+  @spec publish(String.t(), String.t(), map(), keyword()) :: :ok | {:error, term()}
   def publish(exchange, routing_key, payload, opts \\ []) do
     GenServer.call(__MODULE__, {:publish, exchange, routing_key, payload, opts}, 5000)
   end
