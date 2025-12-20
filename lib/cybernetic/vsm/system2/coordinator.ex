@@ -6,6 +6,7 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   """
   alias Cybernetic.Telemetry.OTEL
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   def init(opts) do
@@ -23,15 +24,20 @@ defmodule Cybernetic.VSM.System2.Coordinator do
     {:ok, state}
   end
 
+  @doc "Focus attention on a task"
+  @spec focus(term()) :: :ok
   def focus(task_id), do: GenServer.cast(__MODULE__, {:focus, task_id})
 
   @doc "Set priority weight for a topic (higher = more resources)"
+  @spec set_priority(term(), number()) :: :ok
   def set_priority(topic, weight), do: GenServer.cast(__MODULE__, {:set_priority, topic, weight})
 
   @doc "Reserve a processing slot (returns :ok | :backpressure)"
+  @spec reserve_slot(term()) :: :ok | :backpressure
   def reserve_slot(topic), do: GenServer.call(__MODULE__, {:reserve_slot, topic})
 
   @doc "Release a processing slot"
+  @spec release_slot(term()) :: :ok
   def release_slot(topic), do: GenServer.cast(__MODULE__, {:release_slot, topic})
 
   def handle_cast({:focus, task_id}, state) do
@@ -176,7 +182,8 @@ defmodule Cybernetic.VSM.System2.Coordinator do
     max(1, round(slots))
   end
 
-  # Test interface - routes messages through the message handler
+  @doc "Test interface - routes messages through the message handler"
+  @spec handle_message(map(), map()) :: :ok | {:error, term()}
   def handle_message(message, meta \\ %{}) do
     # Extract operation from type field or operation field
     operation =
