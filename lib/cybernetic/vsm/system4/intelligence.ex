@@ -4,6 +4,7 @@ defmodule Cybernetic.VSM.System4.Intelligence do
   @moduledoc """
   S4: LLM reasoning, scenario simulation, MCP tool calls.
   """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(_opts \\ []), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   def init(state), do: {:ok, state}
 
@@ -43,7 +44,8 @@ defmodule Cybernetic.VSM.System4.Intelligence do
     {:noreply, state}
   end
 
-  # Test interface - routes messages through the message handler
+  @doc "Test interface - routes messages through the message handler"
+  @spec handle_message(map(), map()) :: :ok | {:error, term()}
   def handle_message(message, meta \\ %{}) do
     operation = Map.get(message, :operation, "unknown")
     Cybernetic.VSM.System4.MessageHandler.handle_message(operation, message, meta)
