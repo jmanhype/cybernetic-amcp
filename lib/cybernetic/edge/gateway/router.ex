@@ -67,5 +67,8 @@ defmodule Cybernetic.Edge.Gateway.Router do
   scope "/", Cybernetic.Edge.Gateway do
     get("/", HealthController, :index)
     get("/health", HealthController, :index)
+    get("/health/detailed", HealthController, :detailed)
+    get("/health/vsm", HealthController, :vsm)
+    get("/health/resilience", HealthController, :resilience)
   end
 end
