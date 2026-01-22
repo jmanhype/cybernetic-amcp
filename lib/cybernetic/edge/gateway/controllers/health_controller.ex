@@ -128,10 +128,17 @@ defmodule Cybernetic.Edge.Gateway.HealthController do
           last_success = Map.get(state, :last_poll_success)
           polling_failures = Map.get(state, :polling_failures, 0)
 
+          formatted_last_success = case last_success do
+            nil -> nil
+            %DateTime{} = dt -> DateTime.to_iso8601(dt)
+            unix when is_integer(unix) -> DateTime.from_unix!(unix) |> DateTime.to_iso8601()
+            _ -> nil
+          end
+
           %{
             status: :healthy,
             polling: true,
-            last_success: if(last_success, do: DateTime.to_iso8601(last_success), else: nil),
+            last_success: formatted_last_success,
             polling_failures: polling_failures
           }
         else
