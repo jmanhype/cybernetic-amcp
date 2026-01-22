@@ -159,4 +159,75 @@ defmodule Cybernetic.Archeology.Overlay do
       end)
     end)
   end
+
+  @doc """
+  Detects dead code - static functions that never appear in dynamic traces.
+
+  Filters out test functions and callback functions to reduce false positives.
+  Returns a list of static function references with metadata.
+  """
+  @spec detect_dead_code(map(), map()) :: [static_function()]
+  def detect_dead_code(static_data, dynamic_data) do
+    Logger.debug("Detecting dead code...")
+
+    static_functions = normalize_static_functions(static_data)
+    dynamic_functions = normalize_dynamic_spans(dynamic_data)
+
+    # Compute set difference: static - dynamic
+    dead_code_keys = MapSet.difference(static_functions, dynamic_functions)
+
+    Logger.debug("Found #{MapSet.size(dead_code_keys)} potential dead code functions")
+
+    # Get full function references for dead code
+    all_functions =
+      static_data["traces"]
+      |> Enum.flat_map(fn trace -> trace["functions"] end)
+      |> Enum.filter(fn fn_ref -> fn_ref["type"] != "unknown" end)
+
+    # Filter to dead code and apply exclusions
+    all_functions
+    |> Enum.filter(fn fn_ref ->
+      key = {fn_ref["module"], fn_ref["function"], fn_ref["arity"]}
+      MapSet.member?(dead_code_keys, key)
+    end)
+    |> Enum.reject(fn fn_ref -> is_test_function?(fn_ref) end)
+    |> Enum.reject(fn fn_ref -> is_callback_function?(fn_ref) end)
+    |> Enum.sort_by(fn fn_ref -> {fn_ref["module"], fn_ref["function"], fn_ref["arity"]} end)
+  end
+
+  @doc """
+  Checks if a function reference is a test function.
+
+  Test functions are identified by module name ending with "Test" or
+  function name starting with "test_".
+  """
+  @spec is_test_function?(static_function() | dynamic_span()) :: boolean()
+  def is_test_function?(fn_ref) do
+    module_name = fn_ref["module"]
+    function_name = fn_ref["function"]
+
+    # Check if module name ends with "Test" (case-sensitive, avoiding false positives)
+    String.ends_with?(module_name, "Test") or
+      # Check if function name starts with "test_" (common Elixir convention)
+      String.starts_with?(function_name, "test_")
+  end
+
+  @doc """
+  Checks if a function reference is a callback function.
+
+  Callback functions are standard OTP callbacks for GenServer, GenStage, etc.
+  """
+  @spec is_callback_function?(static_function() | dynamic_span()) :: boolean()
+  def is_callback_function?(fn_ref) do
+    callbacks = [
+      "init", "handle_call", "handle_cast", "handle_info", "terminate", "code_change",
+      "handle_continue", "format_status", "handle_debug",
+      "start_link", "child_spec", "post_init",
+      "handle_events", "handle_subscription", "cancellable?",
+      "perform", "timeout", "retry_at",
+      "call", "stream", "crawl"
+    ]
+
+    fn_ref["function"] in callbacks
+  end
 end

@@ -16,11 +16,11 @@ defmodule Cybernetic.Archeology.OverlayTest do
           },
           %{
             "module" => "Elixir.TestModule",
-            "function" => "private_func",
+            "function" => "unused_func",
             "arity" => 0,
             "file" => "lib/test.ex",
             "line" => 15,
-            "type" => "private"
+            "type" => "public"
           },
           %{
             "module" => "Elixir.TestModule",
@@ -116,7 +116,7 @@ defmodule Cybernetic.Archeology.OverlayTest do
 
       assert MapSet.size(result) == 2
       assert MapSet.member?(result, {"Elixir.TestModule", "public_func", 1})
-      assert MapSet.member?(result, {"Elixir.TestModule", "private_func", 0})
+      assert MapSet.member?(result, {"Elixir.TestModule", "unused_func", 0})
       # Unknown type functions should be filtered out
       refute MapSet.member?(result, {"Elixir.TestModule", ".", 2})
     end
@@ -126,6 +126,13 @@ defmodule Cybernetic.Archeology.OverlayTest do
       result = Overlay.normalize_static_functions(empty_data)
 
       assert MapSet.size(result) == 0
+    end
+
+    test "filters out unknown type functions" do
+      result = Overlay.normalize_static_functions(@static_data)
+
+      # Should only include public and private functions, not unknown
+      assert MapSet.size(result) == 2
     end
   end
 
@@ -166,6 +173,155 @@ defmodule Cybernetic.Archeology.OverlayTest do
 
       assert result["Elixir.TestModule"][{"Elixir.TestModule", "public_func", 1}] == 1
       assert result["Elixir.DynamicModule"][{"Elixir.DynamicModule", "dynamic_func", 2}] == 1
+    end
+  end
+
+  describe "detect_dead_code/2" do
+    test "computes static minus dynamic set difference" do
+      # unused_func/0 is in static but not in dynamic
+      dead_code = Overlay.detect_dead_code(@static_data, @dynamic_data)
+
+      assert length(dead_code) == 1
+      assert dead_code |> Enum.any?(fn fn_ref ->
+        fn_ref["module"] == "Elixir.TestModule" and fn_ref["function"] == "unused_func"
+      end)
+    end
+
+    test "filters out test functions" do
+      static_with_test = %{
+        "traces" => [
+          %{
+            "functions" => [
+              %{
+                "module" => "Elixir.TestModule",
+                "function" => "test_func",
+                "arity" => 1,
+                "file" => "lib/test.ex",
+                "line" => 10,
+                "type" => "public"
+              },
+              %{
+                "module" => "Elixir.TestModuleTest",
+                "function" => "regular_func",
+                "arity" => 0,
+                "file" => "test/test.ex",
+                "line" => 5,
+                "type" => "public"
+              }
+            ]
+          }
+        ],
+        "orphan_functions" => []
+      }
+
+      dead_code = Overlay.detect_dead_code(static_with_test, @dynamic_data)
+
+      # Both test functions should be filtered out
+      refute Enum.any?(dead_code, fn fn_ref -> fn_ref["function"] == "test_func" end)
+      refute Enum.any?(dead_code, fn fn_ref -> String.contains?(fn_ref["module"], "Test") end)
+    end
+
+    test "filters out callback functions" do
+      static_with_callbacks = %{
+        "traces" => [
+          %{
+            "functions" => [
+              %{
+                "module" => "Elixir.MyGenServer",
+                "function" => "init",
+                "arity" => 1,
+                "file" => "lib/server.ex",
+                "line" => 10,
+                "type" => "public"
+              },
+              %{
+                "module" => "Elixir.MyGenServer",
+                "function" => "handle_info",
+                "arity" => 2,
+                "file" => "lib/server.ex",
+                "line" => 15,
+                "type" => "public"
+              }
+            ]
+          }
+        ],
+        "orphan_functions" => []
+      }
+
+      dead_code = Overlay.detect_dead_code(static_with_callbacks, @dynamic_data)
+
+      # Callback functions should be filtered out
+      refute Enum.any?(dead_code, fn fn_ref -> fn_ref["function"] == "init" end)
+      refute Enum.any?(dead_code, fn fn_ref -> fn_ref["function"] == "handle_info" end)
+    end
+
+    test "sorts results by module, function, arity" do
+      dead_code = Overlay.detect_dead_code(@static_data, @dynamic_data)
+
+      # Should be sorted
+      assert length(dead_code) > 0
+
+      # Check sorting
+      modules = Enum.map(dead_code, & &1["module"])
+      assert modules == Enum.sort(modules)
+    end
+  end
+
+  describe "is_test_function?/1" do
+    test "identifies test functions by module name" do
+      test_fn = %{
+        "module" => "Elixir.MyAppTest",
+        "function" => "regular_func",
+        "arity" => 0
+      }
+
+      assert Overlay.is_test_function?(test_fn)
+    end
+
+    test "identifies test functions by function name" do
+      test_fn = %{
+        "module" => "Elixir.MyApp",
+        "function" => "test_something",
+        "arity" => 1
+      }
+
+      assert Overlay.is_test_function?(test_fn)
+    end
+
+    test "returns false for non-test functions" do
+      regular_fn = %{
+        "module" => "Elixir.MyApp",
+        "function" => "regular_func",
+        "arity" => 0
+      }
+
+      refute Overlay.is_test_function?(regular_fn)
+    end
+  end
+
+  describe "is_callback_function?/1" do
+    test "identifies GenServer callbacks" do
+      callbacks = [
+        %{"function" => "init", "arity" => 1},
+        %{"function" => "handle_call", "arity" => 3},
+        %{"function" => "handle_cast", "arity" => 2},
+        %{"function" => "handle_info", "arity" => 2},
+        %{"function" => "terminate", "arity" => 2},
+        %{"function" => "code_change", "arity" => 3}
+      ]
+
+      for callback <- callbacks do
+        assert Overlay.is_callback_function?(callback)
+      end
+    end
+
+    test "returns false for non-callback functions" do
+      regular_fn = %{
+        "function" => "regular_func",
+        "arity" => 0
+      }
+
+      refute Overlay.is_callback_function?(regular_fn)
     end
   end
 end
