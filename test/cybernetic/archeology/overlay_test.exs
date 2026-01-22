@@ -410,4 +410,221 @@ defmodule Cybernetic.Archeology.OverlayTest do
       assert length(ghost_paths) == 0
     end
   end
+
+  describe "calculate_coverage/3" do
+    test "calculates per-module coverage percentage" do
+      coverage = Overlay.calculate_coverage(@static_data, @dynamic_data)
+
+      assert length(coverage) == 1
+      module_coverage = List.first(coverage)
+
+      assert module_coverage["module"] == "Elixir.TestModule"
+      assert module_coverage["static_function_count"] == 2
+      assert module_coverage["dynamic_function_count"] == 1
+      assert module_coverage["coverage_pct"] == 50.0
+    end
+
+    test "identifies hot modules" do
+      # Create data with high coverage
+      static_hot = %{
+        "traces" => [
+          %{
+            "functions" => [
+              %{
+                "module" => "Elixir.HotModule",
+                "function" => "func1",
+                "arity" => 0,
+                "file" => "lib/hot.ex",
+                "line" => 1,
+                "type" => "public"
+              },
+              %{
+                "module" => "Elixir.HotModule",
+                "function" => "func2",
+                "arity" => 0,
+                "file" => "lib/hot.ex",
+                "line" => 2,
+                "type" => "public"
+              },
+              %{
+                "module" => "Elixir.HotModule",
+                "function" => "func3",
+                "arity" => 0,
+                "file" => "lib/hot.ex",
+                "line" => 3,
+                "type" => "public"
+              },
+              %{
+                "module" => "Elixir.HotModule",
+                "function" => "func4",
+                "arity" => 0,
+                "file" => "lib/hot.ex",
+                "line" => 4,
+                "type" => "public"
+              }
+            ]
+          }
+        ]
+      }
+
+      dynamic_hot = %{
+        "traces" => [
+          %{
+            "trace_id" => "test",
+            "spans" => [
+              %{"module" => "Elixir.HotModule", "function" => "func1", "arity" => 0, "file" => "lib/hot.ex", "line" => 1, "timestamp" => 1, "duration_us" => 1},
+              %{"module" => "Elixir.HotModule", "function" => "func2", "arity" => 0, "file" => "lib/hot.ex", "line" => 2, "timestamp" => 2, "duration_us" => 1},
+              %{"module" => "Elixir.HotModule", "function" => "func3", "arity" => 0, "file" => "lib/hot.ex", "line" => 3, "timestamp" => 3, "duration_us" => 1}
+            ]
+          }
+        ]
+      }
+
+      coverage = Overlay.calculate_coverage(static_hot, dynamic_hot)
+
+      module_coverage = List.first(coverage)
+      assert module_coverage["coverage_pct"] == 75.0
+      assert module_coverage["hot_path"] == true
+      assert module_coverage["cold_path"] == false
+    end
+
+    test "identifies cold modules" do
+      # Create data with low coverage
+      static_cold = %{
+        "traces" => [
+          %{
+            "functions" => [
+              %{
+                "module" => "Elixir.ColdModule",
+                "function" => "func1",
+                "arity" => 0,
+                "file" => "lib/cold.ex",
+                "line" => 1,
+                "type" => "public"
+              },
+              %{
+                "module" => "Elixir.ColdModule",
+                "function" => "func2",
+                "arity" => 0,
+                "file" => "lib/cold.ex",
+                "line" => 2,
+                "type" => "public"
+              },
+              %{
+                "module" => "Elixir.ColdModule",
+                "function" => "func3",
+                "arity" => 0,
+                "file" => "lib/cold.ex",
+                "line" => 3,
+                "type" => "public"
+              },
+              %{
+                "module" => "Elixir.ColdModule",
+                "function" => "func4",
+                "arity" => 0,
+                "file" => "lib/cold.ex",
+                "line" => 4,
+                "type" => "public"
+              }
+            ]
+          }
+        ]
+      }
+
+      dynamic_cold = %{
+        "traces" => [
+          %{
+            "trace_id" => "test",
+            "spans" => [
+              %{"module" => "Elixir.ColdModule", "function" => "func1", "arity" => 0, "file" => "lib/cold.ex", "line" => 1, "timestamp" => 1, "duration_us" => 1}
+            ]
+          }
+        ]
+      }
+
+      coverage = Overlay.calculate_coverage(static_cold, dynamic_cold)
+
+      module_coverage = List.first(coverage)
+      assert module_coverage["coverage_pct"] == 25.0
+      assert module_coverage["hot_path"] == false
+      assert module_coverage["cold_path"] == true
+    end
+
+    test "handles custom threshold options" do
+      coverage = Overlay.calculate_coverage(@static_data, @dynamic_data, hot_threshold: 60, cold_threshold: 40)
+
+      module_coverage = List.first(coverage)
+      # With 50% coverage, should be neither hot nor cold with these thresholds
+      assert module_coverage["coverage_pct"] == 50.0
+      assert module_coverage["hot_path"] == false
+      assert module_coverage["cold_path"] == false
+    end
+
+    test "sorts by coverage descending, then module name" do
+      # Create data with multiple modules
+      static_multi = %{
+        "traces" => [
+          %{
+            "functions" => [
+              %{"module" => "Elixir.ModuleA", "function" => "func1", "arity" => 0, "file" => "lib/a.ex", "line" => 1, "type" => "public"},
+              %{"module" => "Elixir.ModuleB", "function" => "func1", "arity" => 0, "file" => "lib/b.ex", "line" => 1, "type" => "public"},
+              %{"module" => "Elixir.ModuleB", "function" => "func2", "arity" => 0, "file" => "lib/b.ex", "line" => 2, "type" => "public"}
+            ]
+          }
+        ]
+      }
+
+      dynamic_multi = %{
+        "traces" => [
+          %{
+            "trace_id" => "test",
+            "spans" => [
+              %{"module" => "Elixir.ModuleA", "function" => "func1", "arity" => 0, "file" => "lib/a.ex", "line" => 1, "timestamp" => 1, "duration_us" => 1},
+              %{"module" => "Elixir.ModuleB", "function" => "func1", "arity" => 0, "file" => "lib/b.ex", "line" => 1, "timestamp" => 2, "duration_us" => 1}
+            ]
+          }
+        ]
+      }
+
+      coverage = Overlay.calculate_coverage(static_multi, dynamic_multi)
+
+      assert length(coverage) == 2
+      # ModuleA has 100% coverage, ModuleB has 50%
+      assert List.first(coverage)["module"] == "Elixir.ModuleA"
+      assert List.last(coverage)["module"] == "Elixir.ModuleB"
+    end
+
+    test "filters out test and callback functions" do
+      static_filtered = %{
+        "traces" => [
+          %{
+            "functions" => [
+              %{"module" => "Elixir.MyModule", "function" => "regular_func", "arity" => 0, "file" => "lib/my.ex", "line" => 1, "type" => "public"},
+              %{"module" => "Elixir.MyModule", "function" => "init", "arity" => 1, "file" => "lib/my.ex", "line" => 2, "type" => "public"},
+              %{"module" => "Elixir.MyModuleTest", "function" => "test_func", "arity" => 0, "file" => "lib/my.ex", "line" => 3, "type" => "public"}
+            ]
+          }
+        ]
+      }
+
+      dynamic_filtered = %{
+        "traces" => [
+          %{
+            "trace_id" => "test",
+            "spans" => [
+              %{"module" => "Elixir.MyModule", "function" => "regular_func", "arity" => 0, "file" => "lib/my.ex", "line" => 1, "timestamp" => 1, "duration_us" => 1}
+            ]
+          }
+        ]
+      }
+
+      coverage = Overlay.calculate_coverage(static_filtered, dynamic_filtered)
+
+      module_coverage = List.first(coverage)
+      # Only regular_func should be counted (1 out of 1 = 100%)
+      assert module_coverage["static_function_count"] == 1
+      assert module_coverage["dynamic_function_count"] == 1
+      assert module_coverage["coverage_pct"] == 100.0
+    end
+  end
 end

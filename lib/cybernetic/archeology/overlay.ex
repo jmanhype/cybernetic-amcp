@@ -270,4 +270,84 @@ defmodule Cybernetic.Archeology.Overlay do
 
     ghost_spans
   end
+
+  @doc """
+  Calculates coverage metrics per module.
+
+  Coverage is the percentage of static functions that appear in dynamic traces.
+  Also identifies hot modules (high coverage) and cold modules (low coverage).
+
+  ## Options
+
+    * `:hot_threshold` - Coverage percentage above which a module is considered "hot" (default: 75)
+    * `:cold_threshold` - Coverage percentage below which a module is considered "cold" (default: 25)
+
+  ## Returns
+
+  A list of maps with module, coverage statistics, and hot/cold classification.
+  """
+  @spec calculate_coverage(map(), map(), keyword()) :: [
+          %{
+            module: String.t(),
+            static_function_count: non_neg_integer(),
+            dynamic_function_count: non_neg_integer(),
+            coverage_pct: float(),
+            hot_path: boolean(),
+            cold_path: boolean()
+          }
+        ]
+  def calculate_coverage(static_data, dynamic_data, opts \\ []) do
+    Logger.debug("Calculating coverage metrics...")
+
+    hot_threshold = Keyword.get(opts, :hot_threshold, 75)
+    cold_threshold = Keyword.get(opts, :cold_threshold, 25)
+
+    static_by_module = group_static_functions_by_module(static_data)
+    dynamic_by_module = group_dynamic_spans_by_module(dynamic_data)
+
+    coverage =
+      static_by_module
+      |> Enum.map(fn {module, static_functions} ->
+        # Filter out test and callback functions
+        static_funcs =
+          static_functions
+          |> Enum.reject(&is_test_function?/1)
+          |> Enum.reject(&is_callback_function?/1)
+
+        static_count = length(static_funcs)
+
+        # Get unique dynamic functions for this module
+        dynamic_funcs =
+          Map.get(dynamic_by_module, module, %{})
+          |> Map.keys()
+
+        dynamic_count =
+          static_funcs
+          |> Enum.count(fn fn_ref ->
+            key = {fn_ref["module"], fn_ref["function"], fn_ref["arity"]}
+            MapSet.member?(MapSet.new(dynamic_funcs), key)
+          end)
+
+        coverage_pct =
+          if static_count > 0 do
+            (dynamic_count / static_count * 100) |> Float.round(1)
+          else
+            0.0
+          end
+
+        %{
+          "module" => module,
+          "static_function_count" => static_count,
+          "dynamic_function_count" => dynamic_count,
+          "coverage_pct" => coverage_pct,
+          "hot_path" => coverage_pct >= hot_threshold,
+          "cold_path" => coverage_pct <= cold_threshold
+        }
+      end)
+      |> Enum.sort_by(fn cov -> {-cov["coverage_pct"], cov["module"]} end)
+
+    Logger.debug("Calculated coverage for #{length(coverage)} modules")
+
+    coverage
+  end
 end
