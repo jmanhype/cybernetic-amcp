@@ -12,7 +12,7 @@
         "Only starts in test/dev"
       ],
       "priority": 1,
-      "status": "pending",
+      "status": "done",
       "notes": ""
     },
     {
@@ -24,7 +24,7 @@
         "Preserves trace IDs"
       ],
       "priority": 1,
-      "status": "pending",
+      "status": "done",
       "notes": ""
     },
     {
@@ -36,7 +36,7 @@
         "Captured by collector"
       ],
       "priority": 2,
-      "status": "pending",
+      "status": "done",
       "notes": ""
     },
     {
@@ -48,7 +48,7 @@
         "Prevents crashes"
       ],
       "priority": 1,
-      "status": "pending",
+      "status": "done",
       "notes": ""
     },
     {
@@ -60,7 +60,7 @@
         "Valid JSON output"
       ],
       "priority": 2,
-      "status": "pending",
+      "status": "done",
       "notes": ""
     }
   ]
