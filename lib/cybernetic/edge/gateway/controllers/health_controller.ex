@@ -177,10 +177,18 @@ defmodule Cybernetic.Edge.Gateway.HealthController do
   end
 
   defp check_redis do
+    redis_url = System.get_env("REDIS_URL") || "redis://localhost:6379"
+
     try do
-      case Redix.command(:redix, ["PING"]) do
-        {:ok, "PONG"} -> :healthy
-        _ -> :unhealthy
+      case Redix.start_link(redis_url) do
+        {:ok, conn} ->
+          result = case Redix.command(conn, ["PING"]) do
+            {:ok, "PONG"} -> :healthy
+            _ -> :unhealthy
+          end
+          Redix.stop(conn)
+          result
+        {:error, _} -> :down
       end
     catch
       _, _ -> :down
