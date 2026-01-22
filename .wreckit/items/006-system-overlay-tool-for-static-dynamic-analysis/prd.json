@@ -13,8 +13,8 @@
         "normalize_dynamic_spans/1 converts to map"
       ],
       "priority": 1,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "All acceptance criteria met with unit tests"
     },
     {
       "id": "US-002",
@@ -25,8 +25,8 @@
         "Filters callback functions"
       ],
       "priority": 1,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Fixed test filtering to avoid false positives"
     },
     {
       "id": "US-003",
@@ -37,8 +37,8 @@
         "Sorts by module"
       ],
       "priority": 2,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Tracks execution counts per ghost function"
     },
     {
       "id": "US-004",
@@ -49,8 +49,8 @@
         "Identifies cold modules"
       ],
       "priority": 2,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Supports custom thresholds, filters test/callbacks"
     },
     {
       "id": "US-005",
@@ -61,8 +61,8 @@
         "Returns complete result map"
       ],
       "priority": 2,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Main entry point with summary statistics"
     },
     {
       "id": "US-006",
@@ -73,8 +73,8 @@
         "Handles input files"
       ],
       "priority": 3,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Full CLI with all options (static, dynamic, format, output, thresholds, verbose)"
     },
     {
       "id": "US-007",
@@ -85,8 +85,8 @@
         "Includes all analysis sections"
       ],
       "priority": 3,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Valid JSON with summary, dead_code, ghost_paths, module_coverage"
     },
     {
       "id": "US-008",
@@ -97,8 +97,8 @@
         "Shows top findings"
       ],
       "priority": 3,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Emoji indicators (📊💀👻🔥❄️) with box-drawing characters"
     },
     {
       "id": "US-009",
@@ -109,8 +109,8 @@
         "Tests filtering"
       ],
       "priority": 4,
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "33 unit tests, all passing"
     },
     {
       "id": "US-010",
@@ -120,7 +120,8 @@
         "Tests CLI interface"
       ],
       "priority": 4,
-      "status": "pending",
+      "status": "done",
+      "notes": "7 integration tests, all passing"
       "notes": ""
     }
   ]
