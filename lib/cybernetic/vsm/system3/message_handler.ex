@@ -6,8 +6,21 @@ defmodule Cybernetic.VSM.System3.MessageHandler do
   require Logger
 
   def handle_message(operation, payload, meta) do
-    Logger.debug("System3 received #{operation}: #{inspect(payload)}")
+    # Wrap in telemetry span for dynamic tracing
+    :telemetry.span(
+      [:cybernetic, :archeology, :span],
+      %{system: :s3, operation: operation},
+      fn ->
+        Logger.debug("System3 received #{operation}: #{inspect(payload)}")
 
+        result = do_handle_message(operation, payload, meta)
+
+        {result, %{payload_size: byte_size(inspect(payload))}}
+      end
+    )
+  end
+
+  defp do_handle_message(operation, payload, meta) do
     case operation do
       "control" ->
         handle_control(payload, meta)
