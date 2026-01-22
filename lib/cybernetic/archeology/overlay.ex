@@ -350,4 +350,93 @@ defmodule Cybernetic.Archeology.Overlay do
 
     coverage
   end
+
+  @doc """
+  Orchestrates the complete overlay analysis pipeline.
+
+  Runs all analysis phases and returns a complete result map with:
+  - dead_code: functions in static but not in dynamic
+  - ghost_paths: functions in dynamic but not in static
+  - module_coverage: per-module coverage metrics
+  - summary: high-level statistics
+
+  ## Options
+
+    * `:static_path` - Path to archeology-results.json (required)
+    * `:dynamic_path` - Path to dynamic-traces.json (required)
+    * `:hot_threshold` - Coverage threshold for hot modules (default: 75)
+    * `:cold_threshold` - Coverage threshold for cold modules (default: 25)
+
+  ## Returns
+
+  A map with all analysis results.
+  """
+  @spec analyze(keyword()) :: %{
+          dead_code: [static_function()],
+          ghost_paths: [%{String.t() => String.t() | non_neg_integer()}],
+          module_coverage: [%{String.t() => String.t() | number() | boolean()}],
+          summary: %{
+            dead_code_count: non_neg_integer(),
+            ghost_path_count: non_neg_integer(),
+            modules_analyzed: non_neg_integer(),
+            avg_coverage_pct: float(),
+            hot_module_count: non_neg_integer(),
+            cold_module_count: non_neg_integer()
+          }
+        }
+  def analyze(opts) do
+    static_path = Keyword.fetch!(opts, :static_path)
+    dynamic_path = Keyword.fetch!(opts, :dynamic_path)
+    hot_threshold = Keyword.get(opts, :hot_threshold, 75)
+    cold_threshold = Keyword.get(opts, :cold_threshold, 25)
+
+    Logger.debug("Starting overlay analysis...")
+    Logger.debug("Static data: #{static_path}")
+    Logger.debug("Dynamic data: #{dynamic_path}")
+
+    # Load data
+    static_data = load_static_data(static_path)
+    dynamic_data = load_dynamic_data(dynamic_path)
+
+    # Run all analyses
+    dead_code = detect_dead_code(static_data, dynamic_data)
+    ghost_paths = detect_ghost_paths(static_data, dynamic_data)
+
+    coverage_opts = [hot_threshold: hot_threshold, cold_threshold: cold_threshold]
+    module_coverage = calculate_coverage(static_data, dynamic_data, coverage_opts)
+
+    # Calculate summary statistics
+    avg_coverage =
+      if length(module_coverage) > 0 do
+        total_coverage = Enum.reduce(module_coverage, 0, fn cov, acc -> acc + cov["coverage_pct"] end)
+        total_coverage / length(module_coverage) |> Float.round(1)
+      else
+        0.0
+      end
+
+    hot_modules = Enum.filter(module_coverage, & &1["hot_path"])
+    cold_modules = Enum.filter(module_coverage, & &1["cold_path"])
+
+    summary = %{
+      "dead_code_count" => length(dead_code),
+      "ghost_path_count" => length(ghost_paths),
+      "modules_analyzed" => length(module_coverage),
+      "avg_coverage_pct" => avg_coverage,
+      "hot_module_count" => length(hot_modules),
+      "cold_module_count" => length(cold_modules)
+    }
+
+    Logger.debug("Analysis complete:")
+    Logger.debug("  Dead code: #{summary["dead_code_count"]}")
+    Logger.debug("  Ghost paths: #{summary["ghost_path_count"]}")
+    Logger.debug("  Modules: #{summary["modules_analyzed"]}")
+    Logger.debug("  Avg coverage: #{summary["avg_coverage_pct"]}%")
+
+    %{
+      dead_code: dead_code,
+      ghost_paths: ghost_paths,
+      module_coverage: module_coverage,
+      summary: summary
+    }
+  end
 end

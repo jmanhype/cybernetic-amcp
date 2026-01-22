@@ -627,4 +627,112 @@ defmodule Cybernetic.Archeology.OverlayTest do
       assert module_coverage["coverage_pct"] == 100.0
     end
   end
+
+  describe "analyze/1" do
+    test "orchestrates full analysis pipeline" do
+      # Create temporary files with test data
+      static_path = System.tmp_dir!() |> Path.join("analyze_static.json")
+      dynamic_path = System.tmp_dir!() |> Path.join("analyze_dynamic.json")
+
+      File.write!(static_path, Jason.encode!(@static_data))
+      File.write!(dynamic_path, Jason.encode!(@dynamic_data))
+
+      result = Overlay.analyze(static_path: static_path, dynamic_path: dynamic_path)
+
+      # Check all sections are present
+      assert Map.has_key?(result, :dead_code)
+      assert Map.has_key?(result, :ghost_paths)
+      assert Map.has_key?(result, :module_coverage)
+      assert Map.has_key?(result, :summary)
+
+      # Check dead_code
+      assert length(result.dead_code) == 1
+      assert result.dead_code |> Enum.any?(fn fn_ref -> fn_ref["function"] == "unused_func" end)
+
+      # Check ghost_paths
+      assert length(result.ghost_paths) == 1
+      assert result.ghost_paths |> Enum.any?(fn ghost -> ghost["function"] == "dynamic_func" end)
+
+      # Check module_coverage
+      assert length(result.module_coverage) == 1
+      module_cov = List.first(result.module_coverage)
+      assert module_cov["module"] == "Elixir.TestModule"
+      assert module_cov["coverage_pct"] == 50.0
+
+      # Check summary
+      assert result.summary["dead_code_count"] == 1
+      assert result.summary["ghost_path_count"] == 1
+      assert result.summary["modules_analyzed"] == 1
+      assert result.summary["avg_coverage_pct"] == 50.0
+
+      File.rm!(static_path)
+      File.rm!(dynamic_path)
+    end
+
+    test "accepts threshold options" do
+      static_path = System.tmp_dir!() |> Path.join("analyze_static2.json")
+      dynamic_path = System.tmp_dir!() |> Path.join("analyze_dynamic2.json")
+
+      File.write!(static_path, Jason.encode!(@static_data))
+      File.write!(dynamic_path, Jason.encode!(@dynamic_data))
+
+      result = Overlay.analyze(
+        static_path: static_path,
+        dynamic_path: dynamic_path,
+        hot_threshold: 60,
+        cold_threshold: 40
+      )
+
+      # With 50% coverage and thresholds of 60/40, should be neither hot nor cold
+      module_cov = List.first(result.module_coverage)
+      assert module_cov["hot_path"] == false
+      assert module_cov["cold_path"] == false
+
+      File.rm!(static_path)
+      File.rm!(dynamic_path)
+    end
+
+    test "calculates summary statistics correctly" do
+      # Create data with multiple modules
+      static_multi = %{
+        "traces" => [
+          %{
+            "functions" => [
+              %{"module" => "Elixir.ModuleA", "function" => "func1", "arity" => 0, "file" => "lib/a.ex", "line" => 1, "type" => "public"},
+              %{"module" => "Elixir.ModuleB", "function" => "func1", "arity" => 0, "file" => "lib/b.ex", "line" => 1, "type" => "public"}
+            ]
+          }
+        ]
+      }
+
+      dynamic_multi = %{
+        "traces" => [
+          %{
+            "trace_id" => "test",
+            "spans" => [
+              %{"module" => "Elixir.ModuleA", "function" => "func1", "arity" => 0, "file" => "lib/a.ex", "line" => 1, "timestamp" => 1, "duration_us" => 1}
+            ]
+          }
+        ]
+      }
+
+      static_path = System.tmp_dir!() |> Path.join("analyze_static3.json")
+      dynamic_path = System.tmp_dir!() |> Path.join("analyze_dynamic3.json")
+
+      File.write!(static_path, Jason.encode!(static_multi))
+      File.write!(dynamic_path, Jason.encode!(dynamic_multi))
+
+      result = Overlay.analyze(static_path: static_path, dynamic_path: dynamic_path)
+
+      # ModuleA: 100% coverage, ModuleB: 0% coverage
+      # Average should be 50%
+      assert result.summary["modules_analyzed"] == 2
+      assert result.summary["avg_coverage_pct"] == 50.0
+      assert result.summary["hot_module_count"] == 1  # ModuleA
+      assert result.summary["cold_module_count"] == 1  # ModuleB
+
+      File.rm!(static_path)
+      File.rm!(dynamic_path)
+    end
+  end
 end
