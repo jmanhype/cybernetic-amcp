@@ -70,6 +70,7 @@ defmodule Mix.Tasks.Cyb.Trace do
 
   alias Cybernetic.Archeology.DynamicCollector
   alias Cybernetic.Archeology.TrafficGenerator
+  alias Cybernetic.Archeology.MockPublisher
 
   @default_duration 5
   @default_output "dynamic-traces.json"
@@ -92,6 +93,23 @@ defmodule Mix.Tasks.Cyb.Trace do
     IO.puts("   Duration: #{duration}s")
     IO.puts("   Output: #{output}")
     IO.puts("")
+
+    # Start MockPublisher if real AMQP publisher is not running
+    case Process.whereis(Cybernetic.Core.Transport.AMQP.Publisher) do
+      nil ->
+        IO.write("   Starting MockPublisher... ")
+        case MockPublisher.start_link() do
+          {:ok, _pid} ->
+            IO.puts("✓")
+
+          {:error, reason} ->
+            IO.puts("✗")
+            IO.puts("   Warning: Failed to start MockPublisher: #{inspect(reason)}")
+        end
+
+      _pid ->
+        IO.puts("   ✓ Real AMQP Publisher detected - using existing publisher")
+    end
 
     # Start the collector
     {:ok, _collector_pid} = DynamicCollector.start_link(max_traces: 1000)
