@@ -1,0 +1,9 @@
+[
+  {
+    "timestamp": "2026-01-22T09:59:39.518347",
+    "session_id": "unknown",
+    "conversation": {},
+    "message_count": 0,
+    "transcript_path": ".claude/hooks/logs/chat.json"
+  }
+]
