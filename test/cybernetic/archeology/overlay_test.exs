@@ -324,4 +324,90 @@ defmodule Cybernetic.Archeology.OverlayTest do
       refute Overlay.is_callback_function?(regular_fn)
     end
   end
+
+  describe "detect_ghost_paths/2" do
+    test "computes dynamic minus static set difference" do
+      # DynamicModule.dynamic_func/2 is in dynamic but not in static
+      ghost_paths = Overlay.detect_ghost_paths(@static_data, @dynamic_data)
+
+      assert length(ghost_paths) == 1
+      assert ghost_paths |> Enum.any?(fn ghost ->
+        ghost["module"] == "Elixir.DynamicModule" and ghost["function"] == "dynamic_func"
+      end)
+    end
+
+    test "tracks execution count" do
+      # Add another execution of the same ghost function
+      dynamic_with_multiple = %{
+        "traces" => [
+          %{
+            "trace_id" => "test123",
+            "spans" => [
+              %{
+                "module" => "Elixir.DynamicModule",
+                "function" => "dynamic_func",
+                "arity" => 2,
+                "file" => "lib/dynamic.ex",
+                "line" => 5,
+                "timestamp" => 1234567890,
+                "duration_us" => 100
+              },
+              %{
+                "module" => "Elixir.DynamicModule",
+                "function" => "dynamic_func",
+                "arity" => 2,
+                "file" => "lib/dynamic.ex",
+                "line" => 5,
+                "timestamp" => 1234567891,
+                "duration_us" => 50
+              }
+            ]
+          }
+        ]
+      }
+
+      ghost_paths = Overlay.detect_ghost_paths(@static_data, dynamic_with_multiple)
+
+      assert length(ghost_paths) == 1
+      ghost = List.first(ghost_paths)
+      assert ghost["execution_count"] == 2
+    end
+
+    test "sorts by module, function, arity" do
+      ghost_paths = Overlay.detect_ghost_paths(@static_data, @dynamic_data)
+
+      # Should be sorted
+      assert length(ghost_paths) > 0
+
+      # Check sorting
+      modules = Enum.map(ghost_paths, & &1["module"])
+      assert modules == Enum.sort(modules)
+    end
+
+    test "returns empty list when all dynamic functions are in static" do
+      # Dynamic data with no ghost paths
+      dynamic_no_ghosts = %{
+        "traces" => [
+          %{
+            "trace_id" => "test123",
+            "spans" => [
+              %{
+                "module" => "Elixir.TestModule",
+                "function" => "public_func",
+                "arity" => 1,
+                "file" => "lib/test.ex",
+                "line" => 10,
+                "timestamp" => 1234567890,
+                "duration_us" => 100
+              }
+            ]
+          }
+        ]
+      }
+
+      ghost_paths = Overlay.detect_ghost_paths(@static_data, dynamic_no_ghosts)
+
+      assert length(ghost_paths) == 0
+    end
+  end
 end

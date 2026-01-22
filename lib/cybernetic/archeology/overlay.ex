@@ -230,4 +230,44 @@ defmodule Cybernetic.Archeology.Overlay do
 
     fn_ref["function"] in callbacks
   end
+
+  @doc """
+  Detects ghost paths - dynamic spans that don't appear in static analysis.
+
+  Ghost paths are functions that execute at runtime but weren't captured in
+  static traces, possibly due to dynamic dispatch (apply/3, runtime eval, etc.).
+
+  Returns a list of maps with module, function, arity, and execution_count.
+  """
+  @spec detect_ghost_paths(map(), map()) :: [%{module: String.t(), function: String.t(), arity: non_neg_integer(), execution_count: pos_integer()}]
+  def detect_ghost_paths(static_data, dynamic_data) do
+    Logger.debug("Detecting ghost paths...")
+
+    static_functions = normalize_static_functions(static_data)
+    dynamic_spans_by_module = group_dynamic_spans_by_module(dynamic_data)
+
+    # Find all dynamic spans not in static analysis
+    ghost_spans =
+      dynamic_spans_by_module
+      |> Enum.flat_map(fn {_module, spans} ->
+        spans
+        |> Enum.filter(fn {key, _count} ->
+          not MapSet.member?(static_functions, key)
+        end)
+        |> Enum.map(fn {key, count} ->
+          {module, function, arity} = key
+          %{
+            "module" => module,
+            "function" => function,
+            "arity" => arity,
+            "execution_count" => count
+          }
+        end)
+      end)
+      |> Enum.sort_by(fn ghost -> {ghost["module"], ghost["function"], ghost["arity"]} end)
+
+    Logger.debug("Found #{length(ghost_spans)} ghost path functions")
+
+    ghost_spans
+  end
 end
