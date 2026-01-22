@@ -14,7 +14,7 @@
       ],
       "priority": 1,
       "status": "done",
-      "notes": "All acceptance criteria met with unit tests"
+      "notes": ""
     },
     {
       "id": "US-002",
@@ -26,7 +26,7 @@
       ],
       "priority": 1,
       "status": "done",
-      "notes": "Fixed test filtering to avoid false positives"
+      "notes": ""
     },
     {
       "id": "US-003",
@@ -38,7 +38,7 @@
       ],
       "priority": 2,
       "status": "done",
-      "notes": "Tracks execution counts per ghost function"
+      "notes": ""
     },
     {
       "id": "US-004",
@@ -50,7 +50,7 @@
       ],
       "priority": 2,
       "status": "done",
-      "notes": "Supports custom thresholds, filters test/callbacks"
+      "notes": ""
     },
     {
       "id": "US-005",
@@ -62,7 +62,7 @@
       ],
       "priority": 2,
       "status": "done",
-      "notes": "Main entry point with summary statistics"
+      "notes": ""
     },
     {
       "id": "US-006",
@@ -74,7 +74,7 @@
       ],
       "priority": 3,
       "status": "done",
-      "notes": "Full CLI with all options (static, dynamic, format, output, thresholds, verbose)"
+      "notes": ""
     },
     {
       "id": "US-007",
@@ -86,7 +86,7 @@
       ],
       "priority": 3,
       "status": "done",
-      "notes": "Valid JSON with summary, dead_code, ghost_paths, module_coverage"
+      "notes": ""
     },
     {
       "id": "US-008",
@@ -98,7 +98,7 @@
       ],
       "priority": 3,
       "status": "done",
-      "notes": "Emoji indicators (📊💀👻🔥❄️) with box-drawing characters"
+      "notes": ""
     },
     {
       "id": "US-009",
@@ -110,7 +110,7 @@
       ],
       "priority": 4,
       "status": "done",
-      "notes": "33 unit tests, all passing"
+      "notes": ""
     },
     {
       "id": "US-010",
@@ -121,7 +121,6 @@
       ],
       "priority": 4,
       "status": "done",
-      "notes": "7 integration tests, all passing"
       "notes": ""
     }
   ]
