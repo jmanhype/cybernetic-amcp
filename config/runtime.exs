@@ -233,15 +233,27 @@ llm_stack =
 config :cybernetic, :llm_stack, stack: llm_stack
 
 # Provider-specific configurations
+env_or_default = fn name, default ->
+  case System.get_env(name) do
+    nil -> default
+    "" -> default
+    value -> value
+  end
+end
+
 config :cybernetic, Cybernetic.VSM.System4.Providers.Anthropic,
   api_key: {:system, "ANTHROPIC_API_KEY"},
+  base_url: env_or_default.("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
   model: "claude-3-5-sonnet-20241022",
   max_tokens: 8192,
   temperature: 0.1
 
 config :cybernetic, Cybernetic.VSM.System4.Providers.OpenAI,
   api_key: {:system, "OPENAI_API_KEY"},
-  model: "gpt-4o",
+  base_url: env_or_default.("OPENAI_BASE_URL", "https://api.openai.com"),
+  chat_path: env_or_default.("OPENAI_CHAT_COMPLETIONS_PATH", "/v1/chat/completions"),
+  embeddings_path: env_or_default.("OPENAI_EMBEDDINGS_PATH", "/v1/embeddings"),
+  model: env_or_default.("OPENAI_MODEL", "gpt-4o"),
   max_tokens: 4096,
   temperature: 0.1
 

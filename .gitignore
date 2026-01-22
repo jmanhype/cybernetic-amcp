@@ -61,3 +61,6 @@ secrets/
 *.tmp
 /tmp/
 .swarm/
+
+# Wreckit local config (may contain secrets)
+.wreckit/config.local.json

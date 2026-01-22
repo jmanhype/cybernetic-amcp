@@ -17,8 +17,8 @@ defmodule Cybernetic.VSM.System4.Service do
   @provider_rules %{
     reasoning: [:anthropic, :openai],
     code_generation: [:anthropic, :openai, :together],
-    general: [:together, :ollama, :openai],
-    fast: [:together, :ollama],
+    general: [:anthropic, :openai, :together, :ollama],
+    fast: [:anthropic, :openai, :together, :ollama],
     quality: [:anthropic, :openai]
   }
 

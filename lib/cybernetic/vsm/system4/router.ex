@@ -68,14 +68,14 @@ defmodule Cybernetic.VSM.System4.Router do
 
   # Provider order is tuned for typical production quality/cost tradeoffs.
   # When developing locally, `prefer_local_ollama_first?/0` can place Ollama first.
-  defp base_chain_by_kind(:policy_review), do: [:anthropic, :ollama]
-  defp base_chain_by_kind(:code_gen), do: [:openai, :together, :anthropic]
-  defp base_chain_by_kind(:root_cause), do: [:anthropic, :together, :openai]
-  defp base_chain_by_kind(:anomaly_detection), do: [:together, :anthropic, :ollama]
-  defp base_chain_by_kind(:compliance_check), do: [:anthropic, :ollama]
-  defp base_chain_by_kind(:optimization), do: [:openai, :together, :anthropic, :ollama]
-  defp base_chain_by_kind(:prediction), do: [:together, :anthropic, :openai, :ollama]
-  defp base_chain_by_kind(:classification), do: [:together, :openai, :ollama]
+  defp base_chain_by_kind(:policy_review), do: [:anthropic, :openai, :ollama]
+  defp base_chain_by_kind(:code_gen), do: [:anthropic, :openai, :together]
+  defp base_chain_by_kind(:root_cause), do: [:anthropic, :openai, :together]
+  defp base_chain_by_kind(:anomaly_detection), do: [:anthropic, :openai, :together, :ollama]
+  defp base_chain_by_kind(:compliance_check), do: [:anthropic, :openai, :ollama]
+  defp base_chain_by_kind(:optimization), do: [:anthropic, :openai, :together, :ollama]
+  defp base_chain_by_kind(:prediction), do: [:anthropic, :openai, :together, :ollama]
+  defp base_chain_by_kind(:classification), do: [:anthropic, :openai, :together, :ollama]
   defp base_chain_by_kind(_), do: default_chain()
 
   defp prefer_local_ollama_first? do

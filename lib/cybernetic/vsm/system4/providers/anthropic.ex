@@ -324,7 +324,11 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   defp get_max_tokens(opts), do: Keyword.get(opts, :max_tokens, @default_max_tokens)
   defp get_temperature(opts), do: Keyword.get(opts, :temperature, @default_temperature)
   defp get_api_key, do: System.get_env("ANTHROPIC_API_KEY")
-  defp get_base_url, do: "https://api.anthropic.com"
+
+  defp get_base_url do
+    Application.get_env(:cybernetic, __MODULE__, [])
+    |> Keyword.get(:base_url, System.get_env("ANTHROPIC_BASE_URL") || "https://api.anthropic.com")
+  end
 
   defp format_episode_data(data) when is_binary(data), do: data
   defp format_episode_data(data), do: Jason.encode!(data, pretty: true)

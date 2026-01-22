@@ -41,53 +41,47 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Router do
 
   defp select_route(_ctx) do
     # Default route
-    %{
-      provider: @default_provider,
-      model: format_model_name(@default_provider, @default_model)
-    }
+    route_for(@default_provider, @default_model)
   end
 
   defp route_by_kind(:policy_review) do
-    %{provider: :anthropic, model: format_model_name(:anthropic, "claude-3-5-sonnet-20241022")}
+    route_for(:anthropic, @default_model)
   end
 
   defp route_by_kind(:code_gen) do
-    %{provider: :openai, model: format_model_name(:openai, "gpt-4o")}
+    route_for(:anthropic, @default_model)
   end
 
   defp route_by_kind(:root_cause) do
-    %{provider: :anthropic, model: format_model_name(:anthropic, "claude-3-5-sonnet-20241022")}
+    route_for(:anthropic, @default_model)
   end
 
   defp route_by_kind(:anomaly_detection) do
-    %{
-      provider: :together,
-      model: format_model_name(:together, "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo")
-    }
+    route_for(:anthropic, @default_model)
   end
 
   defp route_by_kind(:optimization) do
-    %{provider: :openai, model: format_model_name(:openai, "gpt-4o")}
+    route_for(:anthropic, @default_model)
   end
 
   defp route_by_kind(_kind) do
-    %{provider: @default_provider, model: format_model_name(@default_provider, @default_model)}
+    route_for(@default_provider, @default_model)
   end
 
   defp route_by_operation(:analyze) do
-    %{provider: :anthropic, model: format_model_name(:anthropic, "claude-3-5-sonnet-20241022")}
+    route_for(:anthropic, @default_model)
   end
 
   defp route_by_operation(:generate) do
-    %{provider: :openai, model: format_model_name(:openai, "gpt-4o")}
+    route_for(:anthropic, @default_model)
   end
 
   defp route_by_operation(:chat) do
-    %{provider: :anthropic, model: format_model_name(:anthropic, "claude-3-5-sonnet-20241022")}
+    route_for(:anthropic, @default_model)
   end
 
   defp route_by_operation(_op) do
-    %{provider: @default_provider, model: format_model_name(@default_provider, @default_model)}
+    route_for(@default_provider, @default_model)
   end
 
   # Format model names for req_llm compatibility
@@ -126,4 +120,33 @@ defmodule Cybernetic.VSM.System4.LLM.Pipeline.Steps.Router do
   end
 
   defp format_model_name(_provider, model), do: model
+
+  defp route_for(provider, fallback_model) do
+    %{
+      provider: provider,
+      model: format_model_name(provider, configured_model(provider, fallback_model))
+    }
+  end
+
+  defp configured_model(:anthropic, fallback) do
+    Application.get_env(:cybernetic, Cybernetic.VSM.System4.Providers.Anthropic, [])
+    |> Keyword.get(:model, fallback)
+  end
+
+  defp configured_model(:openai, fallback) do
+    Application.get_env(:cybernetic, Cybernetic.VSM.System4.Providers.OpenAI, [])
+    |> Keyword.get(:model, fallback)
+  end
+
+  defp configured_model(:together, fallback) do
+    Application.get_env(:cybernetic, Cybernetic.VSM.System4.Providers.Together, [])
+    |> Keyword.get(:model, fallback)
+  end
+
+  defp configured_model(:ollama, fallback) do
+    Application.get_env(:cybernetic, Cybernetic.VSM.System4.Providers.Ollama, [])
+    |> Keyword.get(:model, fallback)
+  end
+
+  defp configured_model(_provider, fallback), do: fallback
 end

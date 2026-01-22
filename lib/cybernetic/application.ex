@@ -113,6 +113,8 @@ defmodule Cybernetic.Application do
                # Circuit Breaker Registry
                {Registry,
                 keys: :unique, name: Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry},
+               # Edge Gateway Circuit Breaker
+               {Cybernetic.Core.Resilience.AdaptiveCircuitBreaker, name: :edge_gateway},
                # Goldrush Integration
                {Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic, []},
                Cybernetic.Core.Goldrush.Bridge,
