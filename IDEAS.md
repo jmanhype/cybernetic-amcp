@@ -1,17 +1,30 @@
-System archeology for Cybernetic AMCP. No opinions, only traces.
+# Implement Dynamic System Tracing
 
-PHASE 1 - Entry points:
-List every external entry point (HTTP, MQ, CLI, cron).
-Format: [type] | [file:line] | [function]
+## Overview
+Implement a dynamic tracing system using `:telemetry` to capture actual runtime execution paths. This overcomes limitations of static analysis (Item 003) which missed dynamic dispatch patterns.
 
-PHASE 2 - Traces (one per entry point):
-For each entry point, trace to exit.
-Format: file:line → file:line → file:line
+## Goals
+1.  **Capture Traces**: Record execution flow from entry points (HTTP, AMQP) to deep internal functions.
+2.  **Correlate Events**: Use Trace IDs to stitch disjoint events (e.g., HTTP request -> AMQP publish -> AMQP consume) into a single cohesive story.
+3.  **Validate Archeology**: Compare dynamic traces against static call graphs to identify "invisible" dependencies.
 
-PHASE 3 - Shared modules:
-Which modules appear in 2+ traces?
+## Phases
 
-PHASE 4 - Orphans:
-Public functions that appear in zero traces.
+### Phase 1: Telemetry Spans
+- Create `Cybernetic.Archeology.DynamicTracer` module.
+- Attach to existing `:telemetry` events (Phoenix, Ecto, Oban).
+- Add new spans (`:telemetry.span/3`) to critical gaps identified in static analysis (VSM message handlers, internal service bridges).
 
-Output as structured data. No prose.
+### Phase 2: Trace Collector
+- Implement an ephemeral collector (GenServer + ETS) to buffer traces in memory.
+- Group spans by `trace_id`.
+
+### Phase 3: Traffic Generator & Report
+- Create a Mix task `mix cyb.trace` that:
+    1. Starts the application and tracer.
+    2. Injects synthetic traffic (HTTP requests, AMQP messages).
+    3. Waits for processing.
+    4. Dumps captured traces to `dynamic-traces.json`.
+
+## Output
+Structured JSON compatible with the static analysis format for easy comparison.

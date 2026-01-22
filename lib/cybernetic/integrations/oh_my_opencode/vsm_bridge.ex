@@ -170,39 +170,75 @@ defmodule Cybernetic.Integrations.OhMyOpencode.VSMBridge do
 
   @impl true
   def handle_call({:push_state, opts}, _from, state) do
-    force = Keyword.get(opts, :force, false)
-    systems = Keyword.get(opts, :systems, 1..5 |> Enum.to_list())
+    # Wrap in telemetry span for dynamic tracing
+    {result, _metadata} =
+      :telemetry.span(
+        [:cybernetic, :archeology, :span],
+        %{system: :vsm_bridge, operation: :push_state, tenant_id: state.tenant_id},
+        fn ->
+          force = Keyword.get(opts, :force, false)
+          systems = Keyword.get(opts, :systems, 1..5 |> Enum.to_list())
 
-    # push_system_state currently always succeeds (placeholder for remote API)
-    deltas =
-      Enum.map(systems, fn system ->
-        {:ok, delta} = push_system_state(state, system, force)
-        {system, delta}
-      end)
+          # push_system_state currently always succeeds (placeholder for remote API)
+          deltas =
+            Enum.map(systems, fn system ->
+              {:ok, delta} = push_system_state(state, system, force)
+              {system, delta}
+            end)
 
-    broadcast_state_change(state.tenant_id, :pushed, deltas)
-    {:reply, {:ok, deltas}, %{state | last_sync_at: DateTime.utc_now()}}
+          broadcast_state_change(state.tenant_id, :pushed, deltas)
+
+          result = {:ok, deltas}
+
+          metadata = %{
+            systems_count: length(systems),
+            tenant_id: state.tenant_id
+          }
+
+          {result, metadata}
+        end
+      )
+
+    {:reply, result, %{state | last_sync_at: DateTime.utc_now()}}
   end
 
   @impl true
   def handle_call({:pull_state, opts}, _from, state) do
-    systems = Keyword.get(opts, :systems, 1..5 |> Enum.to_list())
+    # Wrap in telemetry span for dynamic tracing
+    {result, _metadata} =
+      :telemetry.span(
+        [:cybernetic, :archeology, :span],
+        %{system: :vsm_bridge, operation: :pull_state, tenant_id: state.tenant_id},
+        fn ->
+          systems = Keyword.get(opts, :systems, 1..5 |> Enum.to_list())
 
-    # Simulate pulling from remote - in production this would call oh-my-opencode API
-    remote_updates =
-      Enum.map(systems, fn system ->
-        {system, get_remote_state(state.tenant_id, system)}
-      end)
+          # Simulate pulling from remote - in production this would call oh-my-opencode API
+          remote_updates =
+            Enum.map(systems, fn system ->
+              {system, get_remote_state(state.tenant_id, system)}
+            end)
 
-    new_remote_states =
-      Enum.reduce(remote_updates, state.remote_states, fn {system, remote_state}, acc ->
-        Map.put(acc, system, remote_state)
-      end)
+          _new_remote_states =
+            Enum.reduce(remote_updates, state.remote_states, fn {system, remote_state}, acc ->
+              Map.put(acc, system, remote_state)
+            end)
 
-    new_state = %{state | remote_states: new_remote_states, last_sync_at: DateTime.utc_now()}
-    broadcast_state_change(state.tenant_id, :pulled, remote_updates)
+          broadcast_state_change(state.tenant_id, :pulled, remote_updates)
 
-    {:reply, {:ok, remote_updates}, new_state}
+          result = {:ok, remote_updates}
+
+          metadata = %{
+            systems_count: length(systems),
+            tenant_id: state.tenant_id
+          }
+
+          {result, metadata}
+        end
+      )
+
+    new_state = %{state | last_sync_at: DateTime.utc_now()}
+
+    {:reply, result, new_state}
   end
 
   @impl true

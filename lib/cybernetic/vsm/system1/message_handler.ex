@@ -9,8 +9,21 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
   Handle incoming messages for System 1.
   """
   def handle_message(operation, payload, meta) do
-    Logger.debug("System1 received #{operation}: #{inspect(payload)}")
+    # Wrap in telemetry span for dynamic tracing
+    :telemetry.span(
+      [:cybernetic, :archeology, :span],
+      %{system: :s1, operation: operation},
+      fn ->
+        Logger.debug("System1 received #{operation}: #{inspect(payload)}")
 
+        result = do_handle_message(operation, payload, meta)
+
+        {result, %{payload_size: byte_size(inspect(payload))}}
+      end
+    )
+  end
+
+  defp do_handle_message(operation, payload, meta) do
     case operation do
       "operation" ->
         handle_operation(payload, meta)
