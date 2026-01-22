@@ -1,30 +1,29 @@
-# Implement Dynamic System Tracing
+# Implement Mock AMQP Publisher for Tracing
 
 ## Overview
-Implement a dynamic tracing system using `:telemetry` to capture actual runtime execution paths. This overcomes limitations of static analysis (Item 003) which missed dynamic dispatch patterns.
+Implement an in-memory Mock AMQP Publisher to allow full dynamic tracing without external RabbitMQ dependency. This resolves the crash encountered in Item 004 and enables capturing complete VSM feedback loops.
 
 ## Goals
-1.  **Capture Traces**: Record execution flow from entry points (HTTP, AMQP) to deep internal functions.
-2.  **Correlate Events**: Use Trace IDs to stitch disjoint events (e.g., HTTP request -> AMQP publish -> AMQP consume) into a single cohesive story.
-3.  **Validate Archeology**: Compare dynamic traces against static call graphs to identify "invisible" dependencies.
+1.  **Prevent Crashes**: Provide a valid process for `Cybernetic.Core.Transport.AMQP.Publisher` calls.
+2.  **Enable Full Traces**: Allow messages to flow S1 -> S2 -> S3 -> S4 -> S5 without external infrastructure.
+3.  **Capture Messaging Topology**: Record "publish" events as spans to visualize inter-system dependencies.
 
 ## Phases
 
-### Phase 1: Telemetry Spans
-- Create `Cybernetic.Archeology.DynamicTracer` module.
-- Attach to existing `:telemetry` events (Phoenix, Ecto, Oban).
-- Add new spans (`:telemetry.span/3`) to critical gaps identified in static analysis (VSM message handlers, internal service bridges).
+### Phase 1: Create Mock Publisher
+- Create `Cybernetic.Archeology.MockPublisher` GenServer.
+- Implement `start_link/1` to register as `Cybernetic.Core.Transport.AMQP.Publisher`.
+- Implement `handle_call({:publish, ...}, ...)` to accept messages.
 
-### Phase 2: Trace Collector
-- Implement an ephemeral collector (GenServer + ETS) to buffer traces in memory.
-- Group spans by `trace_id`.
+### Phase 2: In-Memory Routing
+- In `handle_call`, emit a `:telemetry` span for the publish event.
+- Inspect the routing key (e.g., "s2.coordinate").
+- **Crucial Step:** Immediately dispatch the message to the target system's MessageHandler (e.g., `Cybernetic.VSM.System2.MessageHandler.handle_message/3`).
+- This converts async AMQP messaging into synchronous function calls for the purpose of the trace.
 
-### Phase 3: Traffic Generator & Report
-- Create a Mix task `mix cyb.trace` that:
-    1. Starts the application and tracer.
-    2. Injects synthetic traffic (HTTP requests, AMQP messages).
-    3. Waits for processing.
-    4. Dumps captured traces to `dynamic-traces.json`.
+### Phase 3: Integrate with Trace Task
+- Update `Mix.Tasks.Cyb.Trace` to start the MockPublisher before generating traffic.
+- Ensure it only runs in test/dev mode (guard clauses).
 
 ## Output
-Structured JSON compatible with the static analysis format for easy comparison.
+A `dynamic-traces.json` file containing the full conversation history of the VSM systems.

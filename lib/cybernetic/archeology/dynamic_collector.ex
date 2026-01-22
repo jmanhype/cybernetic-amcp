@@ -531,14 +531,21 @@ defmodule Cybernetic.Archeology.DynamicCollector do
   defp do_export(state, output) do
     traces = build_trace_list(state)
 
+    entry_points =
+      traces
+      |> Enum.map(fn t ->
+        case t.entry_point do
+          nil -> :unknown
+          entry -> Map.get(entry, :type, :unknown)
+        end
+      end)
+      |> Enum.uniq()
+
     output_data = %{
       summary: %{
         trace_count: length(traces),
         total_spans: Enum.sum(Enum.map(traces, & &1.span_count)),
-        entry_points_covered:
-          traces
-          |> Enum.map(fn t -> Map.get(t.entry_point, :type, :unknown) end)
-          |> Enum.uniq()
+        entry_points_covered: entry_points
       },
       traces: traces
     }
