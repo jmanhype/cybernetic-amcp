@@ -71,7 +71,7 @@ defmodule Cybernetic.Security.ApiKeys do
       key_data = %{
         name: "system",
         roles: [:system],
-        tenant_id: nil,
+        tenant_id: "system",
         created_at: DateTime.utc_now(),
         expires_at: DateTime.add(DateTime.utc_now(), 10 * @default_ttl_seconds, :second),
         metadata: %{source: "env"}

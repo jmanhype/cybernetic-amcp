@@ -5,7 +5,7 @@ services:
     container_name: cyb-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: cybernetic
-      RABBITMQ_DEFAULT_PASS: changeme
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
       RABBITMQ_DEFAULT_VHOST: /
     ports:
       - "5672:5672"    # AMQP
@@ -22,7 +22,7 @@ services:
 
   # PostgreSQL for persistent storage
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: cyb-postgres
     environment:
       POSTGRES_DB: cybernetic
@@ -165,7 +165,12 @@ services:
       
       # AI Provider Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+      OPENAI_CHAT_COMPLETIONS_PATH: ${OPENAI_CHAT_COMPLETIONS_PATH}
+      OPENAI_EMBEDDINGS_PATH: ${OPENAI_EMBEDDINGS_PATH}
       TOGETHER_API_KEY: ${TOGETHER_API_KEY}
       
       # Ollama Configuration
@@ -177,13 +182,17 @@ services:
       
       # Security
       CYBERNETIC_HMAC_SECRET: ${CYBERNETIC_HMAC_SECRET}
+      CYBERNETIC_SYSTEM_API_KEY: ${CYBERNETIC_SYSTEM_API_KEY}
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      JWT_SECRET: ${JWT_SECRET}
+      PASSWORD_SALT: ${PASSWORD_SALT}
       
       # Application Settings
       PHX_HOST: ${PHX_HOST:-localhost}
       PORT: 4000
       POOL_SIZE: 10
       MIX_ENV: prod
+      RELEASE_DISTRIBUTION: ${RELEASE_DISTRIBUTION:-none}
     ports:
       - "4000:4000"   # HTTP API
       - "4369:4369"   # EPMD

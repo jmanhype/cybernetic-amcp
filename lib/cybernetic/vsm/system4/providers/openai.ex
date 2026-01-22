@@ -12,6 +12,9 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   require OpenTelemetry.Tracer
 
   @default_model "gpt-4o"
+  @default_base_url "https://api.openai.com"
+  @default_chat_path "/v1/chat/completions"
+  @default_embeddings_path "/v1/embeddings"
   @default_max_tokens 4096
   @default_temperature 0.1
   @telemetry [:cybernetic, :s4, :openai]
@@ -75,7 +78,7 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
       "input" => text
     }
 
-    case make_openai_request(payload, "/v1/embeddings") do
+    case make_openai_request(payload, get_embeddings_path()) do
       {:ok, response} ->
         latency = System.monotonic_time(:millisecond) - start_time
         parse_embed_response(response, latency)
@@ -222,8 +225,9 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
     }
   end
 
-  defp make_openai_request(payload, endpoint \\ "/v1/chat/completions") do
-    url = "#{get_base_url()}#{endpoint}"
+  defp make_openai_request(payload, endpoint \\ nil) do
+    path = endpoint || get_chat_path()
+    url = "#{get_base_url()}#{path}"
 
     headers = [
       {"Content-Type", "application/json"},
@@ -408,7 +412,27 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   defp get_max_tokens(opts), do: Keyword.get(opts, :max_tokens, @default_max_tokens)
   defp get_temperature(opts), do: Keyword.get(opts, :temperature, @default_temperature)
   defp get_api_key, do: System.get_env("OPENAI_API_KEY")
-  defp get_base_url, do: "https://api.openai.com"
+
+  defp get_base_url do
+    base_url =
+      Application.get_env(:cybernetic, __MODULE__, [])
+      |> Keyword.get(:base_url, System.get_env("OPENAI_BASE_URL"))
+
+    resolve_value(base_url, @default_base_url)
+    |> normalize_base_url()
+  end
+
+  defp get_chat_path do
+    Application.get_env(:cybernetic, __MODULE__, [])
+    |> Keyword.get(:chat_path, System.get_env("OPENAI_CHAT_COMPLETIONS_PATH"))
+    |> resolve_value(@default_chat_path)
+  end
+
+  defp get_embeddings_path do
+    Application.get_env(:cybernetic, __MODULE__, [])
+    |> Keyword.get(:embeddings_path, System.get_env("OPENAI_EMBEDDINGS_PATH"))
+    |> resolve_value(@default_embeddings_path)
+  end
 
   defp format_episode_data(data) when is_binary(data), do: data
   defp format_episode_data(data), do: Jason.encode!(data, pretty: true)
@@ -475,4 +499,13 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   defp map_finish_reason("length"), do: :length
   defp map_finish_reason("tool_calls"), do: :tool_calls
   defp map_finish_reason(_), do: :stop
+
+  defp normalize_base_url(base_url) do
+    base_url
+    |> String.trim()
+    |> String.trim_trailing("/")
+  end
+
+  defp resolve_value(value, default) when is_binary(value) and value != "", do: value
+  defp resolve_value(_value, default), do: default
 end
