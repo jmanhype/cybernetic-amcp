@@ -23,6 +23,13 @@ else
     timeout: String.to_integer(System.get_env("ECTO_TIMEOUT") || "30000")
 end
 
+# DatabaseTool Configuration
+# Security settings for MCP database queries
+config :cybernetic, :database_tool,
+  max_result_rows: String.to_integer(System.get_env("DB_TOOL_MAX_ROWS") || "1000"),
+  query_timeout_ms: String.to_integer(System.get_env("DB_TOOL_QUERY_TIMEOUT_MS") || "15000"),
+  read_only_enforced: System.get_env("DB_TOOL_READ_ONLY") != "false"
+
 # Oban production configuration
 if config_env() == :prod do
   config :cybernetic, Oban,

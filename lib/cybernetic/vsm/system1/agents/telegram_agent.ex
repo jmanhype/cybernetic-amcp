@@ -249,31 +249,25 @@ defmodule Cybernetic.VSM.System1.Agents.TelegramAgent do
      }}
   end
 
-  def handle_info({:EXIT, pid, reason}, state) when pid == state.polling_task do
-    # Polling task crashed
-    Logger.error("Telegram polling task crashed: #{inspect(reason)}")
-    failures = state.polling_failures + 1
+  def handle_info({:EXIT, pid, reason}, state) do
+    # Handle task exits
+    if pid == state.polling_task do
+      Logger.debug("Telegram polling task exited: #{inspect(reason)}")
+      failures = if reason == :normal, do: 0, else: state.polling_failures + 1
+      
+      # Schedule retry with backoff if not normal
+      delay = if reason == :normal, do: 100, else: calculate_poll_delay(failures)
+      Process.send_after(self(), :poll_updates, delay)
 
-    # Schedule retry with backoff
-    delay = calculate_poll_delay(failures)
-    Process.send_after(self(), :poll_updates, delay)
-
-    {:noreply, %{state | polling_task: nil, polling_failures: failures}}
+      {:noreply, %{state | polling_task: nil, polling_failures: failures}}
+    else
+      Logger.debug("Received EXIT from unknown process #{inspect(pid)}: #{inspect(reason)}")
+      {:noreply, state}
+    end
   end
 
-  def handle_info(:check_health, state) do
-    # Health check - restart polling if it's been too long
-    now = System.system_time(:second)
-    time_since_success = now - state.last_poll_success
-
-    # 60 seconds without success
-    if time_since_success > 60 do
-      Logger.warning("Telegram polling unhealthy, restarting...")
-      send(self(), :poll_updates)
-    end
-
-    # Schedule next health check
-    Process.send_after(self(), :check_health, 30_000)
+  def handle_info(msg, state) do
+    Logger.debug("Telegram agent received unexpected message: #{inspect(msg)}")
     {:noreply, state}
   end
 
