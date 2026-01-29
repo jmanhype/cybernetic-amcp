@@ -130,6 +130,8 @@ defmodule Cybernetic.Application do
                 provider: Cybernetic.VSM.System4.Providers.Null},
                # S4 Multi-Provider Intelligence Service
                {Cybernetic.VSM.System4.Service, []},
+               # S4 AMQP Consumer for processing intelligence requests
+               {Cybernetic.VSM.System4.AMQPConsumer, []},
                # S4 Memory for conversation context
                {Cybernetic.VSM.System4.Memory, []},
                # S3 Rate Limiter for budget management
