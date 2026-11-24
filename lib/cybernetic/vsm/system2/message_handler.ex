@@ -136,6 +136,9 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
   defp handle_coordination_complete(payload, meta) do
     Logger.info("System2: Coordination complete - #{inspect(payload)}")
 
+    # Return the completed coordination's slots to the Coordinator
+    release_lanes(payload)
+
     # Create intelligence signal for S4 based on the coordination result
     intelligence_payload = %{
       "type" => "vsm.s4.intelligence",
@@ -190,19 +193,89 @@ defmodule Cybernetic.VSM.System2.MessageHandler do
   end
 
   defp coordinate_operation(payload, _meta) do
-    # Simulate coordination logic
-    coordination_id = Map.get(payload, "coordination_id", generate_coordination_id())
+    # Real coordination: reserve an actual processing slot per target
+    # lane from the System2 Coordinator (which owns slot accounting,
+    # priorities and aging). The result is derived from the payload
+    # and the Coordinator's live allocation state - a lane that is at
+    # capacity comes back denied instead of a fabricated allocation.
+    coordination_id =
+      Map.get(payload, "coordination_id") || Map.get(payload, :coordination_id) ||
+        generate_coordination_id()
+
+    lanes = coordination_lanes(payload)
+    {allocated, denied, coordinator_available?} = allocate_lanes(lanes)
+
+    status =
+      cond do
+        not coordinator_available? -> "coordinator_unavailable"
+        denied == [] -> "coordinated"
+        allocated == [] -> "backpressure"
+        true -> "partially_coordinated"
+      end
 
     result = %{
       "coordination_id" => coordination_id,
-      "status" => "coordinated",
-      "resources_allocated" => ["worker_1", "worker_2"],
-      "priority" => "normal",
+      "status" => status,
+      "resources_allocated" => allocated,
+      "resources_denied" => denied,
+      "priority" => Map.get(payload, "priority") || Map.get(payload, :priority) || "normal",
       "timestamp" => DateTime.utc_now()
     }
 
-    Logger.debug("System2: Coordination complete - #{coordination_id}")
+    Logger.debug("System2: Coordination complete - #{coordination_id} (#{status})")
     result
+  end
+
+  # The lanes a coordination request applies to: its target systems,
+  # or a single lane named by topic/source when none are specified.
+  defp coordination_lanes(payload) do
+    systems =
+      Map.get(payload, "target_systems") || Map.get(payload, :target_systems) ||
+        Map.get(payload, "systems") || Map.get(payload, :systems)
+
+    case systems do
+      list when is_list(list) and list != [] ->
+        Enum.map(list, &to_string/1)
+
+      single when is_binary(single) ->
+        [single]
+
+      _ ->
+        [
+          Map.get(payload, "topic") || Map.get(payload, :topic) ||
+            Map.get(payload, "source_system") || Map.get(payload, :source_system) ||
+            "default"
+        ]
+    end
+  end
+
+  defp allocate_lanes(lanes) do
+    if Process.whereis(Cybernetic.VSM.System2.Coordinator) do
+      {allocated, denied} =
+        Enum.split_with(lanes, fn lane ->
+          Cybernetic.VSM.System2.Coordinator.reserve_slot(lane) == :ok
+        end)
+
+      {allocated, denied, true}
+    else
+      {[], lanes, false}
+    end
+  end
+
+  # Release the slots a completed coordination was holding, so the
+  # allocate -> complete cycle does not leak Coordinator capacity.
+  defp release_lanes(payload) do
+    if Process.whereis(Cybernetic.VSM.System2.Coordinator) do
+      allocated =
+        Map.get(payload, "resources_allocated") ||
+          Map.get(payload, :resources_allocated) || []
+
+      Enum.each(allocated, fn lane ->
+        Cybernetic.VSM.System2.Coordinator.release_slot(to_string(lane))
+      end)
+    end
+
+    :ok
   end
 
   defp forward_to_intelligence(payload, meta, coordination_result) do
