@@ -144,7 +144,20 @@ defmodule Cybernetic.Application do
                # VSM Supervisor (includes S1-S5)
                Cybernetic.VSM.Supervisor,
                # Telegram Agent (S1)
-               Cybernetic.VSM.System1.Agents.TelegramAgent
+               Cybernetic.VSM.System1.Agents.TelegramAgent,
+               # Content subsystem (semantic containers, CBCP buckets,
+               # ingest pipeline) - implemented but never started before
+               # the 2026-11-23 audit (Issue #86, P0)
+               Cybernetic.Content.Supervisor,
+               # Capabilities subsystem (registry, planner collaboration,
+               # execution handoff, MCP router, LLM CDN) - likewise
+               # implemented but never started
+               Cybernetic.Capabilities.Supervisor,
+               # S3 ControlSupervisor (audit/health/compliance monitoring).
+               # Distinct from VSM.System3.Control inside VSM.Supervisor;
+               # Cybernetic.Core.Resilience.AdaptiveCircuitBreaker already
+               # looks this process up by name
+               Cybernetic.VSM.System3.ControlSupervisor
              ])
           |> List.flatten()
           |> Kernel.++(health_children())
