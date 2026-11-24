@@ -920,9 +920,51 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     }
   end
 
-  # Placeholder functions - implement based on actual system
-  defp query_system_status(_system), do: {:ok, %{metrics: %{}, errors: []}}
-  defp determine_health_status(_status), do: :healthy
+  # Real health inputs: a system is queried through the process that
+  # represents it in the supervision tree. A missing process is a
+  # failed system; a live one reports its real queue/memory metrics.
+  defp query_system_status(system) do
+    case system_process(system) do
+      nil ->
+        {:ok,
+         %{
+           status: :failed,
+           metrics: %{},
+           errors: ["#{inspect(system)} process is not running"]
+         }}
+
+      pid ->
+        info = Process.info(pid, [:message_queue_len, :memory])
+
+        {:ok,
+         %{
+           metrics: %{
+             message_queue_len: info[:message_queue_len],
+             memory: info[:memory]
+           },
+           errors: []
+         }}
+    end
+  end
+
+  defp system_process(:system1), do: Process.whereis(Cybernetic.VSM.System1.Operational)
+  defp system_process(:system2), do: Process.whereis(Cybernetic.VSM.System2.Coordinator)
+  defp system_process(_system), do: nil
+
+  # Health is computed from the queried status, never assumed:
+  # an explicitly down system or a pile-up of errors is :failed,
+  # any errors degrade, otherwise the system is :healthy.
+  defp determine_health_status(status) do
+    errors = Map.get(status, :errors) || []
+
+    cond do
+      Map.get(status, :status) in [:failed, :down] -> :failed
+      length(errors) >= 3 -> :failed
+      errors != [] -> :degraded
+      Map.get(status, :status) == :degraded -> :degraded
+      true -> :healthy
+    end
+  end
 
   defp check_resource_limit_policy(policy, _state) do
     violations = []
