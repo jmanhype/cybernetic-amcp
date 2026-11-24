@@ -41,10 +41,11 @@ defmodule Cybernetic.MixProject do
       {:gen_stage, "~> 1.2"},
       {:fuse, "~> 2.5"},
 
-      # MCP integration (pinned to SHA for reproducible builds)
-      {:hermes_mcp,
-       git: "https://github.com/cloudwalk/hermes-mcp",
-       ref: "97a3dd7e4b6907cc79136da7999b4f51af4834eb"},
+      # MCP integration. Was a git pin to cloudwalk/hermes-mcp@97a3dd7
+      # (v0.14.1); that repo no longer exists (project renamed to Anubis),
+      # which broke fresh `mix deps.get`. Hex publishes the identical
+      # 0.14.1 release, so source it from Hex until the Anubis migration.
+      {:hermes_mcp, "~> 0.14.1"},
 
       # Goldrush branches for reactive stream processing (pinned to SHA)
       {:goldrush,
