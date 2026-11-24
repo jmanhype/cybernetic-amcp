@@ -64,6 +64,18 @@ defmodule Cybernetic.Application do
           ]
         end
 
+      # S4 AMQP Consumer - only when AMQP is enabled. It was previously
+      # started unconditionally; with AMQP disabled its first
+      # GenServer.call to the (absent) AMQP Connection process exits,
+      # crash-looping until the root supervisor exhausts its restarts
+      # and the whole application shuts down.
+      s4_amqp_consumer_children =
+        if amqp_enabled? do
+          [{Cybernetic.VSM.System4.AMQPConsumer, []}]
+        else
+          []
+        end
+
       amqp_children =
         if amqp_enabled? do
           [
@@ -131,7 +143,8 @@ defmodule Cybernetic.Application do
                # S4 Multi-Provider Intelligence Service
                {Cybernetic.VSM.System4.Service, []},
                # S4 AMQP Consumer for processing intelligence requests
-               {Cybernetic.VSM.System4.AMQPConsumer, []},
+               # (spliced only when AMQP is enabled - see above)
+               s4_amqp_consumer_children,
                # S4 Memory for conversation context
                {Cybernetic.VSM.System4.Memory, []},
                # S3 Rate Limiter for budget management
