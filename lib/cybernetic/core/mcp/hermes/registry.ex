@@ -165,7 +165,10 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
           send(registry_pid, {:invocation_complete, invocation_id, result})
         end)
 
-        {:reply, {:ok, invocation_id}, new_state}
+        # Do not reply yet: the caller is answered with the actual
+        # tool result when the invocation completes
+        # (see handle_info({:invocation_complete, ...})).
+        {:noreply, new_state}
 
       {:error, :not_found} = error ->
         {:reply, error, state}
@@ -210,6 +213,9 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
           %{duration: duration},
           %{tool: invocation.tool, success: match?({:ok, _}, result)}
         )
+
+        # Deliver the result to the original caller
+        GenServer.reply(invocation.from, result)
 
         {:noreply, new_state}
     end
@@ -306,10 +312,13 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     try do
       # Add context to params if the handler supports it
       args =
-        if function_exported?(module, function, 2) do
-          [params, context]
-        else
-          [params]
+        cond do
+          function_exported?(module, function, 2) -> [params, context]
+          function_exported?(module, function, 1) -> [params]
+          # Some builtin handlers take no arguments
+          # (e.g. NonceBloom.generate_nonce/0)
+          function_exported?(module, function, 0) -> []
+          true -> [params]
         end
 
       result = apply(module, function, args)
@@ -317,7 +326,7 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     rescue
       e ->
         Logger.error("Tool invocation failed: #{inspect(e)}")
-        {:error, e}
+        {:error, Exception.message(e)}
     end
   end
 
