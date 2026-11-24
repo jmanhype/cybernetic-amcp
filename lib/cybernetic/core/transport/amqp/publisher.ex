@@ -56,6 +56,12 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
   @spec publish(String.t(), String.t(), map(), keyword()) :: :ok | {:error, term()}
   def publish(exchange, routing_key, payload, opts \\ []) do
     GenServer.call(__MODULE__, {:publish, exchange, routing_key, payload, opts}, 5000)
+  catch
+    # The Publisher is only started when AMQP is enabled (see
+    # Cybernetic.Application). Callers - e.g. System3
+    # ControlSupervisor's periodic health publish - must not crash
+    # in AMQP-disabled environments.
+    :exit, {:noproc, _} -> {:error, :publisher_not_available}
   end
 
   def handle_call(
