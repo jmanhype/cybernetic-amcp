@@ -53,8 +53,14 @@ if config_env() == :prod do
 end
 
 # Transport Configuration for VSM message passing
-# Use AMQP transport in production, can be overridden in test.exs
-config :cybernetic, :transport, Cybernetic.Transport.AMQP
+# runtime.exs loads AFTER {env}.exs, so pinning AMQP here
+# unconditionally silently overrode test.exs's InMemory transport -
+# the test suite's VSM forwarding routed to a dead AMQP transport
+# and failed soft. Pin AMQP only outside test; test keeps the
+# InMemory transport test.exs configures.
+if config_env() != :test do
+  config :cybernetic, :transport, Cybernetic.Transport.AMQP
+end
 
 # AMQP Configuration for production transport
 config :cybernetic, :amqp,
