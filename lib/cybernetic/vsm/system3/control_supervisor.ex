@@ -559,13 +559,52 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     end
   end
 
+  # VSM.Supervisor starts bare module specs, so its child ids are
+  # the child modules themselves - not :"system#{n}" atoms.
+  # Addressing a restart to :"system#{n}" returns
+  # {:error, :not_found}; the old code discarded that result and
+  # reported {:ok, :restarted} regardless, so automatic restarts
+  # silently never happened.
+  defp vsm_child_id(1), do: Cybernetic.VSM.System1.Operational
+  defp vsm_child_id(2), do: Cybernetic.VSM.System2.Coordinator
+  defp vsm_child_id(3), do: Cybernetic.VSM.System3.Control
+  defp vsm_child_id(4), do: Cybernetic.VSM.System4.Intelligence
+  defp vsm_child_id(5), do: Cybernetic.VSM.System5.Policy
+  defp vsm_child_id(_), do: nil
+
+  # restart_child/2 alone only starts a child that is not running;
+  # for a live-but-unhealthy child it returns {:error, :running}.
+  # Terminate first, then start it fresh.
+  defp restart_vsm_child(child_id) do
+    case Supervisor.restart_child(Cybernetic.VSM.Supervisor, child_id) do
+      {:ok, _pid} ->
+        {:ok, :restarted}
+
+      {:error, :running} ->
+        with :ok <- Supervisor.terminate_child(Cybernetic.VSM.Supervisor, child_id),
+             {:ok, _pid} <- Supervisor.restart_child(Cybernetic.VSM.Supervisor, child_id) do
+          {:ok, :restarted}
+        else
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp restart_component(target) do
     # Restart the target component
     case target do
       {:system, system_num} ->
-        # Restart VSM system
-        Supervisor.restart_child(Cybernetic.VSM.Supervisor, :"system#{system_num}")
-        {:ok, :restarted}
+        # Restart VSM system, reporting the real outcome
+        with child_id when not is_nil(child_id) <- vsm_child_id(system_num),
+             true <- Process.whereis(Cybernetic.VSM.Supervisor) != nil do
+          restart_vsm_child(child_id)
+        else
+          nil -> {:error, :invalid_target}
+          false -> {:error, :vsm_supervisor_not_running}
+        end
 
       {:process, pid} ->
         # Restart specific process
@@ -920,9 +959,51 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     }
   end
 
-  # Placeholder functions - implement based on actual system
-  defp query_system_status(_system), do: {:ok, %{metrics: %{}, errors: []}}
-  defp determine_health_status(_status), do: :healthy
+  # Real health inputs: a system is queried through the process that
+  # represents it in the supervision tree. A missing process is a
+  # failed system; a live one reports its real queue/memory metrics.
+  defp query_system_status(system) do
+    case system_process(system) do
+      nil ->
+        {:ok,
+         %{
+           status: :failed,
+           metrics: %{},
+           errors: ["#{inspect(system)} process is not running"]
+         }}
+
+      pid ->
+        info = Process.info(pid, [:message_queue_len, :memory])
+
+        {:ok,
+         %{
+           metrics: %{
+             message_queue_len: info[:message_queue_len],
+             memory: info[:memory]
+           },
+           errors: []
+         }}
+    end
+  end
+
+  defp system_process(:system1), do: Process.whereis(Cybernetic.VSM.System1.Operational)
+  defp system_process(:system2), do: Process.whereis(Cybernetic.VSM.System2.Coordinator)
+  defp system_process(_system), do: nil
+
+  # Health is computed from the queried status, never assumed:
+  # an explicitly down system or a pile-up of errors is :failed,
+  # any errors degrade, otherwise the system is :healthy.
+  defp determine_health_status(status) do
+    errors = Map.get(status, :errors) || []
+
+    cond do
+      Map.get(status, :status) in [:failed, :down] -> :failed
+      length(errors) >= 3 -> :failed
+      errors != [] -> :degraded
+      Map.get(status, :status) == :degraded -> :degraded
+      true -> :healthy
+    end
+  end
 
   defp check_resource_limit_policy(policy, _state) do
     violations = []
