@@ -559,13 +559,52 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     end
   end
 
+  # VSM.Supervisor starts bare module specs, so its child ids are
+  # the child modules themselves - not :"system#{n}" atoms.
+  # Addressing a restart to :"system#{n}" returns
+  # {:error, :not_found}; the old code discarded that result and
+  # reported {:ok, :restarted} regardless, so automatic restarts
+  # silently never happened.
+  defp vsm_child_id(1), do: Cybernetic.VSM.System1.Operational
+  defp vsm_child_id(2), do: Cybernetic.VSM.System2.Coordinator
+  defp vsm_child_id(3), do: Cybernetic.VSM.System3.Control
+  defp vsm_child_id(4), do: Cybernetic.VSM.System4.Intelligence
+  defp vsm_child_id(5), do: Cybernetic.VSM.System5.Policy
+  defp vsm_child_id(_), do: nil
+
+  # restart_child/2 alone only starts a child that is not running;
+  # for a live-but-unhealthy child it returns {:error, :running}.
+  # Terminate first, then start it fresh.
+  defp restart_vsm_child(child_id) do
+    case Supervisor.restart_child(Cybernetic.VSM.Supervisor, child_id) do
+      {:ok, _pid} ->
+        {:ok, :restarted}
+
+      {:error, :running} ->
+        with :ok <- Supervisor.terminate_child(Cybernetic.VSM.Supervisor, child_id),
+             {:ok, _pid} <- Supervisor.restart_child(Cybernetic.VSM.Supervisor, child_id) do
+          {:ok, :restarted}
+        else
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp restart_component(target) do
     # Restart the target component
     case target do
       {:system, system_num} ->
-        # Restart VSM system
-        Supervisor.restart_child(Cybernetic.VSM.Supervisor, :"system#{system_num}")
-        {:ok, :restarted}
+        # Restart VSM system, reporting the real outcome
+        with child_id when not is_nil(child_id) <- vsm_child_id(system_num),
+             true <- Process.whereis(Cybernetic.VSM.Supervisor) != nil do
+          restart_vsm_child(child_id)
+        else
+          nil -> {:error, :invalid_target}
+          false -> {:error, :vsm_supervisor_not_running}
+        end
 
       {:process, pid} ->
         # Restart specific process
