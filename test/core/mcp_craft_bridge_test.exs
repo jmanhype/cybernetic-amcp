@@ -79,13 +79,19 @@ defmodule Cybernetic.Core.MCP.CraftBridgeTest do
         IO.puts("craft-anything-cli not found; skipping live Craft bridge test")
 
       executable ->
-        start_supervised!({CraftClient, transport: {:stdio, command: executable, args: ["mcp"]}})
+        start_supervised!({CraftClient, command: executable, args: ["--deep", "mcp"]})
 
         assert {:ok, count} = CraftBridge.register_tools()
-        assert count >= 10
+        # Essentials alone lists ~30 tools; with the native and
+        # browser toolsets enabled in Deep mode the server lists 100+.
+        assert count >= 100
 
         assert {:ok, tool} = Registry.get_tool("craft_core_session_show")
         assert tool.metadata.remote_name == "core_session_show"
+
+        # One tool from each widened toolset is registered.
+        assert {:ok, _} = Registry.get_tool("craft_native_call_graph_show")
+        assert {:ok, _} = Registry.get_tool("craft_web_site_open")
 
         assert {:ok, result} = Registry.invoke_tool("craft_core_session_show", %{})
         assert is_map(result)

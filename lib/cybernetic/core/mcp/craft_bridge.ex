@@ -8,8 +8,9 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
 
     1. starts `Cybernetic.Core.MCP.CraftClient` connected to
        `craft-anything-cli mcp` over stdio,
-    2. lists the server's tools,
-    3. registers each one in `Cybernetic.Core.MCP.Hermes.Registry`
+    2. enables the configured Craft toolsets on the server,
+    3. lists the server's tools,
+    4. registers each one in `Cybernetic.Core.MCP.Hermes.Registry`
        under a `craft_`-prefixed name with a
        `{:forward, __MODULE__, remote_name}` handler.
 
@@ -26,6 +27,23 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
   The bridge is disabled by default; the application only starts it
   in the full (non-minimal) supervision tree when the config gate is
   on, so default boot and the test suite are unaffected.
+
+  ## Toolsets
+
+  Craft lists only its Essentials (core) toolset at first. Before
+  listing tools, the bridge enables the toolsets named in the
+  `:toolsets` config (default `["native", "browser"]` — the native
+  code and Websites sets). The native set's tools only appear in the
+  server's tool list when the server runs in Deep mode, so the
+  default launch args are `["--deep", "mcp"]`: Deep mode lets Craft
+  read inside study targets, which is the bridge's purpose. Both the
+  args and the toolset list are configurable; set `toolsets: []` and
+  `args: ["mcp"]` for a clean-room, Essentials-only bridge.
+
+  The connection uses the purpose-built `CraftClient`, not the
+  Hermes MCP client: hermes_mcp 0.14.1 drops server messages larger
+  than one stdio chunk and wedges after `enable_toolset`, and the
+  widened tool list is ~125 KB. See `CraftClient`'s moduledoc.
   """
 
   use GenServer
@@ -35,6 +53,8 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
   alias Cybernetic.Core.MCP.Hermes.Registry
 
   @default_timeout 30_000
+  @default_args ["--deep", "mcp"]
+  @default_toolsets ["native", "browser"]
   @register_delay_ms 200
   @max_register_attempts 10
 
@@ -59,8 +79,8 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
     arguments = stringify_keys(params || %{})
 
     case CraftClient.call_tool(remote_name, arguments, timeout: @default_timeout) do
-      {:ok, response} ->
-        unwrap_response(response, remote_name)
+      {:ok, result} ->
+        unwrap_result(result, remote_name)
 
       {:error, error} ->
         raise RuntimeError,
@@ -69,41 +89,14 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
   end
 
   @doc """
-  List the Craft server's tools and register each in the Hermes
-  registry. Returns `{:ok, count}` or `{:error, reason}`.
+  Enable the configured toolsets on the Craft server, list its
+  tools, and register each in the Hermes registry. Returns
+  `{:ok, count}` or `{:error, reason}`.
   """
-  def register_tools do
+  def register_tools(config \\ craft_config()) do
     with :ok <- await_client_ready(40) do
+      enable_toolsets(Keyword.get(config, :toolsets, @default_toolsets))
       do_register_tools()
-    end
-  end
-
-  # The Hermes client connects asynchronously: until the initialize
-  # handshake completes, operations fail with "Server capabilities
-  # not set". Poll the capabilities read until the client is ready.
-  defp await_client_ready(0), do: {:error, :craft_client_not_ready}
-
-  defp await_client_ready(attempts) do
-    # get_server_info/0 returns nil until the handshake completes.
-    if CraftClient.get_server_info() do
-      :ok
-    else
-      Process.sleep(250)
-      await_client_ready(attempts - 1)
-    end
-  end
-
-  defp do_register_tools do
-    case CraftClient.list_tools(timeout: @default_timeout) do
-      {:ok, %{result: %{"tools" => tools}}} when is_list(tools) ->
-        Enum.each(tools, &register_tool/1)
-        {:ok, length(tools)}
-
-      {:ok, other} ->
-        {:error, {:unexpected_list_tools_response, other}}
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -137,7 +130,7 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
 
   def handle_info(:register_tools, state) do
     with :ok <- Registry.await_ready(2_000),
-         {:ok, count} <- register_tools() do
+         {:ok, count} <- register_tools(state.config) do
       Logger.info("CraftBridge: registered #{count} Craft Anything tools")
       {:noreply, %{state | registered: count}}
     else
@@ -159,19 +152,56 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
 
   defp ensure_client_started(config) do
     command = Keyword.get(config, :command, "craft-anything-cli")
-    args = Keyword.get(config, :args, ["mcp"])
+    args = Keyword.get(config, :args, @default_args)
 
-    # The Hermes client only assembles its full start options
-    # (client_info, capabilities, protocol version) in child_spec/1;
-    # calling start_link/1 directly crashes the client supervisor
-    # with a missing :client_info key. Start through the spec.
-    %{start: {mod, fun, start_args}} =
-      CraftClient.child_spec(transport: {:stdio, command: command, args: args})
-
-    case apply(mod, fun, start_args) do
+    case CraftClient.start_link(command: command, args: args) do
       {:ok, _pid} -> :ok
       {:error, {:already_started, _pid}} -> :ok
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # The client connects asynchronously: until the initialize
+  # handshake completes, get_server_info/0 returns nil.
+  defp await_client_ready(0), do: {:error, :craft_client_not_ready}
+
+  defp await_client_ready(attempts) do
+    if CraftClient.get_server_info() do
+      :ok
+    else
+      Process.sleep(250)
+      await_client_ready(attempts - 1)
+    end
+  end
+
+  # Craft only lists the Essentials toolset until others are enabled
+  # on the live server. A toolset that fails to enable is logged and
+  # skipped — the rest still register.
+  defp enable_toolsets(toolsets) do
+    Enum.each(toolsets, fn toolset ->
+      case CraftClient.call_tool("enable_toolset", %{"toolset" => toolset},
+             timeout: @default_timeout
+           ) do
+        {:ok, _result} ->
+          Logger.info("CraftBridge: enabled Craft toolset #{toolset}")
+
+        {:error, error} ->
+          Logger.warning("CraftBridge: could not enable toolset #{toolset}: #{inspect(error)}")
+      end
+    end)
+  end
+
+  defp do_register_tools do
+    case CraftClient.list_tools(timeout: @default_timeout) do
+      {:ok, %{"tools" => tools}} when is_list(tools) ->
+        Enum.each(tools, &register_tool/1)
+        {:ok, length(tools)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_list_tools_response, other}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -186,11 +216,8 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
     )
   end
 
-  defp unwrap_response(response, remote_name) do
-    result = Map.get(response, :result) || %{}
-    is_error = Map.get(response, :is_error, false) || Map.get(result, "isError", false)
-
-    if is_error do
+  defp unwrap_result(result, remote_name) do
+    if Map.get(result, "isError", false) do
       raise RuntimeError,
             "Craft tool #{remote_name} returned an error: #{inspect(result)}"
     end
