@@ -71,10 +71,13 @@ config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
 
 # Craft Anything MCP bridge: registers the external Craft Anything
 # MCP server's tools in the Hermes registry. Disabled by default.
+# The --deep flag runs Craft in Deep mode (reads inside study
+# targets); the native toolset's tools are only listed in Deep mode.
 config :cybernetic, :craft_mcp,
   enabled: false,
   command: "craft-anything-cli",
-  args: ["mcp"]
+  args: ["--deep", "mcp"],
+  toolsets: ["native", "browser"]
 
 # Import environment specific config
 import_config "#{config_env()}.exs"
