@@ -150,8 +150,7 @@ defmodule Cybernetic.Application do
                # S5 Policy Intelligence Engine
                {Cybernetic.VSM.System5.PolicyIntelligence, []},
                # S4 Intelligence Layer
-               {Cybernetic.VSM.System4.LLMBridge,
-                provider: Cybernetic.VSM.System4.Providers.Null},
+               Cybernetic.VSM.System4.LLMBridge,
                # S4 Multi-Provider Intelligence Service
                {Cybernetic.VSM.System4.Service, []},
                # S4 AMQP Consumer for processing intelligence requests
