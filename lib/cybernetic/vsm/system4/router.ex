@@ -223,6 +223,10 @@ defmodule Cybernetic.VSM.System4.Router do
     {:ok, Cybernetic.VSM.System4.Providers.Together}
   end
 
+  defp get_legacy_provider_module(:null) do
+    {:ok, Cybernetic.VSM.System4.Providers.Null}
+  end
+
   defp get_legacy_provider_module(provider) do
     {:error, {:unknown_provider, provider}}
   end
@@ -235,6 +239,7 @@ defmodule Cybernetic.VSM.System4.Router do
     Keyword.merge(base_config, opts)
   end
 
+  defp provider_config_key(:null), do: Cybernetic.VSM.System4.Providers.Null
   defp provider_config_key(:anthropic), do: Cybernetic.VSM.System4.Providers.Anthropic
   defp provider_config_key(:openai), do: Cybernetic.VSM.System4.Providers.OpenAI
   defp provider_config_key(:ollama), do: Cybernetic.VSM.System4.Providers.Ollama

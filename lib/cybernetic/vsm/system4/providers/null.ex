@@ -4,9 +4,14 @@ defmodule Cybernetic.VSM.System4.Providers.Null do
 
   @impl true
   def analyze_episode(ep, _opts) do
+    # Episodes arrive as plain maps (aggregator path) or %Episode{}
+    # structs (Router/Service path) — structs do not implement
+    # Access, so ep["id"] raises on them; use Map.get for both.
+    id = Map.get(ep, :id) || Map.get(ep, "id") || "episode"
+
     {:ok,
      %{
-       summary: "noop summary for #{ep["id"] || "episode"}",
+       summary: "noop summary for #{id}",
        recommendations: [],
        sop_suggestions: []
      }}

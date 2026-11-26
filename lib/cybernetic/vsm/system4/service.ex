@@ -8,7 +8,6 @@ defmodule Cybernetic.VSM.System4.Service do
 
   alias Cybernetic.VSM.System4.{Episode, Memory}
   alias Cybernetic.VSM.System4.Providers.{Anthropic, OpenAI, Together, Ollama, Null}
-  alias Cybernetic.Core.Security.RateLimiter
   alias Cybernetic.Core.Resilience.AdaptiveCircuitBreaker
 
   @default_timeout 30_000
@@ -213,8 +212,8 @@ defmodule Cybernetic.VSM.System4.Service do
     task_type = detect_task_type(episode)
     provider_order = get_provider_order(task_type, state)
 
-    # Check rate limits with graceful fallback
-    case check_rate_limit(episode.id) do
+    # Check the S3 budget with graceful fallback
+    case check_rate_limit(episode) do
       :ok ->
         attempt_providers(episode, provider_order, budget, state)
 
@@ -223,12 +222,22 @@ defmodule Cybernetic.VSM.System4.Service do
     end
   end
 
-  defp check_rate_limit(episode_id) do
+  # The budget for every inference path is enforced by the S3
+  # RateLimiter (the same one the S4 Router consults). This path used
+  # to check Core.Security.RateLimiter with the budget key passed as
+  # the token count — a second, divergent budget DP. If the S3
+  # limiter is not running, allow the request (matching the Router's
+  # fallback in check_budget/2).
+  defp check_rate_limit(episode) do
     try do
-      RateLimiter.check(episode_id, :s4_llm)
+      Cybernetic.VSM.System3.RateLimiter.request_tokens(
+        :s4_llm,
+        :service,
+        episode.priority || :normal
+      )
     catch
       :exit, {:noproc, _} ->
-        # RateLimiter not running, allow request
+        # S3 RateLimiter not running, allow request
         :ok
 
       _ ->

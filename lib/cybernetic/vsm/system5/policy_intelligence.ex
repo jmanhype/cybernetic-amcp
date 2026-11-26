@@ -245,7 +245,17 @@ defmodule Cybernetic.VSM.System5.PolicyIntelligence do
   defp analyze_with_claude(state, analysis_type, context) do
     if state.anthropic_provider do
       episode = build_policy_episode(analysis_type, context)
-      Anthropic.analyze_episode(episode, [])
+
+      # All inference goes through the S4 Router — the single choke
+      # point where the S3 budget check is enforced. Calling the
+      # Anthropic provider directly (as this module used to) bypassed
+      # the budget entirely. The episode kinds built below lead their
+      # Router chains with Anthropic, preserving the Claude-first
+      # behavior while gaining fallback and budget enforcement.
+      case Cybernetic.VSM.System4.Router.route(episode) do
+        {:ok, result, _provider_info} -> {:ok, result}
+        {:error, reason} -> {:error, reason}
+      end
     else
       {:error, :no_claude}
     end
