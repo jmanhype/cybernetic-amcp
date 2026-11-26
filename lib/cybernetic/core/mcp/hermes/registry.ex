@@ -15,7 +15,7 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
             name: String.t(),
             description: String.t(),
             parameters: map(),
-            handler: {module(), atom()},
+            handler: {module(), atom()} | {:forward, module(), String.t()},
             capabilities: list(String.t()),
             metadata: map()
           }
@@ -306,6 +306,21 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
 
     # P1 Fix: Return count for telemetry metric (was returning :ok from Logger.info)
     tools_count
+  end
+
+  # External tools (e.g. Craft Anything via CraftBridge) are registered
+  # with a {:forward, module, remote_name} handler: the module's
+  # forward/3 receives the remote tool name the plain {module, function}
+  # dispatch cannot carry.
+  defp invoke_handler(%Tool{handler: {:forward, module, remote_name}}, params, context) do
+    try do
+      result = module.forward(remote_name, params, context)
+      {:ok, result}
+    rescue
+      e ->
+        Logger.error("Tool invocation failed: #{inspect(e)}")
+        {:error, Exception.message(e)}
+    end
   end
 
   defp invoke_handler(%Tool{handler: {module, function}}, params, context) do
