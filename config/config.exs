@@ -69,5 +69,12 @@ config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
   render_errors: [view: Cybernetic.Edge.Gateway.ErrorView, accepts: ~w(json)],
   live_view: [signing_salt: "GI8HdsmX-Wn5IyWB"]
 
+# Craft Anything MCP bridge: registers the external Craft Anything
+# MCP server's tools in the Hermes registry. Disabled by default.
+config :cybernetic, :craft_mcp,
+  enabled: false,
+  command: "craft-anything-cli",
+  args: ["mcp"]
+
 # Import environment specific config
 import_config "#{config_env()}.exs"

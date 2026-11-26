@@ -76,6 +76,17 @@ defmodule Cybernetic.Application do
           []
         end
 
+      # Craft Anything MCP bridge - only when explicitly enabled via
+      # config :cybernetic, :craft_mcp, enabled: true. It spawns the
+      # external `craft-anything-cli mcp` process and registers its
+      # tools in the Hermes registry, so it stays off by default.
+      craft_mcp_children =
+        if Application.get_env(:cybernetic, :craft_mcp, []) |> Keyword.get(:enabled, false) do
+          [Cybernetic.Core.MCP.CraftBridge]
+        else
+          []
+        end
+
       amqp_children =
         if amqp_enabled? do
           [
@@ -122,6 +133,7 @@ defmodule Cybernetic.Application do
                {Cybernetic.Telemetry.BatchedCollector, []},
                # MCP Registry
                Cybernetic.Core.MCP.Hermes.Registry,
+               craft_mcp_children,
                # Circuit Breaker Registry
                {Registry,
                 keys: :unique, name: Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry},
