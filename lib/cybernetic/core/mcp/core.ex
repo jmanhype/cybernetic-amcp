@@ -2,11 +2,19 @@ defmodule Cybernetic.MCP.Core do
   @moduledoc """
   MCP client/server core integrating Hermes and MAGG adapters.
   Handles stdio/websocket transports, tool discovery, and prompts.
+
+  > #### Deprecated mock surface {: .warning}
+  > This module is a stub: `call_tool/3` and `send_prompt/2` return
+  > hard-coded mock results (their tests assert the mock), and it is
+  > not started by the application. Its former "discovery" step
+  > registered mock tools into the Hermes registry; that was removed
+  > under Axiomatic Design coupling #9 (Issue #86) — the Hermes
+  > registry is the single registration/invocation surface, and a
+  > mock catalog must not be able to pollute it. The mock tool list
+  > below is kept local to this module's own state only.
   """
   use GenServer
   require Logger
-
-  alias Cybernetic.Core.MCP.Hermes.Registry
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -109,26 +117,16 @@ defmodule Cybernetic.MCP.Core do
     Logger.info("MCP: Starting tool discovery")
 
     # TODO: Replace with actual Hermes MCP discovery when configured
-    # For now, register some mock tools
+    # Mock tools are kept in this module's own state ONLY. They are
+    # deliberately not registered into the Hermes registry
+    # (coupling #9 boundary: Hermes is the single registration
+    # surface, fed by real registrants such as the builtins and the
+    # Craft bridge — never by mocks).
     mock_tools = [
       %{name: "search", description: "Search the web"},
       %{name: "calculate", description: "Perform calculations"},
       %{name: "analyze", description: "Analyze data"}
     ]
-
-    Enum.each(mock_tools, fn tool ->
-      # Register with proper parameters
-      Registry.register_tool(
-        tool.name,
-        tool.description,
-        # parameters
-        %{},
-        # handler
-        {__MODULE__, :mock_handler},
-        # opts
-        []
-      )
-    end)
 
     tools_map = Map.new(mock_tools, &{&1.name, &1})
 
