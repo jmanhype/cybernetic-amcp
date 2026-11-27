@@ -10,7 +10,12 @@ defmodule Cybernetic.VSM.System1.Operational do
 
   def init(_opts) do
     children = [
-      {DynamicSupervisor, name: Cybernetic.VSM.System1.AgentSupervisor, strategy: :one_for_one}
+      {DynamicSupervisor, name: Cybernetic.VSM.System1.AgentSupervisor, strategy: :one_for_one},
+      # Telegram agent — S1's entry point (Axiomatic Design coupling
+      # #7: it previously sat on the root supervisor, coupling its
+      # lifecycle to the root tree and the edge webhook path; S1 owns
+      # it here).
+      Cybernetic.VSM.System1.Agents.TelegramAgent
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

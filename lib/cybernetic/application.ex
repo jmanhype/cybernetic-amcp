@@ -194,8 +194,6 @@ defmodule Cybernetic.Application do
                # Edge WASM Validator is stateless - use Cybernetic.Edge.WASM.Validator.load/2 where needed
                # VSM Supervisor (includes S1-S5)
                Cybernetic.VSM.Supervisor,
-               # Telegram Agent (S1)
-               Cybernetic.VSM.System1.Agents.TelegramAgent,
                # HNSW vector index - the shared similarity-search DP
                # (Axiomatic Design coupling #5). It existed and was
                # fully implemented but never started: its only
