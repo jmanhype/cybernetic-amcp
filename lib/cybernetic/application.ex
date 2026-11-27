@@ -76,6 +76,30 @@ defmodule Cybernetic.Application do
           []
         end
 
+      # VSM AMQP Consumers for the remaining canonical queues
+      # (coupling #6, stage 2) - the same AMQP-enabled gate as the
+      # S4 consumer above, for the same reason: with AMQP disabled
+      # a consumer's first channel request to the absent Connection
+      # process would crash-loop it. Each instance of the shared
+      # consumer module owns one queue and dispatches deliveries to
+      # that system's message handler; System3 deliveries go to
+      # ControlSupervisor.process_vsm_message/2.
+      vsm_amqp_consumer_children =
+        if amqp_enabled? do
+          [
+            {Cybernetic.VSM.AMQPConsumer,
+             queue: "cyb.s1.ops", system: :system1, name: Cybernetic.VSM.AMQPConsumer.S1},
+            {Cybernetic.VSM.AMQPConsumer,
+             queue: "cyb.s2.coord", system: :system2, name: Cybernetic.VSM.AMQPConsumer.S2},
+            {Cybernetic.VSM.AMQPConsumer,
+             queue: "cyb.s3.control", system: :system3, name: Cybernetic.VSM.AMQPConsumer.S3},
+            {Cybernetic.VSM.AMQPConsumer,
+             queue: "cyb.s5.policy", system: :system5, name: Cybernetic.VSM.AMQPConsumer.S5}
+          ]
+        else
+          []
+        end
+
       # Craft Anything MCP bridge - only when explicitly enabled via
       # config :cybernetic, :craft_mcp, enabled: true. It spawns the
       # external `craft-anything-cli mcp` process and registers its
@@ -156,6 +180,9 @@ defmodule Cybernetic.Application do
                # S4 AMQP Consumer for processing intelligence requests
                # (spliced only when AMQP is enabled - see above)
                s4_amqp_consumer_children,
+               # VSM AMQP Consumers for the s1/s2/s3/s5 canonical
+               # queues (spliced only when AMQP is enabled - see above)
+               vsm_amqp_consumer_children,
                # S4 Memory for conversation context
                {Cybernetic.VSM.System4.Memory, []},
                # S3 Rate Limiter for budget management
