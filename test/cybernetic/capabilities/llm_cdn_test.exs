@@ -97,6 +97,40 @@ defmodule Cybernetic.Capabilities.LLMCDNTest do
     test "accepts list of inputs" do
       assert {:ok, _} = LLMCDN.embed(["text1", "text2"])
     end
+
+    test "returns the shared Embeddings module's vector" do
+      text = "shared embeddings module vector check"
+      assert {:ok, expected} = Cybernetic.Intelligence.Embeddings.embed(text)
+
+      assert {:ok, response} = LLMCDN.embed(text)
+      assert hd(response.data).embedding == expected
+    end
+
+    test "texts sharing words embed closer than disjoint texts" do
+      {:ok, fox} = LLMCDN.embed("the quick brown fox")
+      {:ok, dog} = LLMCDN.embed("the quick brown dog")
+      {:ok, disjoint} = LLMCDN.embed("zanzibar quantum xylophone")
+
+      fox_vec = hd(fox.data).embedding
+      dog_vec = hd(dog.data).embedding
+      disjoint_vec = hd(disjoint.data).embedding
+
+      assert cosine_similarity(fox_vec, dog_vec) >
+               cosine_similarity(fox_vec, disjoint_vec)
+    end
+  end
+
+  defp cosine_similarity(a, b) do
+    dot =
+      a
+      |> Enum.zip(b)
+      |> Enum.reduce(0.0, fn {x, y}, acc -> acc + x * y end)
+
+    magnitude = fn vector ->
+      :math.sqrt(Enum.reduce(vector, 0.0, fn x, acc -> acc + x * x end))
+    end
+
+    dot / (magnitude.(a) * magnitude.(b))
   end
 
   describe "get_cached/1" do
