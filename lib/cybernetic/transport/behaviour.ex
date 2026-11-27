@@ -27,9 +27,25 @@ defmodule Cybernetic.Transport.Behaviour do
 
   @doc """
   Get the current configured transport module.
+
+  Coupling #8: the `:transport` config is canonically a bare module
+  implementing this behaviour. Any other shape (for example the old
+  keyword-list form) is a misconfiguration and raises immediately,
+  instead of crashing obscurely on the first publish.
   """
   def current_transport do
-    Application.get_env(:cybernetic, :transport, Cybernetic.Transport.AMQP)
+    transport = Application.get_env(:cybernetic, :transport, Cybernetic.Transport.AMQP)
+
+    if is_atom(transport) and Code.ensure_loaded?(transport) and
+         function_exported?(transport, :publish, 4) do
+      transport
+    else
+      raise ArgumentError,
+            "invalid :transport configuration: expected a module implementing " <>
+              "Cybernetic.Transport.Behaviour (publish/4), got: #{inspect(transport)}. " <>
+              "Set `config :cybernetic, :transport, <Module>` with a bare module - " <>
+              "keyword-list transport config is not supported."
+    end
   end
 
   @doc """
