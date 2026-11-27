@@ -36,6 +36,21 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
   Registration is an ETS upsert by tool name, so re-registration is
   idempotent; the Craft tools return without restarting the bridge.
 
+  ## Missing or dying client
+
+  The bridge starts the client linked from its own init. A
+  GenServer whose init returns `{:stop, reason}` — the client's
+  answer to a missing binary — also delivers an EXIT signal with
+  that reason to its linked starter, so the bridge traps exits:
+  without trapping, the signal kills the bridge during startup
+  and takes the whole application boot down with it. If the
+  client cannot start, or exits later, the bridge logs the
+  failure and idles with no client: Craft tools are unavailable,
+  but boot is never blocked or crashed, and there is no restart
+  churn. Tools already registered stay registered (their
+  invocations fail honestly at the client call) — the same
+  semantics as the Magg bridge (`Cybernetic.MCP.MAGGAdapter`).
+
   ## Toolsets
 
   Craft lists only its Essentials (core) toolset at first. Before
@@ -121,24 +136,34 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
 
   @impl true
   def init(opts) do
+    # The client is started linked from init. On this OTP, a
+    # GenServer whose init returns {:stop, reason} propagates an
+    # EXIT to a non-trapping start_link caller instead of simply
+    # returning {:error, reason} — so without trapping, a missing
+    # Craft binary would kill the bridge during startup (and fail
+    # the whole application boot) instead of degrading to a
+    # logged absence. Same pattern as the Magg bridge.
+    Process.flag(:trap_exit, true)
+
     config = Keyword.merge(craft_config(), opts)
     handler_id = attach_ready_handler()
 
+    state = %{
+      config: config,
+      attempts: 0,
+      registered: 0,
+      client_pid: nil,
+      handler_id: handler_id
+    }
+
     case ensure_client_started(config) do
-      :ok ->
+      {:ok, pid} ->
         Process.send_after(self(), :register_tools, @register_delay_ms)
-        {:ok, %{config: config, attempts: 0, registered: 0, handler_id: handler_id}}
+        {:ok, %{state | client_pid: pid}}
 
       {:error, reason} ->
         Logger.error("CraftBridge: could not start Craft MCP client: #{inspect(reason)}")
-
-        {:ok,
-         %{
-           config: config,
-           attempts: @max_register_attempts,
-           registered: 0,
-           handler_id: handler_id
-         }}
+        {:ok, %{state | attempts: @max_register_attempts}}
     end
   end
 
@@ -149,6 +174,14 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
   end
 
   @impl true
+  def handle_info(:hermes_ready, %{client_pid: nil} = state) do
+    # No live client (missing binary, or the client exited):
+    # there is nothing to re-register, and attempting
+    # registration against a dead client would only crash the
+    # bridge.
+    {:noreply, state}
+  end
+
   def handle_info(:hermes_ready, state) do
     # The Hermes registry (re)registered its builtins — on a
     # registry restart its ETS table was destroyed, taking every
@@ -159,7 +192,25 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
     {:noreply, %{state | attempts: 0}}
   end
 
+  # The linked Craft client died (e.g. the server process
+  # exited). Degrade: Craft tools stop answering, the bridge
+  # stays up, and the registrations already in the registry are
+  # left in place.
+  def handle_info({:EXIT, pid, reason}, %{client_pid: pid} = state) when is_pid(pid) do
+    Logger.error("CraftBridge: Craft MCP client exited: #{inspect(reason)}")
+    {:noreply, %{state | client_pid: nil}}
+  end
+
+  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
+
   @impl true
+  def handle_info(:register_tools, %{client_pid: nil} = state) do
+    # No live client: nothing to register against. The failure
+    # was already logged when the client failed to start or
+    # exited; stay idle instead of crashing on a dead client.
+    {:noreply, state}
+  end
+
   def handle_info(:register_tools, %{attempts: attempts} = state)
       when attempts >= @max_register_attempts do
     Logger.error(
@@ -221,8 +272,8 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
     args = Keyword.get(config, :args, @default_args)
 
     case CraftClient.start_link(command: command, args: args) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
+      {:ok, pid} -> {:ok, pid}
+      {:error, {:already_started, pid}} -> {:ok, pid}
       {:error, reason} -> {:error, reason}
     end
   end
