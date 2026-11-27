@@ -105,6 +105,40 @@ defmodule Cybernetic.Core.MCP.CraftBridgeTest do
     end
   end
 
+  test "missing Craft binary: bridge stays alive and registers nothing" do
+    {:ok, tools_before} = Registry.list_tools()
+    craft_before = Enum.filter(tools_before, &String.starts_with?(&1.name, "craft_"))
+
+    bridge_pid =
+      start_supervised!(
+        {CraftBridge, command: "/nonexistent/craft-anything-cli", args: ["--deep", "mcp"]}
+      )
+
+    # The failed client start delivers a stray EXIT to the
+    # bridge; give it time to land, then prove the bridge
+    # survived it (before the fix, that EXIT killed the bridge
+    # during startup — and the whole application boot with it).
+    Process.sleep(300)
+    assert Process.alive?(bridge_pid)
+    assert Process.whereis(CraftBridge) == bridge_pid
+    assert Process.whereis(CraftClient) == nil
+
+    state = :sys.get_state(bridge_pid)
+    assert state.client_pid == nil
+    assert state.registered == 0
+
+    # A registry :ready event (the registry-restart heal) must
+    # not crash or resurrect anything while there is no client.
+    :telemetry.execute([:cybernetic, :mcp_registry, :ready], %{}, %{})
+    Process.sleep(500)
+    assert Process.alive?(bridge_pid)
+    assert Process.whereis(CraftBridge) == bridge_pid
+
+    {:ok, tools_after} = Registry.list_tools()
+    craft_after = Enum.filter(tools_after, &String.starts_with?(&1.name, "craft_"))
+    assert craft_after == craft_before
+  end
+
   test "registry restart: craft tools re-register without restarting the bridge" do
     case craft_executable() do
       nil ->
