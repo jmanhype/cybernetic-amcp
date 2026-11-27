@@ -48,19 +48,15 @@ config :libcluster,
     ]
   ]
 
-# Transport configuration - Using AMQP as primary transport
-config :cybernetic, :transport,
-  adapter: Cybernetic.Transport.AMQP,
-  max_demand: 1000,
-  amqp: [
-    url: "amqp://cybernetic:changeme@localhost:5672",
-    prefetch_count: 10,
-    consumers: [
-      systems: [:system1, :system2, :system3, :system4, :system5],
-      max_demand: 10,
-      min_demand: 5
-    ]
-  ]
+# Transport configuration - Using AMQP as primary transport.
+# Coupling #8: :transport is ALWAYS a bare module implementing
+# Cybernetic.Transport.Behaviour - never a keyword list. The old
+# keyword form (adapter/max_demand/nested amqp options) had no
+# readers anywhere in lib/ and only "worked" because runtime.exs /
+# test.exs overwrote it later in config load order. AMQP connection
+# settings live under the top-level :amqp key (see runtime.exs);
+# per-env transport overrides live in config/{env}.exs / runtime.exs.
+config :cybernetic, :transport, Cybernetic.Transport.AMQP
 
 # Phoenix Edge Gateway configuration
 # P0 Security: secret_key_base moved to runtime.exs - DO NOT hardcode secrets
