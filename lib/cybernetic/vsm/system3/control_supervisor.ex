@@ -48,8 +48,10 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   def init(_opts) do
     Logger.info("System 3 Control Supervisor initializing...")
 
-    # Subscribe to relevant AMQP channels
-    subscribe_to_channels()
+    # AMQP consumption for this supervisor lives in
+    # Cybernetic.VSM.AMQPConsumer on the cyb.s3.control queue
+    # (started only when AMQP is enabled); it dispatches
+    # deliveries to process_vsm_message/2 below.
 
     # Initialize monitoring systems
     health_monitors = init_health_monitors()
@@ -107,6 +109,66 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   def report_algedonic(signal_type, intensity, source) do
     GenServer.cast(__MODULE__, {:algedonic_signal, signal_type, intensity, source})
   end
+
+  @doc """
+  Dispatch a message delivered to System 3 from the transport
+  layer - by `Cybernetic.VSM.AMQPConsumer` from the
+  `cyb.s3.control` AMQP queue, or by an in-process
+  `{:amqp_message, message}` delivery.
+
+  Known message classes are routed to this supervisor's existing
+  handlers:
+
+    * algedonic signals - payloads whose `"type"` is
+      `"algedonic.pain"` / `"algedonic.pleasure"`, or whose routing
+      key is an `s3.algedonic.*` key - are reported through
+      `report_algedonic/3`, with intensity and source extracted
+      from the payload;
+    * policy updates - payloads whose `"type"` or `"operation"`
+      is `"policy_update"` and that carry a policy id and policy
+      data - update the policy cache through `update_policy/2`.
+
+  Anything else returns `{:error, :unknown_message_type}`: there
+  is no silent no-op success for messages System 3 does not
+  understand. A policy update missing its id or data returns
+  `{:error, :invalid_policy_update}`.
+
+  Algedonic intensity extraction: an explicit numeric
+  `"intensity"` wins; otherwise the severity/intensity level -
+  from the payload, its `"data"` sub-map, or the routing key's
+  last segment - is mapped through the algedonic intensity scale
+  shared with `Cybernetic.VSM.System4.MessageHandler` and the
+  Goldrush TelemetryAlgedonic plugin (critical/euphoric 0.95,
+  severe/high 0.85, moderate 0.75, anything else 0.5), calibrated
+  against this supervisor's thresholds: pain is processed above
+  0.7 and auto-intervenes above 0.8, so a moderate signal lands
+  in the escalate-for-analysis band and only severe/critical
+  intervene. Algedonic source extraction: the payload's
+  `"source_system"` through the s1..s5 whitelist;
+  Goldrush-shaped payloads (which carry `"metrics"` and no
+  source) report as `:goldrush_telemetry`, matching the plugin's
+  in-process reports; anything else reports as `:amqp`.
+  """
+  @spec process_vsm_message(map(), String.t() | nil) :: :ok | {:error, term()}
+  def process_vsm_message(message, routing_key) when is_map(message) do
+    cond do
+      algedonic_signal_type(message, routing_key) != nil ->
+        dispatch_algedonic_message(message, routing_key)
+
+      policy_update_message?(message) ->
+        dispatch_policy_update_message(message)
+
+      true ->
+        Logger.warning(
+          "System3 ControlSupervisor: unknown VSM message type: " <>
+            inspect(message_type_of(message))
+        )
+
+        {:error, :unknown_message_type}
+    end
+  end
+
+  def process_vsm_message(_message, _routing_key), do: {:error, :unknown_message_type}
 
   @doc """
   Get audit report
@@ -176,9 +238,20 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
 
   @impl true
   def handle_info({:amqp_message, message}, state) do
-    # Process messages from other VSM systems
-    new_state = process_vsm_message(message, state)
-    {:noreply, new_state}
+    # In-process delivery (in-process senders, tests): dispatch
+    # through the same entry point the AMQP queue consumer uses.
+    # State changes flow through the dispatch targets
+    # (report_algedonic/3, update_policy/2), so this process's own
+    # state is unchanged here.
+    case process_vsm_message(message, nil) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("System3 ControlSupervisor: dropped VSM message: #{inspect(reason)}")
+    end
+
+    {:noreply, state}
   end
 
   @impl true
@@ -669,6 +742,142 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     end
   end
 
+  # ========== PRIVATE FUNCTIONS - VSM MESSAGE DISPATCH ==========
+
+  defp message_type_of(message) do
+    field(message, "type", :type) || field(message, "operation", :operation)
+  end
+
+  # Payloads arrive JSON-decoded (string keys) from AMQP, but
+  # in-process senders may use atom keys; accept both.
+  defp field(map, string_key, atom_key) when is_map(map) do
+    Map.get(map, string_key) || Map.get(map, atom_key)
+  end
+
+  # The signal kind (:pain / :pleasure) is named by the payload
+  # type ("algedonic.pain") or by the canonical routing key
+  # ("s3.algedonic.pain.severe").
+  defp algedonic_signal_type(message, routing_key) do
+    type = field(message, "type", :type)
+
+    cond do
+      type == "algedonic.pain" -> :pain
+      type == "algedonic.pleasure" -> :pleasure
+      is_binary(routing_key) and String.contains?(routing_key, ".algedonic.pain") -> :pain
+      is_binary(routing_key) and String.contains?(routing_key, ".algedonic.pleasure") -> :pleasure
+      true -> nil
+    end
+  end
+
+  defp dispatch_algedonic_message(message, routing_key) do
+    case algedonic_signal_type(message, routing_key) do
+      nil ->
+        {:error, :unknown_message_type}
+
+      signal_type ->
+        report_algedonic(
+          signal_type,
+          algedonic_intensity_from(message, routing_key),
+          algedonic_source_from(message)
+        )
+
+        :ok
+    end
+  end
+
+  defp algedonic_intensity_from(message, routing_key) do
+    explicit = field(message, "intensity", :intensity)
+
+    if is_number(explicit) do
+      explicit * 1.0
+    else
+      data = field(message, "data", :data)
+      data = if is_map(data), do: data, else: %{}
+
+      level =
+        field(message, "severity", :severity) ||
+          explicit ||
+          field(data, "severity", :severity) ||
+          field(data, "intensity", :intensity) ||
+          routing_key_level(routing_key)
+
+      algedonic_level_intensity(level)
+    end
+  end
+
+  defp routing_key_level(routing_key) when is_binary(routing_key) do
+    routing_key |> String.split(".") |> List.last()
+  end
+
+  defp routing_key_level(_routing_key), do: nil
+
+  # The algedonic intensity scale shared with
+  # Cybernetic.VSM.System4.MessageHandler and the Goldrush
+  # TelemetryAlgedonic plugin (see process_vsm_message/2).
+  defp algedonic_level_intensity(level) do
+    case level && to_string(level) do
+      "critical" -> 0.95
+      "euphoric" -> 0.95
+      "severe" -> 0.85
+      "high" -> 0.85
+      "moderate" -> 0.75
+      _other -> 0.5
+    end
+  end
+
+  defp algedonic_source_from(message) do
+    case field(message, "source_system", :source_system) do
+      "s1" ->
+        :s1
+
+      "s2" ->
+        :s2
+
+      "s3" ->
+        :s3
+
+      "s4" ->
+        :s4
+
+      "s5" ->
+        :s5
+
+      _other ->
+        # Goldrush TelemetryAlgedonic signals carry metrics and no
+        # source; the plugin's in-process reports use
+        # :goldrush_telemetry, so the AMQP copies do too.
+        if Map.has_key?(message, "metrics") or Map.has_key?(message, :metrics) do
+          :goldrush_telemetry
+        else
+          :amqp
+        end
+    end
+  end
+
+  defp policy_update_message?(message) do
+    field(message, "type", :type) == "policy_update" ||
+      field(message, "operation", :operation) == "policy_update"
+  end
+
+  defp dispatch_policy_update_message(message) do
+    policy_id = field(message, "policy_id", :policy_id) || field(message, "id", :id)
+
+    policy_data =
+      field(message, "policy_data", :policy_data) ||
+        field(message, "policy", :policy) ||
+        field(message, "data", :data) ||
+        field(message, "payload", :payload)
+
+    if policy_id && is_map(policy_data) do
+      update_policy(policy_id, policy_data)
+      :ok
+    else
+      Logger.warning("System3 ControlSupervisor: policy_update message missing policy id or data")
+
+      {:error, :invalid_policy_update}
+    end
+  end
+
   # ========== PRIVATE FUNCTIONS - AUDIT (SYSTEM 3*) ==========
 
   defp perform_system_audit(state) do
@@ -751,22 +960,6 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   end
 
   # ========== PRIVATE FUNCTIONS - HELPERS ==========
-
-  defp subscribe_to_channels do
-    # Subscribe to AMQP channels for VSM communication
-    topics = [
-      "vsm.system1.#",
-      "vsm.system2.#",
-      "vsm.system4.intelligence",
-      "vsm.system5.policy",
-      "vsm.algedonic.#"
-    ]
-
-    Enum.each(topics, fn topic ->
-      # In production, use AMQP consumer
-      Logger.debug("Subscribed to #{topic}")
-    end)
-  end
 
   defp init_metrics do
     %{
@@ -1108,8 +1301,6 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   defp get_s2_avg_time, do: 25
   defp identify_s2_bottlenecks, do: []
   defp calculate_s2_fairness, do: 0.9
-  defp process_vsm_message(_message, state), do: state
-
   # Helper functions for resource monitoring
   defp get_current_cpu_usage do
     # In a real system, this would query actual CPU metrics
