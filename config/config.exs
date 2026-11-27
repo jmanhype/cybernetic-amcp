@@ -75,6 +75,19 @@ config :cybernetic, :craft_mcp,
   args: ["--deep", "mcp"],
   toolsets: ["native", "browser"]
 
+# Magg MCP aggregator bridge - only started when enabled: true.
+# Magg (https://github.com/sitbon/magg) is an external Python
+# sidecar ("The MCP Aggregator"); the bridge spawns `magg serve`
+# over stdio and registers its tools - its magg_* management tools
+# plus every aggregated backend tool - in the Hermes registry.
+# Magg persists its server config in .magg/config.json under its
+# working directory, so :cd pins the sidecar directory.
+config :cybernetic, :magg,
+  enabled: false,
+  command: "/home/hatch/workspace/magg-sidecar/venv/bin/magg",
+  args: ["serve"],
+  cd: "/home/hatch/workspace/magg-sidecar"
+
 # Embeddings: the single embedding source for capabilities discovery,
 # content semantic search, and S4 memory (Axiomatic Design couplings
 # #4/#5). Default provider is Ollama (local, no API key) with its
