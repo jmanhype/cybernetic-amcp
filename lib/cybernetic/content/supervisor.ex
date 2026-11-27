@@ -34,6 +34,7 @@ defmodule Cybernetic.Content.Supervisor do
       {SemanticContainer,
        [
          name: SemanticContainer,
+         hnsw_index: Keyword.get(opts, :hnsw_index, Cybernetic.Intelligence.HNSW.Index),
          embedding_dimensions: Keyword.get(opts, :embedding_dimensions, 1536),
          max_content_size: Keyword.get(opts, :max_content_size, 100 * 1024 * 1024),
          max_metadata_size: Keyword.get(opts, :max_metadata_size, 64 * 1024)

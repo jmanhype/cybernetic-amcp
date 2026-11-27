@@ -169,6 +169,21 @@ defmodule Cybernetic.Application do
                Cybernetic.VSM.Supervisor,
                # Telegram Agent (S1)
                Cybernetic.VSM.System1.Agents.TelegramAgent,
+               # HNSW vector index - the shared similarity-search DP
+               # (Axiomatic Design coupling #5). It existed and was
+               # fully implemented but never started: its only
+               # supervisor was referenced nowhere. Dimensions come
+               # from the embeddings config so the index matches the
+               # configured provider's vectors.
+               {Cybernetic.Intelligence.HNSW.Index,
+                [
+                  name: Cybernetic.Intelligence.HNSW.Index,
+                  dimensions:
+                    Application.get_env(:cybernetic, :embeddings, [])
+                    |> Keyword.get(:dimensions, 768),
+                  m: 16,
+                  ef_construction: 200
+                ]},
                # Content subsystem (semantic containers, CBCP buckets,
                # ingest pipeline) - implemented but never started before
                # the 2026-11-23 audit (Issue #86, P0)

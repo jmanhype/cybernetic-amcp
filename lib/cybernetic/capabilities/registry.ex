@@ -34,6 +34,7 @@ defmodule Cybernetic.Capabilities.Registry do
   require Logger
 
   alias Cybernetic.Capabilities.Validation
+  alias Cybernetic.Intelligence.Embeddings
 
   @type capability :: %{
           id: String.t(),
@@ -222,7 +223,7 @@ defmodule Cybernetic.Capabilities.Registry do
     filter_fn = Keyword.get(opts, :filter, fn _ -> true end)
 
     result =
-      case generate_embedding(query, state.embedding_model) do
+      case Embeddings.embed(query) do
         {:ok, query_embedding} ->
           matches =
             state.capabilities
@@ -343,25 +344,6 @@ defmodule Cybernetic.Capabilities.Registry do
   @spec generate_id() :: String.t()
   defp generate_id do
     UUID.uuid4()
-  end
-
-  @spec generate_embedding(String.t(), String.t()) :: {:ok, [float()]} | {:error, term()}
-  defp generate_embedding(text, _model) do
-    # Placeholder - would use ReqLLM in production
-    # For now, generate a simple hash-based pseudo-embedding
-    try do
-      hash = :crypto.hash(:sha256, text)
-
-      embedding =
-        hash
-        |> :binary.bin_to_list()
-        |> Enum.take(16)
-        |> Enum.map(&(&1 / 255.0))
-
-      {:ok, embedding}
-    rescue
-      e -> {:error, Exception.message(e)}
-    end
   end
 
   @spec cosine_similarity([float()], [float()]) :: float()

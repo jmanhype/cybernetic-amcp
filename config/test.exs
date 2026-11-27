@@ -29,6 +29,13 @@ config :opentelemetry, traces_exporter: :none
 # Disable AMQP during tests
 config :cybernetic, :amqp, enabled: false
 
+# Embeddings in tests use a deterministic bag-of-words provider so
+# semantic-search tests need no live Ollama/OpenAI (see
+# Cybernetic.Intelligence.Embeddings).
+config :cybernetic, :embeddings,
+  provider: Cybernetic.TestSupport.EmbeddingsProvider,
+  dimensions: 64
+
 # Configure Ecto for async tests with SQL sandbox
 config :cybernetic, Cybernetic.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
