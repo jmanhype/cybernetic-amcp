@@ -28,6 +28,14 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
   in the full (non-minimal) supervision tree when the config gate is
   on, so default boot and the test suite are unaffected.
 
+  If the Hermes registry restarts, its ETS table dies with it and
+  every `craft_*` registration is lost. The bridge therefore
+  subscribes to the registry's `[:cybernetic, :mcp_registry, :ready]`
+  telemetry event (emitted after the registry re-registers its
+  builtins) and re-runs its registration flow when it fires.
+  Registration is an ETS upsert by tool name, so re-registration is
+  idempotent; the Craft tools return without restarting the bridge.
+
   ## Toolsets
 
   Craft lists only its Essentials (core) toolset at first. Before
@@ -51,6 +59,8 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
 
   alias Cybernetic.Core.MCP.CraftClient
   alias Cybernetic.Core.MCP.Hermes.Registry
+
+  @ready_event [:cybernetic, :mcp_registry, :ready]
 
   @default_timeout 30_000
   @default_args ["--deep", "mcp"]
@@ -100,21 +110,53 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
     end
   end
 
+  @doc false
+  def handle_telemetry_event(@ready_event, _measurements, _metadata, pid) do
+    send(pid, :hermes_ready)
+  end
+
+  def handle_telemetry_event(_event, _measurements, _metadata, _pid), do: :ok
+
   # GenServer callbacks
 
   @impl true
   def init(opts) do
     config = Keyword.merge(craft_config(), opts)
+    handler_id = attach_ready_handler()
 
     case ensure_client_started(config) do
       :ok ->
         Process.send_after(self(), :register_tools, @register_delay_ms)
-        {:ok, %{config: config, attempts: 0, registered: 0}}
+        {:ok, %{config: config, attempts: 0, registered: 0, handler_id: handler_id}}
 
       {:error, reason} ->
         Logger.error("CraftBridge: could not start Craft MCP client: #{inspect(reason)}")
-        {:ok, %{config: config, attempts: @max_register_attempts, registered: 0}}
+
+        {:ok,
+         %{
+           config: config,
+           attempts: @max_register_attempts,
+           registered: 0,
+           handler_id: handler_id
+         }}
     end
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    if handler_id = state[:handler_id], do: :telemetry.detach(handler_id)
+    :ok
+  end
+
+  @impl true
+  def handle_info(:hermes_ready, state) do
+    # The Hermes registry (re)registered its builtins — on a
+    # registry restart its ETS table was destroyed, taking every
+    # craft_* registration with it. Re-run registration (an ETS
+    # upsert by name, so idempotent) to restore the Craft tools
+    # without restarting the bridge.
+    Process.send_after(self(), :register_tools, 100)
+    {:noreply, %{state | attempts: 0}}
   end
 
   @impl true
@@ -145,6 +187,30 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
   end
 
   # Private
+
+  # Mirror of ToolProjection's attach pattern: the handler only
+  # forwards a message to this process; no work happens in the
+  # emitter's (the registry's) process.
+  defp attach_ready_handler do
+    handler_id = {:craft_bridge, self()}
+
+    case :telemetry.attach(
+           handler_id,
+           @ready_event,
+           &__MODULE__.handle_telemetry_event/4,
+           self()
+         ) do
+      :ok ->
+        :ok
+
+      {:error, :already_exists} ->
+        Logger.warning(
+          "CraftBridge: telemetry handler #{inspect(handler_id)} already attached; continuing"
+        )
+    end
+
+    handler_id
+  end
 
   defp craft_config do
     Application.get_env(:cybernetic, :craft_mcp, [])
@@ -203,6 +269,13 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
       {:error, reason} ->
         {:error, reason}
     end
+  catch
+    # The Hermes registry can die mid-registration (e.g. it is
+    # being restarted): Registry.register_tool's GenServer.call
+    # then exits in this process. Report a failed attempt instead
+    # of crashing the bridge, so the retry flow — and, on a
+    # registry restart, the :ready re-registration — recovers.
+    :exit, reason -> {:error, {:registry_unavailable, reason}}
   end
 
   defp register_tool(%{"name" => remote_name} = tool) do

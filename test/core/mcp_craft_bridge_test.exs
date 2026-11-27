@@ -105,6 +105,83 @@ defmodule Cybernetic.Core.MCP.CraftBridgeTest do
     end
   end
 
+  test "registry restart: craft tools re-register without restarting the bridge" do
+    case craft_executable() do
+      nil ->
+        IO.puts("craft-anything-cli not found; skipping registry-restart test")
+
+      executable ->
+        bridge_pid =
+          start_supervised!({CraftBridge, command: executable, args: ["--deep", "mcp"]})
+
+        # Initial registration completes through the bridge itself:
+        # wait until its state reports the registered count, so the
+        # kill below lands on an idle bridge, not a mid-registration
+        # one.
+        assert wait_until(fn ->
+                 :sys.get_state(bridge_pid).registered > 0
+               end),
+               "craft tools never registered initially"
+
+        assert {:ok, _} = Registry.get_tool("craft_core_session_show")
+
+        {:ok, tools_before} = Registry.list_tools()
+        craft_before = Enum.count(tools_before, &String.starts_with?(&1.name, "craft_"))
+        assert craft_before >= 100
+
+        # Restart the Hermes registry. It is an app-supervised
+        # child (it belongs to the minimal test tree), so killing
+        # it makes the application supervisor bring back a fresh
+        # instance whose new ETS table starts empty — every craft_*
+        # registration is lost with the old process. The pid change
+        # is the proof of the wipe: the table is created in the
+        # registry's init and owned by that process.
+        registry_pid = Process.whereis(Registry)
+        Process.exit(registry_pid, :kill)
+
+        assert wait_until(fn ->
+                 case Process.whereis(Registry) do
+                   nil -> false
+                   ^registry_pid -> false
+                   _new_pid -> true
+                 end
+               end),
+               "registry never restarted"
+
+        :ok = Registry.await_ready(2_000)
+
+        # The bridge — same pid, never restarted — restores the
+        # tools when the fresh registry's :ready event fires. Wait
+        # for the full set to return, not just the first tool: the
+        # re-registration streams all 115 in one by one.
+        assert wait_until(
+                 fn ->
+                   {:ok, tools} = Registry.list_tools()
+                   Enum.count(tools, &String.starts_with?(&1.name, "craft_")) >= craft_before
+                 end,
+                 240
+               ),
+               "craft tools never returned after the registry restart"
+
+        assert Process.whereis(CraftBridge) == bridge_pid
+    end
+  end
+
+  # Poll `fun` every 250 ms until it returns truthy or the deadline
+  # (30 s by default) passes. Registration against the real Craft
+  # server takes seconds, and this VM is heavily contended.
+  defp wait_until(fun, attempts \\ 120)
+  defp wait_until(_fun, 0), do: false
+
+  defp wait_until(fun, attempts) do
+    if fun.() do
+      true
+    else
+      Process.sleep(250)
+      wait_until(fun, attempts - 1)
+    end
+  end
+
   defp craft_executable do
     candidates = [
       System.find_executable("craft-anything-cli"),

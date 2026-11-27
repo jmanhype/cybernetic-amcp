@@ -7,7 +7,6 @@ defmodule Cybernetic.Capabilities.Supervisor do
   - Tool Projection (one-way Hermes -> Capabilities bridge)
   - Planner Collaboration
   - Execution Handoff
-  - MCP Router
   - LLM CDN
 
   ## Configuration
@@ -17,7 +16,6 @@ defmodule Cybernetic.Capabilities.Supervisor do
         registry_opts: [],
         planner_opts: [],
         handoff_opts: [],
-        mcp_router_opts: [],
         llm_cdn_opts: []
   """
   use Supervisor
@@ -49,9 +47,6 @@ defmodule Cybernetic.Capabilities.Supervisor do
 
       # Execution Handoff
       {Cybernetic.Capabilities.Execution.Handoff, Keyword.get(opts, :handoff_opts, [])},
-
-      # MCP Router
-      {Cybernetic.Capabilities.MCPRouter, Keyword.get(opts, :mcp_router_opts, [])},
 
       # LLM CDN
       {Cybernetic.Capabilities.LLMCDN, Keyword.get(opts, :llm_cdn_opts, [])}

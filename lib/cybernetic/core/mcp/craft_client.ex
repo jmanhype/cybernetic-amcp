@@ -20,8 +20,9 @@ defmodule Cybernetic.Core.MCP.CraftClient do
   bridge needs — initialize handshake, `tools/list`, `tools/call` —
   and ignores server notifications.
 
-  `Cybernetic.MCP.HermesClient` remains the repo's (stub) plugin for
-  the general case; this client is specific to the Craft bridge.
+  No general Hermes MCP client is used anywhere in the repo (the
+  former stub plugin was deleted in the MCP cleanup, Issue #86);
+  this client is specific to the Craft bridge.
   """
 
   use GenServer
