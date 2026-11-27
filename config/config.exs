@@ -66,12 +66,17 @@ config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
   live_view: [signing_salt: "GI8HdsmX-Wn5IyWB"]
 
 # Craft Anything MCP bridge: registers the external Craft Anything
-# MCP server's tools in the Hermes registry. Disabled by default.
+# MCP server's tools in the Hermes registry. Enabled on Jay's
+# instruction (2026-11-27, MCP cleanup branch). The command is an
+# absolute path because the boot process's PATH may not include
+# ~/.local/bin; on hosts without the binary the bridge degrades to
+# a logged absence (CraftClient stops with :command_not_found and
+# the bridge stays up registering nothing) — no boot crash.
 # The --deep flag runs Craft in Deep mode (reads inside study
 # targets); the native toolset's tools are only listed in Deep mode.
 config :cybernetic, :craft_mcp,
-  enabled: false,
-  command: "craft-anything-cli",
+  enabled: true,
+  command: "/home/hatch/.local/bin/craft-anything-cli",
   args: ["--deep", "mcp"],
   toolsets: ["native", "browser"]
 
