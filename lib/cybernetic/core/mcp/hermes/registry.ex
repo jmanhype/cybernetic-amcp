@@ -2,6 +2,22 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   @moduledoc """
   Hermes MCP tool registry for AI agent capabilities.
   Manages tool discovery, registration, and invocation.
+
+  ## Boundary (Axiomatic Design coupling #9, Issue #86)
+
+  This registry is the single source of truth for MCP tool
+  *registration and invocation*: if a tool can be invoked, it is
+  registered here. It is NOT the semantic-discovery index.
+  `Cybernetic.Capabilities.Registry` owns discovery; a one-way
+  projection (`Cybernetic.Capabilities.ToolProjection`) mirrors the
+  tools registered here into it as embedded, searchable capability
+  records. The projection never writes back into this registry.
+
+  Every registration emits
+  `[:cybernetic, :mcp_registry, :tool_registered]` telemetry
+  (metadata: `%{name: name, tool: %Tool{}}`) so the projection — and
+  any other observer — can follow registrations event-by-event
+  instead of polling.
   """
   use GenServer
   require Logger
@@ -9,6 +25,7 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   @registry_table :hermes_tools
   @default_timeout 30_000
   @ready_event [:cybernetic, :mcp_registry, :ready]
+  @tool_registered_event [:cybernetic, :mcp_registry, :tool_registered]
 
   defmodule Tool do
     @type t :: %__MODULE__{
@@ -128,6 +145,12 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
     new_state = put_in(state.tools[name], tool)
 
     Logger.info("Registered MCP tool: #{name}")
+
+    # Coupling #9: notify observers (the Capabilities projection)
+    # that a new invocable tool exists. Fire-and-forget telemetry;
+    # registration semantics are unchanged.
+    :telemetry.execute(@tool_registered_event, %{}, %{name: name, tool: tool})
+
     {:reply, {:ok, tool}, new_state}
   end
 
@@ -296,9 +319,13 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
        }}
     ]
 
-    # Insert directly into ETS to avoid self-call
+    # Insert directly into ETS to avoid self-call. Each builtin
+    # still emits the registration event so event-driven observers
+    # (the Capabilities projection) see builtins the same way they
+    # see runtime registrations.
     Enum.each(tools, fn {name, tool} ->
       :ets.insert(@registry_table, {name, tool})
+      :telemetry.execute(@tool_registered_event, %{}, %{name: name, tool: tool})
     end)
 
     tools_count = length(tools)

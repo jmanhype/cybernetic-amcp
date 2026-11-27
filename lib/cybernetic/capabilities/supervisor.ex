@@ -4,6 +4,7 @@ defmodule Cybernetic.Capabilities.Supervisor do
 
   Manages the lifecycle of:
   - Capability Registry
+  - Tool Projection (one-way Hermes -> Capabilities bridge)
   - Planner Collaboration
   - Execution Handoff
   - MCP Router
@@ -36,6 +37,12 @@ defmodule Cybernetic.Capabilities.Supervisor do
     children = [
       # Capability Registry
       {Cybernetic.Capabilities.Registry, Keyword.get(opts, :registry_opts, [])},
+
+      # Tool Projection: mirrors Hermes-registered MCP tools into
+      # the Capability Registry as discoverable records (coupling
+      # #9). One-way only; degrades to idle if the Hermes registry
+      # is absent.
+      {Cybernetic.Capabilities.ToolProjection, Keyword.get(opts, :projection_opts, [])},
 
       # Planner Collaboration
       {Cybernetic.Capabilities.Planner.Collaboration, Keyword.get(opts, :planner_opts, [])},

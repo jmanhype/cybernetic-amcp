@@ -5,6 +5,19 @@ defmodule Cybernetic.Capabilities.Registry do
   Provides registration, lookup, and semantic discovery of capabilities
   using embeddings for similarity matching.
 
+  ## Boundary (Axiomatic Design coupling #9, Issue #86)
+
+  This registry owns *discovery*: semantic search over capability
+  records. It has no invocation API and never dispatches to a
+  capability's `provider`. MCP tool registration and invocation live
+  in `Cybernetic.Core.MCP.Hermes.Registry`, the source of truth for
+  what can be invoked. `Cybernetic.Capabilities.ToolProjection`
+  mirrors Hermes-registered tools into this registry as embedded,
+  discoverable records (marked with `metadata.mcp_tool` and
+  `provider: Cybernetic.Core.MCP.Hermes.Registry`), so `discover/1`
+  covers the real tool catalog. The projection is one-way: records
+  here never flow back into Hermes.
+
   ## Configuration
 
       config :cybernetic, Cybernetic.Capabilities.Registry,
