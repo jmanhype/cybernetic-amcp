@@ -9,6 +9,8 @@ defmodule Cybernetic.VSM.System4.Memory do
   use GenServer
   require Logger
 
+  alias Cybernetic.Intelligence.Embeddings
+
   @table_name :s4_memory
   # tokens
   @max_context_size 10_000
@@ -36,7 +38,8 @@ defmodule Cybernetic.VSM.System4.Memory do
           role: :user | :assistant | :system,
           content: String.t(),
           tokens: integer(),
-          metadata: map()
+          metadata: map(),
+          embedding: [float()] | nil
         }
 
   # Public API
@@ -126,7 +129,8 @@ defmodule Cybernetic.VSM.System4.Memory do
       role: role,
       content: content,
       tokens: tokens,
-      metadata: metadata
+      metadata: metadata,
+      embedding: entry_embedding(content)
     }
 
     # Store in ETS
@@ -181,13 +185,14 @@ defmodule Cybernetic.VSM.System4.Memory do
     limit = Keyword.get(opts, :limit, 5)
     threshold = Keyword.get(opts, :threshold, 0.7)
 
-    # Generate embedding for query (would use actual embedding service)
-    query_embedding = generate_embedding(query)
+    case Embeddings.embed(query) do
+      {:ok, query_embedding} ->
+        matches = search_by_embedding(query_embedding, threshold, limit, state)
+        {:reply, {:ok, matches}, update_cache_stats(state, false)}
 
-    # Search all memories
-    matches = search_by_embedding(query_embedding, threshold, limit, state)
-
-    {:reply, {:ok, matches}, update_cache_stats(state, false)}
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
   end
 
   @impl GenServer
@@ -328,21 +333,41 @@ defmodule Cybernetic.VSM.System4.Memory do
     end)
   end
 
-  defp generate_embedding(_text) do
-    # Placeholder - would call embedding service
-    # Could use OpenAI, Together, or local Ollama
-    Enum.map(1..768, fn _ -> :rand.uniform() end)
+  # Entries carry the embedding computed at store time. When the
+  # provider is unavailable the entry is stored with embedding: nil
+  # and semantic search simply skips it — no fabricated vector.
+  defp entry_embedding(content) do
+    case Embeddings.embed(content) do
+      {:ok, embedding} -> embedding
+      {:error, _reason} -> nil
+    end
   end
 
-  defp search_by_embedding(_query_embedding, _threshold, limit, _state) do
-    # Placeholder for semantic search
-    # Would compute cosine similarity with cached embeddings
-
-    all_entries = :ets.tab2list(@table_name)
-
-    all_entries
+  defp search_by_embedding(query_embedding, threshold, limit, _state) do
+    :ets.tab2list(@table_name)
     |> Enum.map(fn {_key, entry} -> entry end)
+    |> Enum.filter(&(&1.embedding != nil))
+    |> Enum.map(fn entry ->
+      {entry, cosine_similarity(query_embedding, entry.embedding)}
+    end)
+    |> Enum.filter(fn {_entry, similarity} -> similarity >= threshold end)
+    |> Enum.sort_by(fn {_entry, similarity} -> similarity end, :desc)
     |> Enum.take(limit)
+    |> Enum.map(fn {entry, _similarity} -> entry end)
+  end
+
+  defp cosine_similarity(a, b) when length(a) != length(b), do: 0.0
+
+  defp cosine_similarity(a, b) do
+    dot_product = Enum.zip(a, b) |> Enum.map(fn {x, y} -> x * y end) |> Enum.sum()
+    magnitude_a = :math.sqrt(Enum.map(a, &(&1 * &1)) |> Enum.sum())
+    magnitude_b = :math.sqrt(Enum.map(b, &(&1 * &1)) |> Enum.sum())
+
+    if magnitude_a == 0.0 or magnitude_b == 0.0 do
+      0.0
+    else
+      dot_product / (magnitude_a * magnitude_b)
+    end
   end
 
   defp estimate_tokens(content) when is_binary(content) do

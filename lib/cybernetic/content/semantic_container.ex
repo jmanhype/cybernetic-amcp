@@ -12,13 +12,14 @@ defmodule Cybernetic.Content.SemanticContainer do
   Integrates with:
   - HNSW index for similarity search
   - Storage layer for persistence
-  - ReqLLM for embedding generation
+  - Cybernetic.Intelligence.Embeddings for embedding generation
   """
 
   use GenServer
   require Logger
 
   alias Cybernetic.Config
+  alias Cybernetic.Intelligence.Embeddings
 
   # Types
   @type capability_ref :: String.t()
@@ -60,8 +61,6 @@ defmodule Cybernetic.Content.SemanticContainer do
   # 64KB
   @max_metadata_size 65_536
   @max_capabilities 100
-  # OpenAI ada-002 default
-  @embedding_dimensions 1536
   @cleanup_interval :timer.minutes(5)
 
   @telemetry [:cybernetic, :content, :container]
@@ -487,33 +486,17 @@ defmodule Cybernetic.Content.SemanticContainer do
     end
   end
 
+  # Embeddings come from the single shared DP
+  # (Cybernetic.Intelligence.Embeddings). There is deliberately no
+  # local fallback: if the provider fails, the error propagates and
+  # the container is stored without an embedding (see
+  # maybe_generate_embedding/3) instead of being indexed under a
+  # fabricated hash vector.
   @spec generate_embedding(binary()) :: {:ok, embedding()} | {:error, term()}
   defp generate_embedding(content) do
-    # Truncate content for embedding
-    text = truncate_for_embedding(content)
-
-    if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :embed, 2) do
-      try do
-        case ReqLLM.embed(Req.new(), input: text) do
-          {:ok, %{body: %{"data" => [%{"embedding" => embedding} | _]}}} ->
-            {:ok, embedding}
-
-          {:ok, %{data: [%{embedding: embedding} | _]}} ->
-            {:ok, embedding}
-
-          {:error, reason} ->
-            {:error, reason}
-
-          _ ->
-            {:ok, generate_fallback_embedding(text)}
-        end
-      rescue
-        e -> {:error, Exception.message(e)}
-      end
-    else
-      # Fallback: generate deterministic pseudo-embedding from content hash
-      {:ok, generate_fallback_embedding(content)}
-    end
+    content
+    |> truncate_for_embedding()
+    |> Embeddings.embed()
   end
 
   @spec truncate_for_embedding(binary()) :: String.t()
@@ -523,29 +506,6 @@ defmodule Cybernetic.Content.SemanticContainer do
     content
     |> to_string()
     |> String.slice(0, max_chars)
-  end
-
-  @spec generate_fallback_embedding(binary()) :: embedding()
-  defp generate_fallback_embedding(content) do
-    # Generate a deterministic embedding from content hash
-    # This allows similarity search to work even without LLM
-    hash = :crypto.hash(:sha256, content)
-
-    hash
-    |> :binary.bin_to_list()
-    |> Enum.take(@embedding_dimensions)
-    |> Enum.map(&(&1 / 255.0))
-    |> pad_embedding(@embedding_dimensions)
-  end
-
-  @spec pad_embedding([float()], pos_integer()) :: [float()]
-  defp pad_embedding(embedding, target_size) when length(embedding) >= target_size do
-    Enum.take(embedding, target_size)
-  end
-
-  defp pad_embedding(embedding, target_size) do
-    padding = List.duplicate(0.0, target_size - length(embedding))
-    embedding ++ padding
   end
 
   @spec store_content(map(), t(), binary()) :: :ok | {:error, term()}
@@ -583,7 +543,9 @@ defmodule Cybernetic.Content.SemanticContainer do
 
   defp index_container(%{hnsw_index: hnsw}, container) do
     if container.embedding do
-      case Cybernetic.Intelligence.HNSW.Index.insert(hnsw, container.id, container.embedding) do
+      case Cybernetic.Intelligence.HNSW.Index.insert(container.id, container.embedding,
+             server: hnsw
+           ) do
         :ok -> :ok
         {:error, _} = error -> error
       end
@@ -614,7 +576,7 @@ defmodule Cybernetic.Content.SemanticContainer do
   defp remove_from_hnsw(%{hnsw_index: nil}, _id), do: :ok
 
   defp remove_from_hnsw(%{hnsw_index: hnsw}, id) do
-    Cybernetic.Intelligence.HNSW.Index.delete(hnsw, id)
+    Cybernetic.Intelligence.HNSW.Index.delete(id, server: hnsw)
     :ok
   rescue
     _ -> :ok

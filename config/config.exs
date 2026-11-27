@@ -79,5 +79,14 @@ config :cybernetic, :craft_mcp,
   args: ["--deep", "mcp"],
   toolsets: ["native", "browser"]
 
+# Embeddings: the single embedding source for capabilities discovery,
+# content semantic search, and S4 memory (Axiomatic Design couplings
+# #4/#5). Default provider is Ollama (local, no API key) with its
+# nomic-embed-text model (768 dimensions). To use OpenAI instead:
+#   config :cybernetic, :embeddings, provider: :openai, dimensions: 1536
+# `dimensions` must match the provider model's output; it sizes the
+# HNSW index started by the application.
+config :cybernetic, :embeddings, provider: :ollama, dimensions: 768
+
 # Import environment specific config
 import_config "#{config_env()}.exs"
