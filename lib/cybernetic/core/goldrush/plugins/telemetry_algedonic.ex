@@ -140,6 +140,30 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     {:noreply, new_state}
   end
 
+  # Canonical Addressing
+
+  @doc """
+  Build the canonical algedonic routing key for a target system.
+
+  The canonical addressing scheme (coupling #6) routes inter-system
+  VSM traffic with `sN.<channel>` keys on the `cyb.commands`
+  exchange. Algedonic signals keep their full shape under the
+  system's prefix: `algedonic_routing_key("s3", :pain, :severe)`
+  is `"s3.algedonic.pain.severe"`. A `nil` level omits the suffix:
+  `algedonic_routing_key("s4", :pain, nil)` is `"s4.algedonic.pain"`.
+  """
+  @spec algedonic_routing_key(String.t(), :pain | :pleasure, atom() | nil) :: String.t()
+  def algedonic_routing_key(system, kind, nil), do: "#{system}.algedonic.#{kind}"
+
+  def algedonic_routing_key(system, kind, level),
+    do: "#{system}.algedonic.#{kind}.#{level}"
+
+  # The exchange the canonical scheme publishes on (config-overridable).
+  defp commands_exchange do
+    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
+    Map.get(exchanges, :commands, "cyb.commands")
+  end
+
   # Private Functions
 
   defp add_event(state, event) do
@@ -228,25 +252,32 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       recommendations: generate_pain_recommendations(success_rate, avg_latency)
     }
 
-    # Get exchange names from config
-    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
-    events_exchange = Map.get(exchanges, :events, "cyb.events")
-
-    # Route pain signals based on severity
+    # Route pain signals based on severity, using the canonical
+    # addressing scheme: sN.* keys on the commands exchange.
     case severity do
       :critical ->
         # Critical pain: Route to S5 (Policy) for system-wide changes
-        Publisher.publish(events_exchange, signal, routing_key: "vsm.s5.algedonic.pain.critical")
+        Publisher.publish(
+          commands_exchange(),
+          algedonic_routing_key("s5", :pain, :critical),
+          signal
+        )
+
         Logger.error("CRITICAL PAIN signal sent to S5 Policy: success_rate=#{success_rate}")
 
       :severe ->
         # Severe pain: Route to S3 (Control) for intervention
-        Publisher.publish(events_exchange, signal, routing_key: "vsm.s3.algedonic.pain.severe")
+        Publisher.publish(
+          commands_exchange(),
+          algedonic_routing_key("s3", :pain, :severe),
+          signal
+        )
+
         Logger.warning("SEVERE PAIN signal sent to S3 Control: success_rate=#{success_rate}")
 
       _ ->
         # Mild/moderate pain: Route to S4 (Intelligence) for analysis
-        Publisher.publish(events_exchange, signal, routing_key: "vsm.s4.algedonic.pain")
+        Publisher.publish(commands_exchange(), algedonic_routing_key("s4", :pain, nil), signal)
 
         Logger.warning(
           "PAIN signal sent to S4 Intelligence: success_rate=#{success_rate}, severity=#{severity}"
@@ -262,8 +293,7 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
 
     # Also report in-process to S3's ControlSupervisor, the single
     # owner of the algedonic path. The AMQP publishes above only
-    # reach it when AMQP is enabled (and its topic binding does not
-    # match these routing keys); this report closes the loop in
+    # reach it when AMQP is enabled; this report closes the loop in
     # every deployment mode.
     report_to_control(:pain, severity)
   end
@@ -281,24 +311,32 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       recommendations: generate_pleasure_recommendations(success_rate, avg_latency)
     }
 
-    # Get exchange names from config
-    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
-    events_exchange = Map.get(exchanges, :events, "cyb.events")
-
-    # Route pleasure signals based on intensity
+    # Route pleasure signals based on intensity, using the canonical
+    # addressing scheme: sN.* keys on the commands exchange.
     case intensity do
       :euphoric ->
         # Euphoric pleasure: Route to S5 (Policy) for optimization opportunities
-        Publisher.publish(events_exchange, signal,
-          routing_key: "vsm.s5.algedonic.pleasure.euphoric"
+        Publisher.publish(
+          commands_exchange(),
+          algedonic_routing_key("s5", :pleasure, :euphoric),
+          signal
         )
 
         Logger.info("EUPHORIC PLEASURE signal sent to S5 Policy: success_rate=#{success_rate}")
 
       :high ->
         # High pleasure: Route to both S4 (Intelligence) and S5 (Policy)
-        Publisher.publish(events_exchange, signal, routing_key: "vsm.s4.algedonic.pleasure.high")
-        Publisher.publish(events_exchange, signal, routing_key: "vsm.s5.algedonic.pleasure.high")
+        Publisher.publish(
+          commands_exchange(),
+          algedonic_routing_key("s4", :pleasure, :high),
+          signal
+        )
+
+        Publisher.publish(
+          commands_exchange(),
+          algedonic_routing_key("s5", :pleasure, :high),
+          signal
+        )
 
         Logger.info(
           "HIGH PLEASURE signal sent to S4 Intelligence & S5 Policy: success_rate=#{success_rate}"
@@ -306,7 +344,11 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
 
       _ ->
         # Moderate/mild pleasure: Route to S4 (Intelligence) for analysis
-        Publisher.publish(events_exchange, signal, routing_key: "vsm.s4.algedonic.pleasure")
+        Publisher.publish(
+          commands_exchange(),
+          algedonic_routing_key("s4", :pleasure, nil),
+          signal
+        )
 
         Logger.info(
           "PLEASURE signal sent to S4 Intelligence: success_rate=#{success_rate}, intensity=#{intensity}"

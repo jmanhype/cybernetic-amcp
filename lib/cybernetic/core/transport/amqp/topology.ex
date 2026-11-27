@@ -1,7 +1,21 @@
 defmodule Cybernetic.Core.Transport.AMQP.Topology do
   @moduledoc """
   AMQP topology setup for Cybernetic framework.
-  Defines durable exchanges, queues, and bindings for VSM systems.
+
+  This module is the SINGLE declaration site for the AMQP topology
+  (coupling #6 consolidation). The canonical addressing scheme for
+  inter-system VSM traffic is `sN.<channel>` routing keys published
+  on the `cyb.commands` exchange; each system's queue is bound with
+  the `sN.#` pattern so every key for that system routes to it:
+
+    * `cyb.s1.ops`     <- `cyb.commands`, `s1.#`
+    * `cyb.s2.coord`   <- `cyb.commands`, `s2.#`
+    * `cyb.s3.control` <- `cyb.commands`, `s3.#`
+    * `cyb.s4.llm`     <- `cyb.commands`, `s4.#`
+    * `cyb.s5.policy`  <- `cyb.commands`, `s5.#`
+
+  No other module declares VSM queues or bindings: the AMQP
+  Connection only connects, and the Publisher only publishes.
   """
 
   use GenServer
@@ -33,8 +47,10 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   # ]
 
   @queues [
-    # VSM System queues - match existing configuration
-    {"vsm.s1.operations",
+    # VSM system queues - the canonical addressing scheme (see
+    # moduledoc). Argument profiles mirror the retired vsm.sN.*
+    # queues they replace.
+    {"cyb.s1.ops",
      durable: true,
      arguments: [
        {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
@@ -42,7 +58,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
        {"x-message-ttl", :long, 300_000},
        {"x-overflow", :longstr, "drop-head"}
      ]},
-    {"vsm.s2.coordination",
+    {"cyb.s2.coord",
      durable: true,
      arguments: [
        {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
@@ -50,7 +66,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
        {"x-message-ttl", :long, 600_000},
        {"x-single-active-consumer", :bool, true}
      ]},
-    {"vsm.s3.control",
+    {"cyb.s3.control",
      durable: true,
      arguments: [
        {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
@@ -58,14 +74,14 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
        {"x-max-priority", :byte, 10},
        {"x-message-ttl", :long, 900_000}
      ]},
-    {"vsm.s4.intelligence",
+    {"cyb.s4.llm",
      durable: true,
      arguments: [
        {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
        {"x-max-length", :long, 20_000},
        {"x-message-ttl", :long, 3_600_000}
      ]},
-    {"vsm.s5.policy",
+    {"cyb.s5.policy",
      durable: true,
      arguments: [
        {"x-dead-letter-exchange", :longstr, "vsm.dlx"},
@@ -80,6 +96,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     # Telemetry aggregation
     {"telemetry.metrics", durable: true},
     {"telemetry.logs", durable: true},
+    {"cyb.telemetry.q", durable: true},
 
     # Event processing
     {"events.stream", durable: true},
@@ -104,19 +121,13 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   ]
 
   @bindings [
-    # VSM bindings to event exchange
-    {"cyb.events", "vsm.s1.operations", "vsm.s1.*"},
-    {"cyb.events", "vsm.s2.coordination", "vsm.s2.*"},
-    {"cyb.events", "vsm.s3.control", "vsm.s3.*"},
-    {"cyb.events", "vsm.s4.intelligence", "vsm.s4.*"},
-    {"cyb.events", "vsm.s5.policy", "vsm.s5.*"},
-
-    # VSM internal communication - using individual system exchanges
-    {"cyb.vsm.s1", "vsm.s1.operations", "s1.#"},
-    {"cyb.vsm.s2", "vsm.s2.coordination", "s2.#"},
-    {"cyb.vsm.s3", "vsm.s3.control", "s3.#"},
-    {"cyb.vsm.s4", "vsm.s4.intelligence", "s4.#"},
-    {"cyb.vsm.s5", "vsm.s5.policy", "s5.#"},
+    # VSM bindings - canonical scheme: every sN.* key published on
+    # cyb.commands routes to that system's queue
+    {"cyb.commands", "cyb.s1.ops", "s1.#"},
+    {"cyb.commands", "cyb.s2.coord", "s2.#"},
+    {"cyb.commands", "cyb.s3.control", "s3.#"},
+    {"cyb.commands", "cyb.s4.llm", "s4.#"},
+    {"cyb.commands", "cyb.s5.policy", "s5.#"},
 
     # MCP bindings - use cyb.mcp.tools exchange
     {"cyb.mcp.tools", "mcp.requests", "request"},
@@ -125,6 +136,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     # Telemetry bindings
     {"cyb.telemetry", "telemetry.metrics", "metrics.#"},
     {"cyb.telemetry", "telemetry.logs", "logs.#"},
+    {"cyb.telemetry", "cyb.telemetry.q", "#"},
 
     # Event stream binding
     {"cyb.events", "events.stream", "#"},
@@ -135,6 +147,21 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     # Retry queue binding to DLX
     {"vsm.dlx", "cyb.events.retry", "retry"}
   ]
+
+  @doc """
+  The queue declarations this module owns, as `{name, opts}` data.
+  Exposed so the consolidated topology can be verified without a
+  running broker.
+  """
+  @spec queues() :: [{String.t(), keyword()}]
+  def queues, do: @queues
+
+  @doc """
+  The bindings this module owns, as `{exchange, queue, routing_key}`
+  data. Exposed for broker-free verification (see `queues/0`).
+  """
+  @spec bindings() :: [{String.t(), String.t(), String.t()}]
+  def bindings, do: @bindings
 
   # GenServer callbacks
 
@@ -235,10 +262,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
       telemetry: :fanout,
       events: :topic,
       commands: :topic,
-      mcp_tools: :topic,
-      s1: :topic,
-      vsm: :topic,
-      dlx: :fanout
+      mcp_tools: :topic
     }
 
     Enum.reduce_while(exchanges, :ok, fn {key, exchange_name}, _acc ->
@@ -267,8 +291,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   defp handle_exchange_result(:ok, channel) do
     # Hardcoded special exchanges not in config
     special_exchanges = [
-      {"vsm.dlx", :fanout},
-      {"cybernetic.exchange", :topic}
+      {"vsm.dlx", :fanout}
     ]
 
     Enum.reduce_while(special_exchanges, :ok, fn {name, type}, _acc ->
@@ -346,11 +369,11 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
   @doc """
   Get queue name for a VSM system
   """
-  def queue_for_system(1), do: "vsm.s1.operations"
-  def queue_for_system(2), do: "vsm.s2.coordination"
-  def queue_for_system(3), do: "vsm.s3.control"
-  def queue_for_system(4), do: "vsm.s4.intelligence"
-  def queue_for_system(5), do: "vsm.s5.policy"
+  def queue_for_system(1), do: "cyb.s1.ops"
+  def queue_for_system(2), do: "cyb.s2.coord"
+  def queue_for_system(3), do: "cyb.s3.control"
+  def queue_for_system(4), do: "cyb.s4.llm"
+  def queue_for_system(5), do: "cyb.s5.policy"
   def queue_for_system(_), do: "events.stream"
 
   @doc """

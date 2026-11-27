@@ -881,10 +881,13 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     end
   end
 
+  # Canonical addressing (coupling #6): inter-system traffic uses
+  # sN.<channel> keys on the cyb.commands exchange. Coordination
+  # traffic for S2 uses the same s2.coordinate key S1 uses.
   defp send_to_s2(operation, data) do
     Publisher.publish(
-      "cybernetic.exchange",
-      "vsm.system2.coordination",
+      "cyb.commands",
+      "s2.coordinate",
       %{
         operation: operation,
         payload: data,
@@ -894,10 +897,12 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     )
   end
 
+  # Intelligence traffic for S4 uses the canonical s4.intelligence
+  # key (the same key S2 forwards with).
   defp send_to_s4(operation, data) do
     Publisher.publish(
-      "cybernetic.exchange",
-      "vsm.system4.intelligence",
+      "cyb.commands",
+      "s4.intelligence",
       %{
         operation: operation,
         payload: data,

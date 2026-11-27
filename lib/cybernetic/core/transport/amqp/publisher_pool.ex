@@ -304,11 +304,6 @@ defmodule Cybernetic.Core.Transport.AMQP.PublisherPool do
       {"cyb.events", :topic},
       {"cyb.commands", :topic},
       {"cyb.telemetry", :fanout},
-      {"cyb.vsm.s1", :topic},
-      {"cyb.vsm.s2", :topic},
-      {"cyb.vsm.s3", :topic},
-      {"cyb.vsm.s4", :topic},
-      {"cyb.vsm.s5", :topic},
       {"cyb.mcp.tools", :topic},
       {"vsm.dlx", :fanout}
     ]

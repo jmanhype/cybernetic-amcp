@@ -48,9 +48,11 @@ Implementation of Stafford Beer's Viable System Model with 5 recursive systems.
 5. System 4 ↔ System 5 (policy)
 
 ## AMQP Queues
-- `vsm.system1.operations`
-- `vsm.system2.coordination`
-- `vsm.system3.control`
-- `vsm.system4.intelligence`
-- `vsm.system5.policy`
+Canonical scheme: `sN.<channel>` keys on the `cyb.commands` exchange,
+declared solely by `Cybernetic.Core.Transport.AMQP.Topology`.
+- `cyb.s1.ops` (`s1.#`)
+- `cyb.s2.coord` (`s2.#`)
+- `cyb.s3.control` (`s3.#`)
+- `cyb.s4.llm` (`s4.#`)
+- `cyb.s5.policy` (`s5.#`)
 EOF < /dev/null

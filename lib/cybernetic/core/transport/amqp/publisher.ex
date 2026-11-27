@@ -14,11 +14,6 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
       {"cyb.commands", :topic},
       # telemetry is fanout, not topic
       {"cyb.telemetry", :fanout},
-      {"cyb.vsm.s1", :topic},
-      {"cyb.vsm.s2", :topic},
-      {"cyb.vsm.s3", :topic},
-      {"cyb.vsm.s4", :topic},
-      {"cyb.vsm.s5", :topic},
       {"cyb.mcp.tools", :topic},
       {"vsm.dlx", :fanout}
     ]
@@ -128,29 +123,14 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
     end
   end
 
+  # The Publisher declares the exchanges it publishes to, and
+  # nothing else: queues and bindings are declared exclusively by
+  # Cybernetic.Core.Transport.AMQP.Topology (coupling #6
+  # consolidation - single declaration site).
   defp setup_exchanges(channel) do
     Enum.each(get_exchanges(), fn {name, type} ->
       AMQP.Exchange.declare(channel, name, type, durable: true)
       Logger.info("Declared exchange: #{name} (#{type})")
-    end)
-
-    # Setup queues using config
-    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
-    commands_exchange = Map.get(exchanges, :commands, "cyb.commands")
-    telemetry_exchange = Map.get(exchanges, :telemetry, "cyb.telemetry")
-
-    [
-      {"cyb.s1.ops", commands_exchange, "s1.*"},
-      {"cyb.s2.coord", commands_exchange, "s2.*"},
-      {"cyb.s3.control", commands_exchange, "s3.*"},
-      {"cyb.s4.llm", commands_exchange, "s4.*"},
-      {"cyb.s5.policy", commands_exchange, "s5.*"},
-      {"cyb.telemetry.q", telemetry_exchange, "#"}
-    ]
-    |> Enum.each(fn {queue, exchange, routing_key} ->
-      AMQP.Queue.declare(channel, queue, durable: true)
-      AMQP.Queue.bind(channel, queue, exchange, routing_key: routing_key)
-      Logger.debug("Bound #{queue} to #{exchange} with key #{routing_key}")
     end)
   end
 
