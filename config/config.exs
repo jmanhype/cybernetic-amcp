@@ -88,7 +88,7 @@ config :cybernetic, :craft_mcp,
 # Magg persists its server config in .magg/config.json under its
 # working directory, so :cd pins the sidecar directory.
 config :cybernetic, :magg,
-  enabled: false,
+  enabled: true,
   command: "/home/hatch/workspace/magg-sidecar/venv/bin/magg",
   args: ["serve"],
   cd: "/home/hatch/workspace/magg-sidecar"
