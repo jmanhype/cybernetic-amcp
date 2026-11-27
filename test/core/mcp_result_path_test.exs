@@ -71,12 +71,13 @@ defmodule Cybernetic.Core.MCP.ResultPathTest do
   end
 
   test "handler tool_request for a failing tool returns an error response" do
-    # vsm_query's handler module does not exist, so invocation fails;
-    # the response must carry the failure instead of raising.
+    # vsm_query's handler is real now; an unknown system makes the
+    # tool itself return an error, and the response must carry the
+    # failure instead of raising.
     message = %{
       "type" => "tool_request",
       "tool" => "vsm_query",
-      "params" => %{"system" => "s1", "query" => "status"},
+      "params" => %{"system" => "s9", "query" => "status"},
       "id" => "req-error-1"
     }
 

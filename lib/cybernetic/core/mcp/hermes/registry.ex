@@ -18,6 +18,16 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
   (metadata: `%{name: name, tool: %Tool{}}`) so the projection — and
   any other observer — can follow registrations event-by-event
   instead of polling.
+
+  ## Handler contract
+
+  A `{module, function}` handler is called with `[params, context]`,
+  `[params]`, or `[]`, whichever arity it exports. Its return value
+  is normalized into the invocation result: `{:ok, value}` and
+  `{:error, reason}` tuples pass through unchanged, any other value
+  is wrapped in `{:ok, value}`, and a raised exception becomes
+  `{:error, message}`. Handlers therefore report expected failures
+  as `{:error, reason}` rather than raising.
   """
   use GenServer
   require Logger
@@ -363,8 +373,11 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
           true -> [params]
         end
 
-      result = apply(module, function, args)
-      {:ok, result}
+      case apply(module, function, args) do
+        {:ok, _value} = ok -> ok
+        {:error, _reason} = error -> error
+        result -> {:ok, result}
+      end
     rescue
       e ->
         Logger.error("Tool invocation failed: #{inspect(e)}")
