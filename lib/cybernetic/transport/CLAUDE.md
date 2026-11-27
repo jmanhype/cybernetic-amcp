@@ -13,16 +13,21 @@ Handles all inter-system communication via AMQP.
 ## Configuration
 - Connection URL from `AMQP_URL` env var
 - Default: `amqp://guest:guest@localhost:5672`
-- Exchange: `cybernetic.exchange` (topic, durable)
+- Exchange: `cyb.commands` (topic, durable)
 
 ## Queue Structure
+
+Canonical addressing scheme: inter-system traffic uses `sN.<channel>`
+routing keys on the `cyb.commands` exchange. All queues and bindings
+are declared by a single site, `Cybernetic.Core.Transport.AMQP.Topology`.
+
 ```
-cybernetic.exchange (topic)
-├── vsm.system1.operations
-├── vsm.system2.coordination
-├── vsm.system3.control
-├── vsm.system4.intelligence
-└── vsm.system5.policy
+cyb.commands (topic)
+├── cyb.s1.ops      (s1.#)
+├── cyb.s2.coord    (s2.#)
+├── cyb.s3.control  (s3.#)
+├── cyb.s4.llm      (s4.#)
+└── cyb.s5.policy   (s5.#)
 ```
 
 ## Message Format

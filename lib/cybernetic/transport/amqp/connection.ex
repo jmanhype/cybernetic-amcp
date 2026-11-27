@@ -1,6 +1,11 @@
 defmodule Cybernetic.Transport.AMQP.Connection do
   @moduledoc """
   AMQP connection manager with automatic reconnection and pool management.
+
+  This module only connects. It declares no exchanges, queues, or
+  bindings: the AMQP topology has a single declaration site,
+  `Cybernetic.Core.Transport.AMQP.Topology` (coupling #6
+  consolidation).
   """
   use GenServer
   require Logger
@@ -20,8 +25,7 @@ defmodule Cybernetic.Transport.AMQP.Connection do
        config: config,
        connection: nil,
        channel: nil,
-       status: :disconnected,
-       queues: config[:queues] || []
+       status: :disconnected
      }}
   end
 
@@ -70,7 +74,6 @@ defmodule Cybernetic.Transport.AMQP.Connection do
 
   def handle_info({:connection_result, {:ok, conn, chan}}, state) do
     Logger.info("AMQP connected successfully")
-    setup_exchanges_and_queues(chan, state.config)
     {:noreply, %{state | connection: conn, channel: chan, status: :connected}}
   end
 
@@ -94,22 +97,6 @@ defmodule Cybernetic.Transport.AMQP.Connection do
       Process.monitor(conn.pid)
       {:ok, conn, chan}
     end
-  end
-
-  defp setup_exchanges_and_queues(channel, config) do
-    exchange = config[:exchange] || "cybernetic.exchange"
-    exchange_type = config[:exchange_type] || :topic
-
-    # Declare exchange
-    AMQP.Exchange.declare(channel, exchange, exchange_type, durable: true)
-
-    # Setup VSM system queues
-    Enum.each(config[:queues] || [], fn {system, queue_name} ->
-      AMQP.Queue.declare(channel, queue_name, durable: true)
-      routing_key = "vsm.#{system}.*"
-      AMQP.Queue.bind(channel, queue_name, exchange, routing_key: routing_key)
-      Logger.debug("Bound queue #{queue_name} with routing key #{routing_key}")
-    end)
   end
 
   def terminate(_reason, %{connection: conn}) when not is_nil(conn) do

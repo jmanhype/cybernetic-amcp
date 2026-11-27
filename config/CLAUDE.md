@@ -11,8 +11,10 @@
 
 ### AMQP Settings
 - URL: `amqp://guest:guest@localhost:5672`
-- Exchange: `cybernetic.exchange` (topic, durable)
-- Queues for each VSM system (S1-S5)
+- Exchange: `cyb.commands` (topic, durable)
+- Queues for each VSM system (S1-S5) are declared in code by
+  `Cybernetic.Core.Transport.AMQP.Topology` (canonical `cyb.sN.*`
+  queues), not in config
 
 ### VSM System Configuration
 - System1: Operations queue
