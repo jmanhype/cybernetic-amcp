@@ -35,6 +35,8 @@ defmodule Cybernetic.Capabilities.LLMCDN do
 
   require Logger
 
+  alias Cybernetic.Intelligence.Embeddings
+
   @type fingerprint :: String.t()
   @type cache_entry :: %{
           fingerprint: fingerprint(),
@@ -428,29 +430,33 @@ defmodule Cybernetic.Capabilities.LLMCDN do
     end
   end
 
+  # Embeddings come from the single shared DP,
+  # Cybernetic.Intelligence.Embeddings (coupling register #4/#5).
+  # This module previously attempted ReqLLM.embeddings/1 and otherwise
+  # fabricated a deterministic pseudo-embedding from a SHA-256 hash of
+  # the input, so embed/2 effectively never failed. Provider errors
+  # from the shared module now propagate as {:error, reason} through
+  # the normal llm_response path (replied to waiters, never cached).
   @spec call_llm_embed(term()) :: {:ok, term()} | {:error, term()}
   defp call_llm_embed(input) do
-    # P2 Fix: Use apply/3 to avoid compile warnings for optional dependency
-    try do
-      if Code.ensure_loaded?(ReqLLM) and function_exported?(ReqLLM, :embeddings, 1) do
-        apply(ReqLLM, :embeddings, [%{input: input}])
-      else
-        # Placeholder for testing - generate pseudo-embeddings
-        embedding =
-          input
-          |> to_string()
-          |> then(&:crypto.hash(:sha256, &1))
-          |> :binary.bin_to_list()
-          |> Enum.take(16)
-          |> Enum.map(&(&1 / 255.0))
+    result =
+      input
+      |> List.wrap()
+      |> Enum.reduce_while({:ok, []}, fn text, {:ok, acc} ->
+        case Embeddings.embed(to_string(text)) do
+          {:ok, embedding} -> {:cont, {:ok, [%{embedding: embedding} | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
 
-        {:ok, %{data: [%{embedding: embedding}]}}
-      end
-    rescue
-      e ->
-        Logger.error("LLM embed failed", error: inspect(e))
-        {:error, Exception.message(e)}
+    case result do
+      {:ok, data} -> {:ok, %{data: Enum.reverse(data)}}
+      {:error, _} = error -> error
     end
+  rescue
+    e ->
+      Logger.error("LLM embed failed", error: inspect(e))
+      {:error, Exception.message(e)}
   end
 
   @spec schedule_cleanup() :: reference()
