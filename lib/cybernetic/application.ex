@@ -111,6 +111,17 @@ defmodule Cybernetic.Application do
           []
         end
 
+      # Magg MCP aggregator bridge - only when explicitly enabled
+      # via config :cybernetic, :magg, enabled: true. It spawns the
+      # external `magg serve` sidecar process and registers its
+      # tools in the Hermes registry, so it stays off by default.
+      magg_children =
+        if Application.get_env(:cybernetic, :magg, []) |> Keyword.get(:enabled, false) do
+          [Cybernetic.MCP.MAGGAdapter]
+        else
+          []
+        end
+
       amqp_children =
         if amqp_enabled? do
           [
@@ -158,6 +169,7 @@ defmodule Cybernetic.Application do
                # MCP Registry
                Cybernetic.Core.MCP.Hermes.Registry,
                craft_mcp_children,
+               magg_children,
                # Circuit Breaker Registry
                {Registry,
                 keys: :unique, name: Cybernetic.Core.Resilience.AdaptiveCircuitBreaker.Registry},
