@@ -4,10 +4,15 @@ defmodule Cybernetic.Intelligence.EmbeddingsWiringTest.FailingProvider do
 end
 
 defmodule Cybernetic.Intelligence.EmbeddingsWiringTest.NullStorage do
-  @moduledoc "In-memory stand-in for the SemanticContainer storage adapter (put/3 shape it calls)."
-  def put(_path, _content, _tenant_id), do: :ok
-  def get(_path, _tenant_id), do: {:error, :not_found}
-  def delete(_path, _tenant_id), do: :ok
+  @moduledoc """
+  In-memory stand-in for the SemanticContainer storage adapter, mirroring
+  the canonical Cybernetic.Storage.Adapter contract:
+  put(tenant_id, path, content) -> {:ok, artifact} and
+  get/delete(tenant_id, path).
+  """
+  def put(_tenant_id, _path, _content), do: {:ok, %{}}
+  def get(_tenant_id, _path), do: {:error, :not_found}
+  def delete(_tenant_id, _path), do: :ok
 end
 
 defmodule Cybernetic.Intelligence.EmbeddingsWiringTest do

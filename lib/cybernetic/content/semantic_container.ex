@@ -512,7 +512,8 @@ defmodule Cybernetic.Content.SemanticContainer do
   defp store_content(state, container, content) do
     path = content_path(container)
 
-    case state.storage_adapter.put(path, content, container.tenant_id) do
+    case state.storage_adapter.put(container.tenant_id, path, content) do
+      {:ok, _artifact} -> :ok
       :ok -> :ok
       {:error, _} = error -> error
     end
@@ -521,13 +522,13 @@ defmodule Cybernetic.Content.SemanticContainer do
   @spec fetch_content(map(), t()) :: {:ok, binary()} | {:error, term()}
   defp fetch_content(state, container) do
     path = content_path(container)
-    state.storage_adapter.get(path, container.tenant_id)
+    state.storage_adapter.get(container.tenant_id, path)
   end
 
   @spec delete_content(map(), t()) :: :ok
   defp delete_content(state, container) do
     path = content_path(container)
-    state.storage_adapter.delete(path, container.tenant_id)
+    state.storage_adapter.delete(container.tenant_id, path)
     :ok
   rescue
     _ -> :ok
