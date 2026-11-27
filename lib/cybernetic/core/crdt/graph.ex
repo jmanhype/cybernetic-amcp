@@ -6,6 +6,8 @@ defmodule Cybernetic.Core.CRDT.Graph do
   use GenServer
   require Logger
 
+  alias Cybernetic.Core.CRDT.GraphQueries
+
   @table :crdt_graph
 
   @typedoc "Node identifier (any term)"
@@ -180,6 +182,36 @@ defmodule Cybernetic.Core.CRDT.Graph do
   def get_state do
     GenServer.call(__MODULE__, :get_state)
   end
+
+  @doc """
+  Query the graph through the validated query executor
+  (`Cybernetic.Core.CRDT.GraphQueries`).
+
+  This is the handler behind the MCP registry's `crdt_query`
+  tool: it bridges the tool's `%{query: ..., params: ...}` shape
+  onto `GraphQueries.execute/3`. The query name may be an atom
+  or a string; a string naming a known query type is converted
+  to that atom, and anything else is passed through untouched so
+  the executor's own validation produces its
+  "Unknown query type" error.
+  """
+  @spec query(map(), map()) :: {:ok, GraphQueries.Result.t()} | {:error, String.t()}
+  def query(params, context \\ %{}) when is_map(params) do
+    query_type = params[:query] || params["query"]
+    query_params = params[:params] || params["params"] || %{}
+
+    GraphQueries.execute(normalize_query_type(query_type), query_params, context: context)
+  end
+
+  defp normalize_query_type(type) when is_atom(type), do: type
+
+  defp normalize_query_type(type) when is_binary(type) do
+    Enum.find(GraphQueries.list_query_types(), type, fn known ->
+      Atom.to_string(known) == type
+    end)
+  end
+
+  defp normalize_query_type(type), do: type
 
   # Server callbacks
 
