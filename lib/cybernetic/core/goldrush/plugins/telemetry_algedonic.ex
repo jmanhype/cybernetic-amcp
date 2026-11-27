@@ -259,6 +259,13 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       %{severity: signal.severity, success_rate: success_rate},
       signal
     )
+
+    # Also report in-process to S3's ControlSupervisor, the single
+    # owner of the algedonic path. The AMQP publishes above only
+    # reach it when AMQP is enabled (and its topic binding does not
+    # match these routing keys); this report closes the loop in
+    # every deployment mode.
+    report_to_control(:pain, severity)
   end
 
   defp emit_pleasure_signal(success_rate, avg_latency, metrics) do
@@ -312,6 +319,35 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       %{intensity: signal.intensity, success_rate: success_rate},
       signal
     )
+
+    # Also report in-process to S3's ControlSupervisor (see
+    # emit_pain_signal).
+    report_to_control(:pleasure, intensity)
+  end
+
+  # The algedonic intensity scale shared with
+  # Cybernetic.VSM.System4.MessageHandler: ControlSupervisor
+  # processes pain above 0.7 and auto-intervenes above 0.8.
+  defp report_to_control(type, level) do
+    if Process.whereis(Cybernetic.VSM.System3.ControlSupervisor) do
+      intensity =
+        case level do
+          :critical -> 0.95
+          :euphoric -> 0.95
+          :severe -> 0.85
+          :high -> 0.85
+          :moderate -> 0.75
+          _other -> 0.5
+        end
+
+      Cybernetic.VSM.System3.ControlSupervisor.report_algedonic(
+        type,
+        intensity,
+        :goldrush_telemetry
+      )
+    end
+
+    :ok
   end
 
   defp calculate_pain_severity(success_rate) do

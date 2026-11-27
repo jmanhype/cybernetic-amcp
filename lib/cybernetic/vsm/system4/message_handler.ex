@@ -143,6 +143,14 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     # Send intervention (for test purposes, we'll emit telemetry)
     :telemetry.execute([:vsm, :s4, :intervention], %{severity: severity}, intervention)
 
+    # Close the algedonic loop: forward the signal to S3's
+    # ControlSupervisor, the single owner of the algedonic path
+    # (buffer, thresholds, intervention). Until now this handler was
+    # a dead end — signals arrived from S1 and went no further than
+    # telemetry, while ControlSupervisor's algedonic machinery was
+    # only ever exercised by tests.
+    forward_algedonic(:pain, severity, payload)
+
     # Also send directly to test collector if present
     if test_collector =
          :persistent_term.get({:test_collector, Cybernetic.Transport.InMemory}, nil) do
@@ -182,6 +190,9 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     # Send optimization (for test purposes, we'll emit telemetry)
     :telemetry.execute([:vsm, :s4, :optimization], %{intensity: intensity}, optimization)
 
+    # Close the algedonic loop (see handle_pain_signal).
+    forward_algedonic(:pleasure, intensity, payload)
+
     # Also send directly to test collector if present
     if test_collector =
          :persistent_term.get({:test_collector, Cybernetic.Transport.InMemory}, nil) do
@@ -189,6 +200,47 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     end
 
     Logger.info("System4: Generated optimization - #{strategy}")
+
+    :ok
+  end
+
+  # The algedonic intensity scale shared by every producer that
+  # reports into ControlSupervisor (this handler and the Goldrush
+  # TelemetryAlgedonic plugin): ControlSupervisor processes pain
+  # above 0.7 and auto-intervenes above 0.8, so :moderate (what S1
+  # emits for its error bursts) lands in the escalate-for-analysis
+  # band, and only :severe / :critical trigger intervention.
+  defp algedonic_intensity(level) do
+    case level do
+      :critical -> 0.95
+      :euphoric -> 0.95
+      :severe -> 0.85
+      :high -> 0.85
+      :moderate -> 0.75
+      _other -> 0.5
+    end
+  end
+
+  defp algedonic_source(payload) do
+    case Map.get(payload, "source_system") do
+      "s1" -> :s1
+      "s2" -> :s2
+      "s3" -> :s3
+      "s5" -> :s5
+      _other -> :s4
+    end
+  end
+
+  defp forward_algedonic(type, level, payload) do
+    # ControlSupervisor runs in the full tree; in reduced trees the
+    # signal stays telemetry-only rather than crashing the handler.
+    if Process.whereis(Cybernetic.VSM.System3.ControlSupervisor) do
+      Cybernetic.VSM.System3.ControlSupervisor.report_algedonic(
+        type,
+        algedonic_intensity(level),
+        algedonic_source(payload)
+      )
+    end
 
     :ok
   end
