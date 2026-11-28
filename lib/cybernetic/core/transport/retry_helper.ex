@@ -52,6 +52,13 @@ defmodule Cybernetic.Core.Transport.RetryHelper do
             result
 
           {:error, reason} = error ->
+            # Phase 1 (IP-35): a retry is a span EVENT on the
+            # current (consume) span, not a root span of its own.
+            Cybernetic.Telemetry.OTEL.add_event("amqp.retry", %{
+              attempt: retries + 1,
+              reason: inspect(reason)
+            })
+
             new_headers = increment_retry(headers)
             delay_ms = calculate_backoff(retries, Keyword.get(opts, :delay_base, 1000))
 

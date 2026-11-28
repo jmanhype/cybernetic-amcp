@@ -37,6 +37,20 @@ defmodule Cybernetic.VSM.System4.Router do
 
       result = try_chain(episode, chain, opts, attempts)
 
+      # Phase 1 (IP-35): the pre-existing s4.route span gains the
+      # provider that actually served the episode.
+      case result do
+        {:ok, _result, %{provider: provider}} ->
+          OpenTelemetry.Span.set_attribute(
+            OpenTelemetry.Tracer.current_span_ctx(),
+            :provider,
+            to_string(provider)
+          )
+
+        _other ->
+          :ok
+      end
+
       latency = System.monotonic_time(:millisecond) - start_time
 
       emit_route_telemetry(episode, chain, result, latency, attempts)

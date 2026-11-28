@@ -135,20 +135,43 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
     opts =
       Keyword.merge([exchange: "cyb.commands", routing_key: meta.routing_key], opts)
 
-    attempt = fn ->
-      try do
-        process_message(message, meta, %{})
-        :ok
-      rescue
-        error -> {:error, {:processing_raised, error}}
-      catch
-        kind, reason -> {:error, {:processing_caught, kind, reason}}
-      end
-    end
+    # Phase 1 (IP-35): consume span parented to the publisher's
+    # trace context; the S4 processing runs as its child span.
+    parent_ctx =
+      Cybernetic.Telemetry.OTEL.extract_context(Map.get(meta, :headers) || [])
 
-    case RetryHelper.with_retry(headers, payload, attempt, opts) do
-      {:error, :poison} -> :reject
-      _other -> :ack
+    token = :otel_ctx.attach(parent_ctx)
+
+    try do
+      Cybernetic.Telemetry.OTEL.with_span(
+        "amqp.consume",
+        %{routing_key: meta.routing_key},
+        fn ->
+          attempt = fn ->
+            Cybernetic.Telemetry.OTEL.with_span(
+              "vsm.dispatch",
+              %{system: :system4, routing_key: meta.routing_key},
+              fn ->
+                try do
+                  process_message(message, meta, %{})
+                  :ok
+                rescue
+                  error -> {:error, {:processing_raised, error}}
+                catch
+                  kind, reason -> {:error, {:processing_caught, kind, reason}}
+                end
+              end
+            )
+          end
+
+          case RetryHelper.with_retry(headers, payload, attempt, opts) do
+            {:error, :poison} -> :reject
+            _other -> :ack
+          end
+        end
+      )
+    after
+      :otel_ctx.detach(token)
     end
   end
 

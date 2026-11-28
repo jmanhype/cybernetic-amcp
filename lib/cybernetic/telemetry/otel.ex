@@ -71,15 +71,21 @@ defmodule Cybernetic.Telemetry.OTEL do
   Extract trace context from AMQP headers
   """
   def extract_context(headers) when is_list(headers) do
-    headers_map =
-      headers
-      |> Enum.map(fn
+    # Two carrier-contract fixes (opentelemetry_api 1.4.1), Phase 1
+    # (IP-35): the propagator's default carrier is a list of
+    # {key, value} tuples, not the map this function used to build
+    # (a map carrier silently extracts nothing); and extract/1
+    # attaches the result to the calling process and returns a
+    # detach token, not a context - extract_to/2 returns the
+    # extracted context itself, which is what callers here attach
+    # and detach around a unit of work.
+    carrier =
+      Enum.map(headers, fn
         {k, _type, v} -> {to_string(k), to_string(v)}
         {k, v} -> {to_string(k), to_string(v)}
       end)
-      |> Map.new()
 
-    :otel_propagator_text_map.extract(headers_map)
+    :otel_propagator_text_map.extract_to(:otel_ctx.get_current(), carrier)
   end
 
   # P0 Security: Whitelist of known OTEL propagation headers to prevent atom DoS
@@ -101,12 +107,17 @@ defmodule Cybernetic.Telemetry.OTEL do
   Inject trace context into AMQP headers
   """
   def inject_context(headers \\ []) do
-    ctx_map = %{}
-    updated_map = :otel_propagator_text_map.inject(ctx_map)
+    # The text-map propagator's default carrier is a list of
+    # {key, value} tuples (opentelemetry_api 1.4.1). Passing a map
+    # (as this function did) makes the composite propagator's
+    # carrier-set fail internally and return the carrier unchanged
+    # - injection silently no-oped. Fixed in Phase 1 (IP-35): the
+    # publish seam's propagation depends on this working.
+    injected = :otel_propagator_text_map.inject([])
 
     # Convert back to AMQP header format using whitelist
     amqp_headers =
-      updated_map
+      injected
       |> Enum.filter(fn {k, _v} -> Map.has_key?(@otel_header_whitelist, k) end)
       |> Enum.map(fn {k, v} ->
         {Map.fetch!(@otel_header_whitelist, k), :longstr, to_string(v)}
