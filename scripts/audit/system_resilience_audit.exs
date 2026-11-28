@@ -489,12 +489,18 @@ defmodule SystemResilienceAudit do
   defp check_rabbitmq_direct do
     try do
       config = Application.get_env(:cybernetic, :amqp, [])
-      url = config[:url] || "amqp://cybernetic:changeme@localhost:5672"
 
-      case AMQP.Connection.open(url) do
-        {:ok, conn} ->
-          AMQP.Connection.close(conn)
-          :healthy
+      # No fallback URL: never connect with embedded credentials.
+      case config[:url] do
+        url when is_binary(url) and url != "" ->
+          case AMQP.Connection.open(url) do
+            {:ok, conn} ->
+              AMQP.Connection.close(conn)
+              :healthy
+
+            _ ->
+              :unhealthy
+          end
 
         _ ->
           :unhealthy

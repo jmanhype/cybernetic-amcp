@@ -9,7 +9,7 @@ Mix.install([
 defmodule FinalVerification do
   @services [
     {"RabbitMQ Management", "http://localhost:15672/api/overview", 
-     [{"Authorization", "Basic " <> Base.encode64("cybernetic:changeme")}]},
+     [{"Authorization", "Basic " <> Base.encode64("cybernetic:" <> (System.get_env("RABBITMQ_PASSWORD") || ""))}]},
     {"Jaeger UI", "http://localhost:16686/api/services", []},
     {"Prometheus", "http://localhost:9090/api/v1/targets", []},
     {"Grafana", "http://localhost:3000/api/health", 
@@ -168,7 +168,7 @@ defmodule FinalVerification do
     IO.puts("   ❌ Errors: #{error_count}")
     
     IO.puts("\n📌 Quick Access URLs:")
-    IO.puts("   • RabbitMQ: http://localhost:15672 (cybernetic/changeme)")
+    IO.puts("   • RabbitMQ: http://localhost:15672 (user cybernetic, password from RABBITMQ_PASSWORD)")
     IO.puts("   • Jaeger: http://localhost:16686")
     IO.puts("   • Prometheus: http://localhost:9090")
     IO.puts("   • Grafana: http://localhost:3000 (admin/changeme)")

@@ -133,12 +133,19 @@ defmodule Cybernetic.Health.Monitor do
   defp check_rabbitmq do
     try do
       config = Application.get_env(:cybernetic, :amqp, [])
-      url = config[:url] || "amqp://cybernetic:changeme@localhost:5672"
 
-      case AMQP.Connection.open(url) do
-        {:ok, conn} ->
-          AMQP.Connection.close(conn)
-          :healthy
+      # No fallback URL: without a configured AMQP URL there is no
+      # broker to check. Never connect with embedded credentials.
+      case config[:url] do
+        url when is_binary(url) and url != "" ->
+          case AMQP.Connection.open(url) do
+            {:ok, conn} ->
+              AMQP.Connection.close(conn)
+              :healthy
+
+            _ ->
+              :unhealthy
+          end
 
         _ ->
           :unhealthy

@@ -66,10 +66,24 @@ defmodule Mix.Tasks.Cyb.Probe do
   defp probe_amqp_roundtrip do
     IO.write("  Checking AMQP connectivity... ")
 
+    # Use the configured AMQP URL (config :cybernetic, :amqp). There
+    # is no default: probing with embedded default credentials would
+    # report a broker reachable on credentials nobody configured.
+    url = Application.get_env(:cybernetic, :amqp, []) |> Keyword.get(:url)
+
+    case url do
+      url when is_binary(url) and url != "" ->
+        probe_amqp_roundtrip(url)
+
+      _ ->
+        IO.puts("✗ (AMQP_URL not configured)")
+        {:error, :amqp_url_not_configured}
+    end
+  end
+
+  defp probe_amqp_roundtrip(url) do
     # Try to connect and declare a test queue
-    case AMQP.Connection.open(
-           Application.get_env(:cybernetic, :amqp_url, "amqp://guest:guest@localhost:5672")
-         ) do
+    case AMQP.Connection.open(url) do
       {:ok, conn} ->
         case AMQP.Channel.open(conn) do
           {:ok, chan} ->
