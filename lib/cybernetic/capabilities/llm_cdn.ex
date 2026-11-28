@@ -1,6 +1,6 @@
 defmodule Cybernetic.Capabilities.LLMCDN do
   @moduledoc """
-  Goldrush LLM-CDN for caching and deduplicating LLM requests.
+  LLM-CDN for caching and deduplicating LLM requests.
 
   Provides request fingerprinting, caching, and deduplication to reduce
   redundant LLM API calls and improve response times.

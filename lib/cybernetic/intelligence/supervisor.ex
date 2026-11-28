@@ -3,7 +3,6 @@ defmodule Cybernetic.Intelligence.Supervisor do
   Supervisor for Intelligence layer components.
 
   Manages:
-  - DeterministicCache - Content-addressable cache with Bloom filter
   - WorkflowHooks - CEP pattern matching and workflow triggers
   - ZombieDetector - Process health monitoring
   - HNSWIndex - Vector similarity search
@@ -13,7 +12,6 @@ defmodule Cybernetic.Intelligence.Supervisor do
 
   require Logger
 
-  alias Cybernetic.Intelligence.Cache.DeterministicCache
   alias Cybernetic.Intelligence.CEP.WorkflowHooks
   alias Cybernetic.Intelligence.Zombie.Detector, as: ZombieDetector
   alias Cybernetic.Intelligence.HNSW.Index, as: HNSWIndex
@@ -32,14 +30,6 @@ defmodule Cybernetic.Intelligence.Supervisor do
     Logger.info("Intelligence Supervisor starting")
 
     children = [
-      # Content-addressable cache with Bloom filter
-      {DeterministicCache,
-       [
-         name: DeterministicCache,
-         max_size: Keyword.get(opts, :cache_max_size, 10_000),
-         max_memory: Keyword.get(opts, :cache_max_memory, 100 * 1024 * 1024)
-       ]},
-
       # CEP workflow hooks
       {WorkflowHooks, [name: WorkflowHooks]},
 
@@ -79,7 +69,6 @@ defmodule Cybernetic.Intelligence.Supervisor do
   @spec get_all_stats() :: map()
   def get_all_stats do
     %{
-      cache: safe_call(DeterministicCache, :stats, []),
       cep: safe_call(WorkflowHooks, :stats, []),
       zombie: safe_call(ZombieDetector, :stats, []),
       hnsw: safe_call(HNSWIndex, :stats, []),
@@ -91,7 +80,6 @@ defmodule Cybernetic.Intelligence.Supervisor do
   @spec health_check() :: %{healthy: boolean(), components: map()}
   def health_check do
     components = %{
-      cache: process_alive?(DeterministicCache),
       cep: process_alive?(WorkflowHooks),
       zombie: process_alive?(ZombieDetector),
       hnsw: process_alive?(HNSWIndex),
