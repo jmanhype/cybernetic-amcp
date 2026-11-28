@@ -90,12 +90,18 @@ defmodule Cybernetic.Transport.AMQP.Connection do
   end
 
   defp establish_connection(config) do
-    url = config[:url] || "amqp://guest:guest@localhost:5672"
+    # No fallback URL: without a configured AMQP URL there is nothing
+    # to connect to. Never substitute embedded default credentials.
+    case config[:url] do
+      url when is_binary(url) and url != "" ->
+        with {:ok, conn} <- AMQP.Connection.open(url),
+             {:ok, chan} <- AMQP.Channel.open(conn) do
+          Process.monitor(conn.pid)
+          {:ok, conn, chan}
+        end
 
-    with {:ok, conn} <- AMQP.Connection.open(url),
-         {:ok, chan} <- AMQP.Channel.open(conn) do
-      Process.monitor(conn.pid)
-      {:ok, conn, chan}
+      _ ->
+        {:error, :amqp_url_not_configured}
     end
   end
 

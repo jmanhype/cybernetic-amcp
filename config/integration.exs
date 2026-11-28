@@ -48,7 +48,7 @@ config :opentelemetry, traces_exporter: :none
 # Enable AMQP for integration tests
 config :cybernetic, :amqp,
   enabled: true,
-  url: System.get_env("RABBITMQ_URL", "amqp://guest:guest@localhost:5672"),
+  url: System.get_env("RABBITMQ_URL"),
   exchange: "cybernetic.test.exchange",
   queues: [
     "cybernetic.test.system1",

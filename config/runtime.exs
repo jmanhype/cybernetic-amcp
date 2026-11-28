@@ -63,8 +63,27 @@ if config_env() != :test do
 end
 
 # AMQP Configuration for production transport
+# No hardcoded fallback URL: one would embed broker credentials in
+# source, and any deployment missing AMQP_URL would silently connect
+# with them. Following this file's convention for credential-bearing
+# settings (CYBERNETIC_HMAC_SECRET and SECRET_KEY_BASE below),
+# production refuses to boot without AMQP_URL. In dev/test an unset
+# AMQP_URL leaves the URL nil, and the AMQP layer reports itself not
+# configured instead of connecting with default credentials.
+amqp_url =
+  case {config_env(), System.get_env("AMQP_URL")} do
+    {:prod, nil} ->
+      raise "AMQP_URL is required in production"
+
+    {:prod, ""} ->
+      raise "AMQP_URL cannot be empty in production"
+
+    {_, url} ->
+      url
+  end
+
 config :cybernetic, :amqp,
-  url: System.get_env("AMQP_URL") || "amqp://cybernetic:changeme@localhost:5672",
+  url: amqp_url,
   exchange: System.get_env("AMQP_EXCHANGE") || "cyb.commands",
   exchange_type: :topic,
   # Queue declarations are NOT configured here: the AMQP topology

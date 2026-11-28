@@ -5,7 +5,7 @@ services:
     container_name: cyb-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: cybernetic
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
       RABBITMQ_DEFAULT_VHOST: /
     ports:
       - "5672:5672"    # AMQP
@@ -155,7 +155,7 @@ services:
     container_name: cyb-app
     environment:
       # AMQP Configuration
-      AMQP_URL: amqp://cybernetic:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      AMQP_URL: amqp://cybernetic:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}@rabbitmq:5672
       
       # Database Configuration
       DATABASE_URL: postgres://cybernetic:${POSTGRES_PASSWORD:-changeme}@postgres:5432/cybernetic

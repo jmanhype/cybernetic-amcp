@@ -1,6 +1,6 @@
 #!/bin/bash
-export AMQP_URL="amqp://cybernetic:changeme@localhost:5672"
-export RABBITMQ_PASSWORD="changeme"
+export RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD to your local RabbitMQ password}"
+export AMQP_URL="${AMQP_URL:-amqp://cybernetic:${RABBITMQ_PASSWORD}@localhost:5672}"
 export DATABASE_URL="postgres://cybernetic:changeme@localhost:5432/cybernetic"
 export POSTGRES_PASSWORD="changeme"
 export REDIS_URL="redis://default:changeme@localhost:6379"

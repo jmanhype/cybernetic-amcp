@@ -49,7 +49,7 @@ defmodule FullSystemVerification do
     try do
       # Check management API
       case HTTPoison.get("http://localhost:15672/api/overview", 
-                        [{"Authorization", "Basic " <> Base.encode64("cybernetic:changeme")}]) do
+                        [{"Authorization", "Basic " <> Base.encode64("cybernetic:" <> (System.get_env("RABBITMQ_PASSWORD") || ""))}]) do
         {:ok, %{status_code: 200, body: body}} ->
           data = Jason.decode!(body)
           
@@ -58,14 +58,14 @@ defmodule FullSystemVerification do
           IO.puts("   #{@green} Erlang version: #{data["erlang_version"]}")
           
           # Check AMQP connection
-          case AMQP.Connection.open("amqp://cybernetic:changeme@localhost:5672") do
+          case AMQP.Connection.open(System.get_env("AMQP_URL") || raise("AMQP_URL env var is required")) do
             {:ok, conn} ->
               {:ok, channel} = AMQP.Channel.open(conn)
               IO.puts("   #{@green} AMQP connection: SUCCESSFUL")
               
               # Check queues
               case HTTPoison.get("http://localhost:15672/api/queues", 
-                                [{"Authorization", "Basic " <> Base.encode64("cybernetic:changeme")}]) do
+                                [{"Authorization", "Basic " <> Base.encode64("cybernetic:" <> (System.get_env("RABBITMQ_PASSWORD") || ""))}]) do
                 {:ok, %{status_code: 200, body: queue_body}} ->
                   queues = Jason.decode!(queue_body)
                   IO.puts("   #{@green} Queues configured: #{length(queues)}")
