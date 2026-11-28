@@ -24,12 +24,6 @@ defmodule Cybernetic.Core.MCP.Server do
   > server integration.
   """
 
-  # Note: Uncomment when Hermes.Server is available
-  # use Hermes.Server,
-  #   name: "Cybernetic aMCP Server",
-  #   version: "1.0.0",
-  #   capabilities: [:tools]
-
   alias Cybernetic.Core.MCP.Hermes.Registry
 
   @doc """

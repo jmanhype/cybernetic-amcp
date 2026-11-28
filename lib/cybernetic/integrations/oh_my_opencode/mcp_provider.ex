@@ -1,19 +1,19 @@
 defmodule Cybernetic.Integrations.OhMyOpencode.MCPProvider do
   @moduledoc """
-  Hermes MCP server that exposes Cybernetic platform tools to oh-my-opencode.
+  Anubis MCP server that exposes Cybernetic platform tools to oh-my-opencode.
 
   This is a thin adapter around `Cybernetic.MCP.Tool` implementations and is
-  intended to be mounted via Hermes StreamableHTTP (`/mcp`).
+  intended to be mounted via Anubis StreamableHTTP (`/mcp`).
   """
 
-  use Hermes.Server,
+  use Anubis.Server,
     name: "cybernetic",
     version: "0.1.0",
     capabilities: [:tools]
 
   alias Cybernetic.MCP.Tools.{CodeAnalysisTool, DatabaseTool}
   alias Cybernetic.VSM.System3.RateLimiter
-  alias Hermes.Server.Response
+  alias Anubis.Server.Response
 
   @tool_specs %{
     "code_analysis.analyze" => %{
@@ -195,7 +195,7 @@ defmodule Cybernetic.Integrations.OhMyOpencode.MCPProvider do
         user_id
 
       _ ->
-        case frame.private[:session_id] do
+        case frame.context.session_id do
           session_id when is_binary(session_id) and session_id != "" -> session_id
           _ -> "unknown"
         end

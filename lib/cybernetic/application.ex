@@ -148,8 +148,6 @@ defmodule Cybernetic.Application do
                {Phoenix.PubSub, name: Cybernetic.PubSub},
                # SSE Supervisor (owns connection tracking ETS table)
                Cybernetic.Edge.Gateway.SSESupervisor,
-               # Hermes MCP runtime (streamable HTTP transport)
-               Hermes.Server.Registry,
                # Cluster discovery
                cluster_children,
                # Phoenix Edge Gateway Endpoint

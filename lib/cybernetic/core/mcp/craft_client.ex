@@ -4,8 +4,8 @@ defmodule Cybernetic.Core.MCP.CraftClient do
   (`craft-anything-cli mcp`, protocol 2025-06-18).
 
   This module exists because the Hermes MCP client in
-  `hermes_mcp` 0.14.1 cannot talk to this server once its toolsets
-  are widened:
+  `hermes_mcp` 0.14.1 (the pre-Anubis-migration library) could not
+  talk to this server once its toolsets were widened:
 
     * its stdio transport decodes each OS port chunk as a complete
       message, so any server message larger than one chunk (~64 KB)
@@ -20,7 +20,7 @@ defmodule Cybernetic.Core.MCP.CraftClient do
   bridge needs — initialize handshake, `tools/list`, `tools/call` —
   and ignores server notifications.
 
-  No general Hermes MCP client is used anywhere in the repo (the
+  No general library MCP client is used anywhere in the repo (the
   former stub plugin was deleted in the MCP cleanup, Issue #86);
   this client is specific to the Craft bridge.
   """
