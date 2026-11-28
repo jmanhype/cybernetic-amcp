@@ -27,7 +27,8 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
     :active_interventions,
     :policy_cache,
     :algedonic_buffer,
-    :metrics
+    :metrics,
+    :seen_signal_ids
   ]
 
   # Monitoring intervals
@@ -39,6 +40,12 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   @pain_threshold 0.7
   @intervention_threshold 0.8
   @circuit_breaker_threshold 5
+
+  # Algedonic signal dedup window (Phase 2, §7): the last N signal
+  # ids are remembered; a repeat arrival is audit-recorded as a
+  # duplicate, not re-counted. In-memory by design - a restart of
+  # this supervisor resets the window.
+  @max_seen_signal_ids 1_000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -66,7 +73,8 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
       active_interventions: %{},
       policy_cache: %{},
       algedonic_buffer: :queue.new(),
-      metrics: init_metrics()
+      metrics: init_metrics(),
+      seen_signal_ids: %{ids: MapSet.new(), fifo: :queue.new()}
     }
 
     # Start monitoring loops
@@ -107,7 +115,50 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   Report algedonic signal from S1
   """
   def report_algedonic(signal_type, intensity, source) do
-    GenServer.cast(__MODULE__, {:algedonic_signal, signal_type, intensity, source})
+    report_algedonic(signal_type, intensity, source, nil, source)
+  end
+
+  @doc """
+  Report an algedonic signal with its identity (Phase 2, §7).
+
+  Every algedonic signal carries a `signal_id` and an origin: the
+  id is minted by the first emitter (see `mint_signal_id/0`) and
+  preserved across forwards, and `source` names that first emitter
+  - never a forwarder. `via` names the immediate delivery path of
+  this report (defaults to `source` for direct in-process reports;
+  forwarders and the AMQP dispatch pass their own path).
+
+  A `nil` signal id is minted at receipt. A report whose id was
+  already seen is a duplicate arrival: it is not buffered, not
+  counted in metrics, and is witnessed into the audit log as
+  `:algedonic_duplicate` - duplicates are evidence of path
+  redundancy, kept visible at the price of one audit line.
+  """
+  @spec report_algedonic(atom(), number(), atom(), String.t() | nil, atom()) :: :ok
+  def report_algedonic(signal_type, intensity, source, signal_id, via) do
+    GenServer.cast(
+      __MODULE__,
+      {:algedonic_signal, signal_type, intensity, source, signal_id, via}
+    )
+  end
+
+  @doc """
+  Report an algedonic signal with its identity, delivered directly
+  by its origin (the common in-process case; `via` is the source).
+  """
+  @spec report_algedonic(atom(), number(), atom(), String.t() | nil) :: :ok
+  def report_algedonic(signal_type, intensity, source, signal_id) do
+    report_algedonic(signal_type, intensity, source, signal_id, source)
+  end
+
+  @doc """
+  Mints a new algedonic signal id. The first emitter of a signal
+  mints its id and every forwarder preserves it, so one physical
+  signal keeps one identity on every path it travels (Phase 2, §7).
+  """
+  @spec mint_signal_id() :: String.t()
+  def mint_signal_id do
+    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
   end
 
   @doc """
@@ -147,7 +198,11 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   `"source_system"` through the s1..s5 whitelist;
   Goldrush-shaped payloads (which carry `"metrics"` and no
   source) report as `:goldrush_telemetry`, matching the plugin's
-  in-process reports; anything else reports as `:amqp`.
+  in-process reports; anything else reports as `:amqp_ingress`
+  (Phase 2, §7: the signal arrived over the broker and nothing in
+  it says from whom). Signal identity (Phase 2, §7): a payload's
+  `"signal_id"` is preserved through dispatch; one is minted at
+  dispatch for payloads that arrive without one.
   """
   @spec process_vsm_message(map(), String.t() | nil) :: :ok | {:error, term()}
   def process_vsm_message(message, routing_key) when is_map(message) do
@@ -257,41 +312,66 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   end
 
   @impl true
-  def handle_cast({:algedonic_signal, signal_type, intensity, source}, state) do
-    # Buffer algedonic signals for processing
-    signal = %{
-      type: signal_type,
-      intensity: intensity,
-      source: source,
-      timestamp: DateTime.utc_now()
-    }
+  def handle_cast({:algedonic_signal, signal_type, intensity, source, signal_id, via}, state) do
+    signal_id = signal_id || mint_signal_id()
 
-    # Phase 1 (IP-27): the signal is witnessed into the audit log
-    # at the moment it is received, and the metrics counter that
-    # the audit cycle reconciles against the log is kept with it.
-    Cybernetic.Audit.Log.record(:algedonic_signal, %{
-      signal_type: signal_type,
-      intensity: intensity,
-      source: source
-    })
+    if MapSet.member?(state.seen_signal_ids.ids, signal_id) do
+      # Phase 2 (§7): a repeat arrival of an already-seen signal id
+      # is a duplicate - the same physical signal reaching this
+      # entry point by a second path. It is not buffered and not
+      # counted; it is witnessed as evidence of the redundant path.
+      Cybernetic.Audit.Log.record(:algedonic_duplicate, %{
+        signal_id: signal_id,
+        origin: source,
+        via: via
+      })
 
-    new_buffer = :queue.in(signal, state.algedonic_buffer)
+      {:noreply, state}
+    else
+      state = %{
+        state
+        | seen_signal_ids: remember_signal_id(state.seen_signal_ids, signal_id)
+      }
 
-    new_state = %{
-      state
-      | algedonic_buffer: new_buffer,
-        metrics: Map.update!(state.metrics, :algedonic_signals, &(&1 + 1))
-    }
+      # Buffer algedonic signals for processing
+      signal = %{
+        type: signal_type,
+        intensity: intensity,
+        source: source,
+        signal_id: signal_id,
+        timestamp: DateTime.utc_now()
+      }
 
-    # Process if threshold exceeded
-    new_state =
-      if signal_type == :pain && intensity > @pain_threshold do
-        handle_pain_signal(signal, new_state)
-      else
-        new_state
-      end
+      # Phase 1 (IP-27): the signal is witnessed into the audit log
+      # at the moment it is received, and the metrics counter that
+      # the audit cycle reconciles against the log is kept with it.
+      # Phase 2 (§7): the entry carries the signal's identity, so
+      # counts are counts of distinct signals, not of arrivals.
+      Cybernetic.Audit.Log.record(:algedonic_signal, %{
+        signal_type: signal_type,
+        intensity: intensity,
+        source: source,
+        signal_id: signal_id
+      })
 
-    {:noreply, new_state}
+      new_buffer = :queue.in(signal, state.algedonic_buffer)
+
+      new_state = %{
+        state
+        | algedonic_buffer: new_buffer,
+          metrics: Map.update!(state.metrics, :algedonic_signals, &(&1 + 1))
+      }
+
+      # Process if threshold exceeded
+      new_state =
+        if signal_type == :pain && intensity > @pain_threshold do
+          handle_pain_signal(signal, new_state)
+        else
+          new_state
+        end
+
+      {:noreply, new_state}
+    end
   end
 
   @impl true
@@ -826,13 +906,47 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
         {:error, :unknown_message_type}
 
       signal_type ->
+        # Phase 2 (§7): identity enters at dispatch. A payload that
+        # carries a signal id keeps it (and its provenance); one
+        # that arrives without an id is minted one here, and a
+        # payload with no provenance at all is recorded as
+        # :amqp_ingress rather than attributed to a system.
+        signal_id = field(message, "signal_id", :signal_id) || mint_signal_id()
+
         report_algedonic(
           signal_type,
           algedonic_intensity_from(message, routing_key),
-          algedonic_source_from(message)
+          dispatch_origin(message),
+          signal_id,
+          :amqp
         )
 
         :ok
+    end
+  end
+
+  # The origin of an AMQP-dispatched signal: the payload's own
+  # provenance where it carries any (see algedonic_source_from/1);
+  # the bare catch-all becomes :amqp_ingress - the signal arrived
+  # over the broker and nothing in it says from whom.
+  defp dispatch_origin(message) do
+    case algedonic_source_from(message) do
+      :amqp -> :amqp_ingress
+      source -> source
+    end
+  end
+
+  # Remembers a signal id in the bounded dedup window (FIFO
+  # eviction past @max_seen_signal_ids).
+  defp remember_signal_id(%{ids: ids, fifo: fifo} = seen, signal_id) do
+    ids = MapSet.put(ids, signal_id)
+    fifo = :queue.in(signal_id, fifo)
+
+    if MapSet.size(ids) > @max_seen_signal_ids do
+      {{:value, oldest}, fifo} = :queue.out(fifo)
+      %{seen | ids: MapSet.delete(ids, oldest), fifo: fifo}
+    else
+      %{seen | ids: ids, fifo: fifo}
     end
   end
 

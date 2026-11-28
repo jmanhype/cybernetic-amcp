@@ -221,13 +221,19 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     end
   end
 
+  # The signal's origin: the first emitter, named by the payload's
+  # "source_system". Phase 2 (§7): a payload without provenance is
+  # :unknown - a forwarder never re-attributes a signal to itself
+  # (the pre-Phase-2 default recorded every unprovenanced forward
+  # as :s4, overwriting the origin in S3's audit record).
   defp algedonic_source(payload) do
     case Map.get(payload, "source_system") do
       "s1" -> :s1
       "s2" -> :s2
       "s3" -> :s3
+      "s4" -> :s4
       "s5" -> :s5
-      _other -> :s4
+      _other -> :unknown
     end
   end
 
@@ -235,10 +241,22 @@ defmodule Cybernetic.VSM.System4.MessageHandler do
     # ControlSupervisor runs in the full tree; in reduced trees the
     # signal stays telemetry-only rather than crashing the handler.
     if Process.whereis(Cybernetic.VSM.System3.ControlSupervisor) do
-      Cybernetic.VSM.System3.ControlSupervisor.report_algedonic(
+      alias Cybernetic.VSM.System3.ControlSupervisor
+
+      # Phase 2 (§7): the forward preserves the signal's identity -
+      # the payload's signal id travels with it (one is minted here
+      # if the origin emitted before identities existed), the origin
+      # is the first emitter, and this hop is recorded as via :s4.
+      # ControlSupervisor dedups on the id, so a signal that also
+      # reached S3 by another path is counted once.
+      signal_id = Map.get(payload, "signal_id") || ControlSupervisor.mint_signal_id()
+
+      ControlSupervisor.report_algedonic(
         type,
         algedonic_intensity(level),
-        algedonic_source(payload)
+        algedonic_source(payload),
+        signal_id,
+        :s4
       )
     end
 
