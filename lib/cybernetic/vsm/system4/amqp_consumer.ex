@@ -3,11 +3,21 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
   AMQP consumer for System 4 (Intelligence).
   Consumes messages from cyb.s4.llm queue bound to cyb.commands exchange with s4.* routing key.
   Processes messages through S4 MessageHandler and routes responses back to requesters.
+
+  Processing failures are settled under the bounded retry policy
+  (IP-30) via `process_delivery/4`, mirroring the shared VSM
+  consumer: a raise during processing is republished with an
+  incremented `_retries` header and an exponential-backoff
+  expiration, and the delivery is rejected without requeue - which
+  dead-letters it - only once the retry count is exhausted. Before
+  IP-30 a raise crashed this consumer and the broker redelivered
+  the message into a fresh crash, unbounded.
   """
   use GenServer
   use AMQP
   require Logger
   alias Cybernetic.Core.Transport.AMQP.Connection
+  alias Cybernetic.Core.Transport.RetryHelper
 
   @queue "cyb.s4.llm"
   @default_prefetch_count 10
@@ -42,8 +52,14 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
 
     case Jason.decode(payload) do
       {:ok, message} ->
-        process_message(message, meta, state)
-        Basic.ack(state.channel, meta.delivery_tag)
+        case process_delivery(message, payload, meta, channel: state.channel) do
+          :ack ->
+            Basic.ack(state.channel, meta.delivery_tag)
+
+          :reject ->
+            Logger.error("S4 Consumer: processing retries exhausted, dead-lettering")
+            Basic.reject(state.channel, meta.delivery_tag, requeue: false)
+        end
 
       {:error, reason} ->
         Logger.error("Failed to decode message: #{inspect(reason)}")
@@ -74,8 +90,60 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
     case Queue.declare(channel, @queue, passive: true) do
       {:ok, _} ->
         Logger.debug("Queue #{@queue} exists")
+
       {:error, _} ->
         Logger.warning("Queue #{@queue} does not exist - topology should create it")
+    end
+  end
+
+  @doc """
+  Processes a decoded delivery under the bounded retry policy
+  (IP-30) and reports how the caller should settle the delivery.
+
+  The processing runs through
+  `Cybernetic.Core.Transport.RetryHelper.with_retry/4`, which counts
+  attempts in the `_retries` AMQP header. A raise during processing
+  republishes the raw payload to the `cyb.commands` exchange under
+  the delivery's original routing key - so the copy returns to this
+  consumer's queue - with the count incremented and an
+  exponential-backoff expiration, and this function returns `:ack`.
+  Once the count reaches the helper's maximum the message is
+  poison: the helper does not run the processing at all and this
+  function returns `:reject`, so the caller rejects without requeue
+  and the message dead-letters. Handler `{:error, _}` results are
+  formatted into the response inside `process_message/3` and remain
+  acked contract outcomes, as before.
+
+  The `:channel` option is forwarded to the helper (production
+  deliveries always pass the consumer's channel; broker-free tests
+  omit it, in which case the helper skips the republish and the
+  outcome mapping is unchanged).
+  """
+  @spec process_delivery(map(), binary(), map(), keyword()) :: :ack | :reject
+  def process_delivery(message, payload, meta, opts \\ []) do
+    headers =
+      meta
+      |> Map.get(:headers)
+      |> RetryHelper.headers_map()
+      |> Map.put("_routing_key", meta.routing_key)
+
+    opts =
+      Keyword.merge([exchange: "cyb.commands", routing_key: meta.routing_key], opts)
+
+    attempt = fn ->
+      try do
+        process_message(message, meta, %{})
+        :ok
+      rescue
+        error -> {:error, {:processing_raised, error}}
+      catch
+        kind, reason -> {:error, {:processing_caught, kind, reason}}
+      end
+    end
+
+    case RetryHelper.with_retry(headers, payload, attempt, opts) do
+      {:error, :poison} -> :reject
+      _other -> :ack
     end
   end
 
@@ -99,7 +167,8 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
     }
 
     # Process through S4 MessageHandler
-    result = Cybernetic.VSM.System4.MessageHandler.handle_message(operation, payload, handler_meta)
+    result =
+      Cybernetic.VSM.System4.MessageHandler.handle_message(operation, payload, handler_meta)
 
     # Send response if correlation_id present (Telegram request)
     if correlation_id do
@@ -121,6 +190,7 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
   def extract_operation("s4.analyze", _message), do: "analyze"
   def extract_operation("s4.learn", _message), do: "learn"
   def extract_operation("s4.predict", _message), do: "predict"
+
   def extract_operation(_routing_key, message) do
     # Fallback to operation field in message
     Map.get(message, "operation", "intelligence")
@@ -133,6 +203,7 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
     catch
       :exit, {:noproc, _} ->
         Logger.warning("TelegramAgent not available, cannot send response")
+
       kind, reason ->
         Logger.error("Failed to send response to TelegramAgent: #{kind}: #{inspect(reason)}")
     end

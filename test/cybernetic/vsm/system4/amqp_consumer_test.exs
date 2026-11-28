@@ -86,4 +86,32 @@ defmodule Cybernetic.VSM.System4.AMQPConsumerTest do
       assert String.contains?(result["result"], "nil")
     end
   end
+
+  describe "process_delivery/4 (IP-30 bounded retry)" do
+    test "a delivery whose retry count is exhausted settles as :reject without processing" do
+      # _retries at the RetryHelper cap (5): the message is poison,
+      # so it is rejected for dead-lettering and the S4 handler is
+      # never invoked.
+      meta = %{routing_key: "s4.reason", headers: [{"_retries", :signedint, 5}]}
+
+      assert :reject =
+               AMQPConsumer.process_delivery(
+                 %{"operation" => "intelligence"},
+                 ~s({"operation":"intelligence"}),
+                 meta
+               )
+    end
+
+    test "a processing raise is a delivery failure and settles as :ack (retry scheduled)" do
+      # A decoded JSON scalar is not a map: processing it raises
+      # inside process_message/3. Before IP-30 that raise crashed
+      # the consumer and the broker redelivered into a fresh crash;
+      # now it takes the bounded retry path and the original
+      # delivery is acked (no channel in tests, so the helper skips
+      # the republish; the outcome mapping is what is proven here).
+      meta = %{routing_key: "s4.reason", headers: []}
+
+      assert :ack = AMQPConsumer.process_delivery(123, "123", meta)
+    end
+  end
 end

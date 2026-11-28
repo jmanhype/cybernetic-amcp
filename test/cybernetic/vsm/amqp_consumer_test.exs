@@ -189,4 +189,45 @@ defmodule Cybernetic.VSM.AMQPConsumerTest do
     assert {:error, :invalid_message} =
              AMQPConsumer.dispatch(:system3, ["not", "a", "map"], "s3.control", %{})
   end
+
+  describe "dispatch_with_retry/5 (IP-30 bounded retry)" do
+    test "a successful dispatch settles as :ack" do
+      meta = %{routing_key: "s1.status_update", headers: []}
+
+      assert :ack =
+               AMQPConsumer.dispatch_with_retry(
+                 :system1,
+                 %{"operation" => "status_update"},
+                 ~s({"operation":"status_update"}),
+                 meta
+               )
+    end
+
+    test "a handler contract error is an outcome, not a delivery failure: :ack, no retry" do
+      meta = %{routing_key: "s1.bogus", headers: []}
+
+      assert :ack =
+               AMQPConsumer.dispatch_with_retry(
+                 :system1,
+                 %{"operation" => "bogus"},
+                 ~s({"operation":"bogus"}),
+                 meta
+               )
+    end
+
+    test "a delivery whose retry count is exhausted settles as :reject without dispatching" do
+      # _retries at the RetryHelper cap (5): the message is poison,
+      # so even a payload that would dispatch successfully is
+      # rejected for dead-lettering.
+      meta = %{routing_key: "s1.status_update", headers: [{"_retries", :signedint, 5}]}
+
+      assert :reject =
+               AMQPConsumer.dispatch_with_retry(
+                 :system1,
+                 %{"operation" => "status_update"},
+                 ~s({"operation":"status_update"}),
+                 meta
+               )
+    end
+  end
 end
