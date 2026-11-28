@@ -209,19 +209,21 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
 
   @impl true
   def handle_info(:audit_cycle, state) do
-    # System 3* audit function
+    # System 3* audit function. perform_system_audit/1 records its
+    # own audit_cycle entry into the audit log (Phase 1, IP-27).
     audit_results = perform_system_audit(state)
 
     # Send audit results to S4 for analysis
     send_to_s4(:audit_results, audit_results)
 
-    # Log audit completion (AuditLogger disabled for now)
     Logger.info("System3 audit completed: #{inspect(Map.keys(audit_results))}")
 
     # Schedule next audit
     Process.send_after(self(), :audit_cycle, @audit_interval)
 
-    {:noreply, state}
+    new_state = %{state | metrics: Map.update!(state.metrics, :audit_cycles, &(&1 + 1))}
+
+    {:noreply, new_state}
   end
 
   @impl true
@@ -264,8 +266,22 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
       timestamp: DateTime.utc_now()
     }
 
+    # Phase 1 (IP-27): the signal is witnessed into the audit log
+    # at the moment it is received, and the metrics counter that
+    # the audit cycle reconciles against the log is kept with it.
+    Cybernetic.Audit.Log.record(:algedonic_signal, %{
+      signal_type: signal_type,
+      intensity: intensity,
+      source: source
+    })
+
     new_buffer = :queue.in(signal, state.algedonic_buffer)
-    new_state = %{state | algedonic_buffer: new_buffer}
+
+    new_state = %{
+      state
+      | algedonic_buffer: new_buffer,
+        metrics: Map.update!(state.metrics, :algedonic_signals, &(&1 + 1))
+    }
 
     # Process if threshold exceeded
     new_state =
@@ -334,7 +350,7 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
 
         new_state = %{state | active_interventions: new_interventions, state: :intervening}
 
-        # Log intervention (AuditLogger disabled for now)
+        # The intervention itself is recorded by execute_intervention/2
         Logger.info("Intervention started: #{intervention.id} - #{result}")
 
         {:reply, {:ok, intervention.id}, new_state}
@@ -611,26 +627,51 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   defp execute_intervention(intervention, _state) do
     Logger.info("Executing intervention: #{inspect(intervention)}")
 
-    case intervention.action do
-      :restart_component ->
-        restart_component(intervention.target)
+    result =
+      case intervention.action do
+        :restart_component ->
+          restart_component(intervention.target)
 
-      :throttle_input ->
-        throttle_component_input(intervention.target)
+        :throttle_input ->
+          throttle_component_input(intervention.target)
 
-      :redirect_traffic ->
-        redirect_traffic(intervention.target)
+        :redirect_traffic ->
+          redirect_traffic(intervention.target)
 
-      :scale_resources ->
-        scale_resources(intervention.target)
+        :scale_resources ->
+          scale_resources(intervention.target)
 
-      :emergency_stop ->
-        emergency_stop(intervention.target)
+        :emergency_stop ->
+          emergency_stop(intervention.target)
 
-      _ ->
-        {:error, :unknown_action}
-    end
+        _ ->
+          {:error, :unknown_action}
+      end
+
+    # Phase 1 (IP-27): every intervention execution - manual,
+    # algedonic-triggered, or policy-driven - is witnessed into the
+    # audit log with its outcome.
+    Cybernetic.Audit.Log.record(:intervention, %{
+      intervention_id: intervention.id,
+      action: intervention.action,
+      target: audit_target(intervention.target),
+      outcome: audit_outcome(result)
+    })
+
+    result
   end
+
+  # Audit payloads are JSON data: targets and outcomes are rendered
+  # as plain strings.
+  defp audit_target({:system, system_num}), do: "system:#{system_num}"
+  defp audit_target({:process, pid}) when is_pid(pid), do: inspect(pid)
+  defp audit_target(target) when is_atom(target), do: Atom.to_string(target)
+  defp audit_target(target), do: inspect(target)
+
+  defp audit_outcome({:ok, result}) when is_atom(result), do: "ok:#{result}"
+  defp audit_outcome({:ok, result}), do: "ok:#{inspect(result)}"
+  defp audit_outcome({:error, reason}), do: "error:#{inspect(reason)}"
+  defp audit_outcome(other), do: inspect(other)
 
   # VSM.Supervisor starts bare module specs, so its child ids are
   # the child modules themselves - not :"system#{n}" atoms.
@@ -668,25 +709,35 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
 
   defp restart_component(target) do
     # Restart the target component
-    case target do
-      {:system, system_num} ->
-        # Restart VSM system, reporting the real outcome
-        with child_id when not is_nil(child_id) <- vsm_child_id(system_num),
-             true <- Process.whereis(Cybernetic.VSM.Supervisor) != nil do
-          restart_vsm_child(child_id)
-        else
-          nil -> {:error, :invalid_target}
-          false -> {:error, :vsm_supervisor_not_running}
-        end
+    result =
+      case target do
+        {:system, system_num} ->
+          # Restart VSM system, reporting the real outcome
+          with child_id when not is_nil(child_id) <- vsm_child_id(system_num),
+               true <- Process.whereis(Cybernetic.VSM.Supervisor) != nil do
+            restart_vsm_child(child_id)
+          else
+            nil -> {:error, :invalid_target}
+            false -> {:error, :vsm_supervisor_not_running}
+          end
 
-      {:process, pid} ->
-        # Restart specific process
-        Process.exit(pid, :restart)
-        {:ok, :restarted}
+        {:process, pid} ->
+          # Restart specific process
+          Process.exit(pid, :restart)
+          {:ok, :restarted}
 
-      _ ->
-        {:error, :invalid_target}
-    end
+        _ ->
+          {:error, :invalid_target}
+      end
+
+    # Phase 1 (IP-27): restarts are witnessed into the audit log
+    # with their real outcome.
+    Cybernetic.Audit.Log.record(:component_restart, %{
+      target: audit_target(target),
+      outcome: audit_outcome(result)
+    })
+
+    result
   end
 
   defp throttle_component_input(target) do
@@ -880,83 +931,146 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
 
   # ========== PRIVATE FUNCTIONS - AUDIT (SYSTEM 3*) ==========
 
+  # Phase 1 (IP-27): the audit is rebuilt on evidence. Every number
+  # in the report comes from (1) counts over the hash-chained audit
+  # log for the period, or (2) a live read-only probe of the system
+  # that owns the state (RateLimiter budgets, Coordinator slots,
+  # S4 Service stats) - and the two are reconciled. Sections whose
+  # numbers had no source (S1 operation counts, latency and error
+  # rates, S2 coordination and fairness estimates, host CPU/memory)
+  # are gone, not relabeled.
   defp perform_system_audit(state) do
     Logger.info("System 3* performing audit cycle")
 
-    # Audit S1 operations
-    s1_audit = audit_system1_operations()
+    to = DateTime.utc_now()
+    from = DateTime.add(to, -@audit_interval, :millisecond)
 
-    # Audit S2 coordination
-    s2_audit = audit_system2_coordination()
+    report = build_audit_report(state, from, to)
 
-    # Audit resource usage
-    resource_audit = audit_resource_usage()
+    # The cycle appends its own entry: what it found, over what
+    # period, and whether the chain it read verified.
+    Cybernetic.Audit.Log.record(:audit_cycle, %{
+      period_from: DateTime.to_iso8601(from),
+      period_to: DateTime.to_iso8601(to),
+      events_total: report.events.total,
+      chain_verified: report.compliance.chain_verified,
+      compliant: report.compliance.compliant
+    })
 
-    # Audit policy compliance
-    compliance_audit = audit_policy_compliance(state)
+    report
+  end
 
-    # Compile audit report
+  defp build_audit_report(state, from, to) do
+    entries = Cybernetic.Audit.Log.entries_between(from, to)
+    events = summarize_audit_events(entries)
+
+    chain_result = Cybernetic.Audit.Log.verify_chain()
+    chain_verified = match?({:ok, _}, chain_result)
+
+    violations =
+      entries
+      |> Enum.filter(&(&1["type"] in ["causality_violation", "policy_violation"]))
+      |> Enum.map(fn entry ->
+        %{type: entry["type"], seq: entry["seq"], ts: entry["ts"], payload: entry["payload"]}
+      end)
+
+    # Reconciliation: this process's own algedonic counter counts
+    # every signal this incarnation received; the log holds every
+    # signal recorded since it started. The counter can lag the log
+    # (signals recorded by a previous ControlSupervisor incarnation)
+    # but it must never exceed it - if it does, recording is broken.
+    all_entries = Cybernetic.Audit.Log.entries_between(nil, nil)
+    logged_algedonic = Enum.count(all_entries, &(&1["type"] == "algedonic_signal"))
+    counter = state.metrics.algedonic_signals
+    algedonic_consistent = counter <= logged_algedonic
+
+    anomalies =
+      []
+      |> add_anomaly(not chain_verified, {:audit_chain_unverified, chain_result})
+      |> add_anomaly(
+        not algedonic_consistent,
+        {:algedonic_counter_exceeds_log, counter, logged_algedonic}
+      )
+      |> add_anomaly(violations != [], {:policy_or_causality_violations, length(violations)})
+
     %{
       timestamp: DateTime.utc_now(),
-      system1: s1_audit,
-      system2: s2_audit,
-      resources: resource_audit,
-      compliance: compliance_audit,
-      anomalies: detect_anomalies(s1_audit, s2_audit, resource_audit),
-      recommendations: generate_recommendations(state)
+      period: %{from: from, to: to},
+      events: events,
+      resources: %{budgets: audit_budgets()},
+      coordination: audit_coordination(),
+      s4_service: Cybernetic.VSM.System4.Service.stats(),
+      compliance: %{
+        compliant: chain_verified and violations == [],
+        chain_verified: chain_verified,
+        violations: violations
+      },
+      reconciliation: %{
+        algedonic_signals: %{
+          counter: counter,
+          logged_total: logged_algedonic,
+          consistent: algedonic_consistent
+        }
+      },
+      anomalies: anomalies
     }
   end
 
-  defp audit_system1_operations do
-    # Audit S1 operational efficiency
+  defp add_anomaly(anomalies, true, anomaly), do: [anomaly | anomalies]
+  defp add_anomaly(anomalies, false, _anomaly), do: anomalies
+
+  defp summarize_audit_events(entries) do
+    grouped = Enum.group_by(entries, & &1["type"])
+    algedonic = Map.get(grouped, "algedonic_signal", [])
+    interventions = Map.get(grouped, "intervention", [])
+    denials = Map.get(grouped, "budget_denial", [])
+
     %{
-      total_operations: get_s1_operation_count(),
-      success_rate: get_s1_success_rate(),
-      average_latency: get_s1_avg_latency(),
-      error_patterns: analyze_s1_errors(),
-      resource_efficiency: calculate_s1_efficiency()
+      total: length(entries),
+      algedonic_signals: %{
+        total: length(algedonic),
+        pain: Enum.count(algedonic, &(&1["payload"]["signal_type"] == "pain")),
+        pleasure: Enum.count(algedonic, &(&1["payload"]["signal_type"] == "pleasure")),
+        by_source: count_payload_values(algedonic, "source")
+      },
+      interventions: %{
+        total: length(interventions),
+        succeeded:
+          Enum.count(interventions, &String.starts_with?(&1["payload"]["outcome"] || "", "ok:")),
+        failed:
+          Enum.count(
+            interventions,
+            &String.starts_with?(&1["payload"]["outcome"] || "", "error:")
+          )
+      },
+      budget_denials: %{
+        total: length(denials),
+        by_key: count_payload_values(denials, "budget_key")
+      },
+      component_restarts: length(Map.get(grouped, "component_restart", [])),
+      causality_violations: length(Map.get(grouped, "causality_violation", [])),
+      audit_cycles: length(Map.get(grouped, "audit_cycle", []))
     }
   end
 
-  defp audit_system2_coordination do
-    # Audit S2 coordination effectiveness
-    %{
-      coordination_events: get_s2_coordination_count(),
-      conflict_resolution_rate: get_s2_resolution_rate(),
-      average_coordination_time: get_s2_avg_time(),
-      bottlenecks: identify_s2_bottlenecks(),
-      fairness_score: calculate_s2_fairness()
-    }
+  defp count_payload_values(entries, key) do
+    Enum.frequencies_by(entries, & &1["payload"][key])
   end
 
-  defp detect_anomalies(s1_audit, s2_audit, resource_audit) do
-    anomalies = []
+  # Live probes: each reads the state of the process that owns it.
+  # A probe whose owner is not running reports that plainly instead
+  # of estimating.
+  defp audit_budgets do
+    Cybernetic.VSM.System3.RateLimiter.all_budgets()
+  catch
+    :exit, {:noproc, _} -> %{status: :not_running}
+  end
 
-    # Check for S1 anomalies
-    anomalies =
-      if s1_audit.success_rate < 0.95 do
-        [{:low_success_rate, s1_audit.success_rate} | anomalies]
-      else
-        anomalies
-      end
-
-    # Check for S2 anomalies
-    anomalies =
-      if s2_audit.conflict_resolution_rate < 0.9 do
-        [{:poor_coordination, s2_audit.conflict_resolution_rate} | anomalies]
-      else
-        anomalies
-      end
-
-    # Check for resource anomalies
-    anomalies =
-      if resource_audit.cpu_usage > 0.8 do
-        [{:high_cpu_usage, resource_audit.cpu_usage} | anomalies]
-      else
-        anomalies
-      end
-
-    anomalies
+  defp audit_coordination do
+    case Cybernetic.VSM.System2.Coordinator.get_stats() do
+      {:ok, stats} -> stats
+      {:error, _} -> %{status: :not_running}
+    end
   end
 
   # ========== PRIVATE FUNCTIONS - HELPERS ==========
@@ -1144,7 +1258,13 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   end
 
   defp generate_audit_report(from, to, state) do
-    # Generate comprehensive audit report
+    # The state snapshot, plus the evidence-based audit for the
+    # period (Phase 1, IP-27): log counts, live probes, compliance
+    # from the verified chain. A nil period defaults to the last
+    # hour for the audit section.
+    audit_to = to || DateTime.utc_now()
+    audit_from = from || DateTime.add(audit_to, -3600, :second)
+
     %{
       period: %{from: from, to: to},
       control_state: state.state,
@@ -1153,6 +1273,7 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
       interventions: state.active_interventions,
       circuit_breakers: state.circuit_breakers,
       metrics: state.metrics,
+      audit: build_audit_report(state, audit_from, audit_to),
       generated_at: DateTime.utc_now()
     }
   end
@@ -1288,19 +1409,6 @@ defmodule Cybernetic.VSM.System3.ControlSupervisor do
   defp scale_resources(_target), do: {:ok, :scaled}
   defp emergency_stop(_target), do: {:ok, :stopped}
   defp check_circuit_breaker_timeout(_breaker, state), do: state
-  defp audit_resource_usage, do: %{cpu_usage: 0.5, memory_usage: 0.6}
-  defp audit_policy_compliance(_state), do: %{compliant: true, violations: []}
-  defp generate_recommendations(_state), do: []
-  defp get_s1_operation_count, do: 1000
-  defp get_s1_success_rate, do: 0.98
-  defp get_s1_avg_latency, do: 50
-  defp analyze_s1_errors, do: []
-  defp calculate_s1_efficiency, do: 0.85
-  defp get_s2_coordination_count, do: 500
-  defp get_s2_resolution_rate, do: 0.95
-  defp get_s2_avg_time, do: 25
-  defp identify_s2_bottlenecks, do: []
-  defp calculate_s2_fairness, do: 0.9
   # Helper functions for resource monitoring
   defp get_current_cpu_usage do
     # In a real system, this would query actual CPU metrics

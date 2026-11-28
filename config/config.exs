@@ -58,6 +58,12 @@ config :libcluster,
 # per-env transport overrides live in config/{env}.exs / runtime.exs.
 config :cybernetic, :transport, Cybernetic.Transport.AMQP
 
+# Audit log (Phase 1, IP-27): Cybernetic.Audit.Log writes one
+# append-only, hash-chained JSONL file per day into this directory.
+# Verification (`mix cyb.audit_verify`) reads these files directly
+# from disk, without the running system.
+config :cybernetic, :audit_log_dir, "priv/audit"
+
 # Phoenix Edge Gateway configuration
 # P0 Security: secret_key_base moved to runtime.exs - DO NOT hardcode secrets
 config :cybernetic, Cybernetic.Edge.Gateway.Endpoint,
