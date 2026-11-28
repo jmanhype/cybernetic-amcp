@@ -238,11 +238,15 @@ defmodule Cybernetic.Core.MCP.Hermes.Registry do
           |> Map.put(:stats, stats)
           |> update_in([:invocations], &Map.delete(&1, invocation_id))
 
-        # Emit telemetry
+        # Emit telemetry. Phase 2 (§6): the event carries the
+        # :cybernetic prefix every other in-repo event uses - the
+        # unprefixed name had no consumer anywhere (the Goldrush
+        # Bridge attached to the prefixed name and starved), so the
+        # rename breaks nothing and feeds the reflex layer.
         duration = System.monotonic_time(:millisecond) - invocation.started_at
 
         :telemetry.execute(
-          [:mcp, :tool, :invocation],
+          [:cybernetic, :mcp, :tool, :invocation],
           %{duration: duration},
           %{tool: invocation.tool, success: match?({:ok, _}, result)}
         )

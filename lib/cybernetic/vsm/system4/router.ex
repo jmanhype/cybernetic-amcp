@@ -322,9 +322,22 @@ defmodule Cybernetic.VSM.System4.Router do
     measurements =
       case result do
         {:ok, %{tokens: tokens}} ->
+          tokens_in = Map.get(tokens, :input, 0)
+          tokens_out = Map.get(tokens, :output, 0)
+
+          # Phase 2 (§6): per-call token usage as its own event -
+          # the cost_anomaly rule's input. Tokens, not dollars: no
+          # price table exists in this codebase, so no cost figure
+          # is computed or claimed here.
+          :telemetry.execute(
+            [:cybernetic, :s4, :usage],
+            %{tokens_in: tokens_in, tokens_out: tokens_out},
+            %{provider: provider}
+          )
+
           Map.merge(measurements, %{
-            tokens_in: Map.get(tokens, :input, 0),
-            tokens_out: Map.get(tokens, :output, 0)
+            tokens_in: tokens_in,
+            tokens_out: tokens_out
           })
 
         _ ->

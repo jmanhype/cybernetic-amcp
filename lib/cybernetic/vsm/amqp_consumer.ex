@@ -168,6 +168,11 @@ defmodule Cybernetic.VSM.AMQPConsumer do
   deliveries always pass the consumer's channel; broker-free tests
   omit it, in which case the helper skips the republish and the
   outcome mapping is unchanged).
+
+  Phase 2 (§6): this seam also emits the reflex layer's work and
+  message telemetry - [:cybernetic, :work, :finished] / :failed
+  and [:amqp, :message, :processed] / :error / :replay - mapped
+  from the dispatch outcome (see `emit_delivery_events/4`).
   """
   @spec dispatch_with_retry(atom(), map(), binary(), map(), keyword()) :: :ack | :reject
   def dispatch_with_retry(system, message, payload, meta, opts \\ []) do
@@ -192,29 +197,42 @@ defmodule Cybernetic.VSM.AMQPConsumer do
       Cybernetic.Telemetry.OTEL.extract_context(Map.get(meta, :headers) || [])
 
     token = :otel_ctx.attach(parent_ctx)
+    started_us = System.monotonic_time(:microsecond)
 
-    try do
-      Cybernetic.Telemetry.OTEL.with_span(
-        "amqp.consume",
-        %{routing_key: meta.routing_key},
-        fn ->
-          attempt = fn ->
-            Cybernetic.Telemetry.OTEL.with_span(
-              "vsm.dispatch",
-              %{system: system, routing_key: meta.routing_key},
-              fn -> dispatch_safely(system, message, meta) end
-            )
-          end
+    {settlement, result} =
+      try do
+        Cybernetic.Telemetry.OTEL.with_span(
+          "amqp.consume",
+          %{routing_key: meta.routing_key},
+          fn ->
+            attempt = fn ->
+              Cybernetic.Telemetry.OTEL.with_span(
+                "vsm.dispatch",
+                %{system: system, routing_key: meta.routing_key},
+                fn -> dispatch_safely(system, message, meta) end
+              )
+            end
 
-          case RetryHelper.with_retry(headers, payload, attempt, opts) do
-            {:error, :poison} -> :reject
-            _other -> :ack
+            result = RetryHelper.with_retry(headers, payload, attempt, opts)
+
+            settlement =
+              case result do
+                {:error, :poison} -> :reject
+                _other -> :ack
+              end
+
+            {settlement, result}
           end
-        end
-      )
-    after
-      :otel_ctx.detach(token)
-    end
+        )
+      after
+        :otel_ctx.detach(token)
+      end
+
+    # Phase 2 (§6): this seam is where the reflex layer's work and
+    # message events are born (see emit_delivery_events/4).
+    emit_delivery_events(system, meta.routing_key, result, started_us)
+
+    settlement
   end
 
   @impl true
@@ -270,6 +288,10 @@ defmodule Cybernetic.VSM.AMQPConsumer do
       {:error, reason} ->
         Logger.error("VSM Consumer #{state.queue}: failed to decode message: #{inspect(reason)}")
 
+        # Phase 2 (§6): a decode reject is a final failure, and it
+        # is labeled as one at this seam (see emit_decode_events/3).
+        emit_decode_events(state.system, meta.routing_key)
+
         Basic.reject(state.channel, meta.delivery_tag, requeue: false)
     end
 
@@ -290,6 +312,58 @@ defmodule Cybernetic.VSM.AMQPConsumer do
     Logger.error("VSM Consumer #{state.queue} channel down: #{inspect(reason)}")
     send(self(), :connect)
     {:noreply, %{state | channel: nil}}
+  end
+
+  # Phase 2 (§6): the two consumer dispatch seams are where the
+  # reflex layer's events are born. Every AMQP-driven unit of work
+  # passes exactly one of the two seams (this one, or System4's
+  # process_delivery/4), so coverage is total by construction and
+  # durations are measured once, in one place per seam - the same
+  # seams Phase 1 put OTel spans on. In-process work that never
+  # crosses AMQP is not "work" for these events; stated, accepted.
+  #
+  # Outcome mapping, from the RetryHelper result:
+  #   * completed dispatch (handler answered, including handler
+  #     contract errors) -> [:amqp, :message, :processed] and
+  #     [:cybernetic, :work, :finished], duration in ms (float);
+  #   * a failed attempt the bounded policy will replay ->
+  #     [:amqp, :message, :replay] (the republish itself happens
+  #     in RetryHelper when a channel is present);
+  #   * poison (retries exhausted) -> [:amqp, :message, :error]
+  #     and [:cybernetic, :work, :failed], labeled :poison.
+  defp emit_delivery_events(system, routing_key, result, started_us) do
+    duration_ms = (System.monotonic_time(:microsecond) - started_us) / 1000
+    meta = %{system: system, routing_key: routing_key}
+
+    case result do
+      {:error, :poison} ->
+        :telemetry.execute([:amqp, :message, :error], %{}, Map.put(meta, :reason, :poison))
+
+        :telemetry.execute(
+          [:cybernetic, :work, :failed],
+          %{},
+          Map.put(meta, :reason, :poison)
+        )
+
+      {:error, _reason} ->
+        :telemetry.execute([:amqp, :message, :replay], %{}, meta)
+
+      _ok ->
+        :telemetry.execute([:amqp, :message, :processed], %{duration: duration_ms}, meta)
+        :telemetry.execute([:cybernetic, :work, :finished], %{duration: duration_ms}, meta)
+    end
+
+    :ok
+  end
+
+  # A payload that does not decode can never succeed on retry; it
+  # is rejected at the delivery handler as a final failure, labeled
+  # :decode_error so the reflex layer can tell it from poison.
+  defp emit_decode_events(system, routing_key) do
+    meta = %{system: system, routing_key: routing_key, reason: :decode_error}
+    :telemetry.execute([:amqp, :message, :error], %{}, meta)
+    :telemetry.execute([:cybernetic, :work, :failed], %{}, meta)
+    :ok
   end
 
   defp setup_queue(channel, queue) do
