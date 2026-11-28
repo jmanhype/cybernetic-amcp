@@ -91,6 +91,28 @@ defmodule Cybernetic.Capabilities.Registry do
     GenServer.call(__MODULE__, {:unregister, capability_id})
   end
 
+  @doc """
+  Atomically replace the capability stored under `capability_id`
+  with a new record built from `attrs`.
+
+  The replacement keeps the existing record's `id` and
+  `registered_at`, and the swap happens inside a single registry
+  state transition: concurrent readers (`list/0`, `get_by_name/1`,
+  `discover/2`) always observe either the old record or the new
+  one, never a missing record. This is the refresh primitive the
+  Hermes → Capabilities projection uses; an unregister/register
+  pair would leave a window in which the name is absent.
+
+  Returns `{:error, :not_found}` when no capability has that ID,
+  and `{:error, :name_already_registered}` — leaving the stored
+  record untouched — when `attrs` renames the capability onto a
+  name owned by a different record.
+  """
+  @spec replace(String.t(), map()) :: {:ok, capability()} | {:error, term()}
+  def replace(capability_id, attrs) do
+    GenServer.call(__MODULE__, {:replace, capability_id, attrs})
+  end
+
   @doc "Get a capability by ID"
   @spec get(String.t()) :: {:ok, capability()} | {:error, :not_found}
   def get(capability_id) do
@@ -203,6 +225,38 @@ defmodule Cybernetic.Capabilities.Registry do
   end
 
   @impl true
+  def handle_call({:replace, id, attrs}, _from, state) do
+    case Map.get(state.capabilities, id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      existing ->
+        case build_capability(attrs) do
+          {:ok, built} ->
+            if built.name != existing.name and Map.has_key?(state.name_index, built.name) do
+              {:reply, {:error, :name_already_registered}, state}
+            else
+              replaced = %{built | id: existing.id, registered_at: existing.registered_at}
+
+              new_state = %{
+                state
+                | capabilities: Map.put(state.capabilities, id, replaced),
+                  name_index:
+                    state.name_index
+                    |> Map.delete(existing.name)
+                    |> Map.put(replaced.name, id)
+              }
+
+              Logger.info("Capability replaced", name: replaced.name, id: id)
+              {:reply, {:ok, replaced}, new_state}
+            end
+
+          {:error, _reason} = error ->
+            {:reply, error, state}
+        end
+    end
+  end
+
   def handle_call({:get, id}, _from, state) do
     case Map.get(state.capabilities, id) do
       nil -> {:reply, {:error, :not_found}, state}

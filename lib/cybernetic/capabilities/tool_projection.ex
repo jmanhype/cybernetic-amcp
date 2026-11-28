@@ -36,11 +36,12 @@ defmodule Cybernetic.Capabilities.ToolProjection do
       never invokes a tool. Hermes state is byte-identical before
       and after a projection run.
     * **Idempotent.** Re-running catch-up refreshes each projected
-      record in place (unregister + re-register under the same
-      name): exactly one capability record per tool name, never a
-      duplicate. A name already owned by a *manually* registered
-      (non-projection) capability is skipped and logged, never
-      overwritten.
+      record in place, via a single atomic replace inside the
+      Capabilities registry: exactly one capability record per
+      tool name, never a duplicate, and a concurrent reader never
+      observes the name missing mid-refresh. A name already owned
+      by a *manually* registered (non-projection) capability is
+      skipped and logged, never overwritten.
     * **Self-healing resync.** Catch-up also prunes projection-owned
       records whose tools have vanished from Hermes. Because the
       Hermes readiness event re-triggers catch-up, a Hermes registry
@@ -208,13 +209,19 @@ defmodule Cybernetic.Capabilities.ToolProjection do
 
   @spec project_tool(Tool.t()) :: :ok | :skipped | {:error, term()}
   defp project_tool(%Tool{} = tool) do
+    # Build the record (including the embedding) BEFORE touching
+    # the Capabilities registry, so no registry mutation is ever
+    # separated from its replacement by a slow provider call.
+    attrs = capability_attrs(tool)
+
     case safe_get_by_name(tool.name) do
       {:ok, existing} ->
         if projection?(existing) do
-          # Refresh in place: one record per tool name, with the
-          # current description/embedding.
-          CapabilitiesRegistry.unregister(existing.id)
-          register_projection(tool)
+          # Refresh in place: one atomic replace inside the
+          # Capabilities registry, so a concurrent list/0 or
+          # discover/2 always sees either the old record or the
+          # new one — never a torn set with the name missing.
+          replace_projection(existing, tool, attrs)
         else
           Logger.warning(
             "ToolProjection: skipping #{inspect(tool.name)} — a non-projection " <>
@@ -225,7 +232,7 @@ defmodule Cybernetic.Capabilities.ToolProjection do
         end
 
       {:error, :not_found} ->
-        register_projection(tool)
+        register_projection(tool, attrs)
 
       {:error, _reason} = error ->
         error
@@ -234,15 +241,36 @@ defmodule Cybernetic.Capabilities.ToolProjection do
     :exit, _ -> {:error, :registry_unavailable}
   end
 
+  @spec replace_projection(CapabilitiesRegistry.capability(), Tool.t(), map()) ::
+          :ok | :skipped | {:error, term()}
+  defp replace_projection(existing, tool, attrs) do
+    case CapabilitiesRegistry.replace(existing.id, attrs) do
+      {:ok, _capability} ->
+        :ok
+
+      {:error, :not_found} ->
+        # The record vanished between the lookup and the replace
+        # (e.g. pruned concurrently): fall back to a fresh insert.
+        register_projection(tool, attrs)
+
+      {:error, reason} = error ->
+        Logger.warning(
+          "ToolProjection: could not refresh #{inspect(tool.name)}: #{inspect(reason)}"
+        )
+
+        error
+    end
+  end
+
   defp safe_get_by_name(name) do
     CapabilitiesRegistry.get_by_name(name)
   catch
     :exit, _ -> {:error, :capabilities_unavailable}
   end
 
-  @spec register_projection(Tool.t()) :: :ok | {:error, term()}
-  defp register_projection(%Tool{} = tool) do
-    case CapabilitiesRegistry.register(capability_attrs(tool)) do
+  @spec register_projection(Tool.t(), map()) :: :ok | :skipped | {:error, term()}
+  defp register_projection(%Tool{} = tool, attrs) do
+    case CapabilitiesRegistry.register(attrs) do
       {:ok, _capability} ->
         :ok
 

@@ -1,3 +1,36 @@
+defmodule Cybernetic.Capabilities.ToolProjectionTest.GatedEmbeddingsProvider do
+  @moduledoc """
+  Embedding provider test double for the resync-race regression
+  test. Delegates to the deterministic test provider, except that
+  the first `embed/2` call after the gate is armed blocks until the
+  test releases it — parking the projection mid-refresh, exactly
+  where the torn-read window opens, so the test can read the
+  Capabilities registry from a concurrent process.
+  """
+
+  alias Cybernetic.TestSupport.EmbeddingsProvider
+
+  @spec embed(String.t(), keyword()) :: {:ok, [float()]} | {:error, term()}
+  def embed(text, opts) do
+    case Application.get_env(:cybernetic, :projection_gate) do
+      %{armed: true, notify: pid} ->
+        Application.put_env(:cybernetic, :projection_gate, %{armed: false, notify: pid})
+        send(pid, {:projection_gate_blocked, self()})
+
+        receive do
+          :release_projection_gate -> :ok
+        after
+          10_000 -> :ok
+        end
+
+      _other ->
+        :ok
+    end
+
+    EmbeddingsProvider.embed(text, opts)
+  end
+end
+
 defmodule Cybernetic.Capabilities.ToolProjectionTest do
   @moduledoc """
   Boundary tests for Axiomatic Design coupling #9 (Issue #86):
@@ -122,6 +155,56 @@ defmodule Cybernetic.Capabilities.ToolProjectionTest do
     assert {:ok, still} = CapabilitiesRegistry.get_by_name("crdt_merge")
     assert still.id == manual.id
     assert still.provider == ManualMod
+  end
+
+  test "a concurrent list/0 never observes a torn mirrored set during resync" do
+    start_supervised!(ToolProjection)
+    assert {:ok, _} = ToolProjection.resync()
+
+    baseline_names =
+      CapabilitiesRegistry.list() |> Enum.map(& &1.name) |> Enum.sort()
+
+    assert length(baseline_names) >= 6
+
+    original_embeddings = Application.get_env(:cybernetic, :embeddings)
+
+    Application.put_env(
+      :cybernetic,
+      :embeddings,
+      provider: Cybernetic.Capabilities.ToolProjectionTest.GatedEmbeddingsProvider
+    )
+
+    Application.put_env(:cybernetic, :projection_gate, %{armed: true, notify: self()})
+
+    on_exit(fn ->
+      Application.put_env(:cybernetic, :embeddings, original_embeddings)
+      Application.delete_env(:cybernetic, :projection_gate)
+    end)
+
+    resync_task = Task.async(fn -> ToolProjection.resync() end)
+
+    # The projection is now parked mid-refresh: the embedding for
+    # the record being refreshed is still being computed. In the
+    # pre-fix implementation the old record had already been
+    # unregistered at this point and the new one not yet
+    # registered, so a concurrent reader saw the mirrored set torn.
+    assert_receive {:projection_gate_blocked, projection_pid}, 5_000
+
+    observed_names =
+      CapabilitiesRegistry.list() |> Enum.map(& &1.name) |> Enum.sort()
+
+    send(projection_pid, :release_projection_gate)
+    assert {:ok, _} = Task.await(resync_task, 30_000)
+
+    assert observed_names == baseline_names,
+           "concurrent list/0 during resync observed a torn mirrored set; " <>
+             "missing: #{inspect(baseline_names -- observed_names)}, " <>
+             "unexpected: #{inspect(observed_names -- baseline_names)}"
+
+    final_names =
+      CapabilitiesRegistry.list() |> Enum.map(& &1.name) |> Enum.sort()
+
+    assert final_names == baseline_names
   end
 
   test "MCP.Server init registers nothing into Hermes (capture-handler landmine removed)" do
