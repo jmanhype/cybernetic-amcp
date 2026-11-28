@@ -20,6 +20,17 @@ defmodule Cybernetic.VSM.EventProducersTest do
     def analyze_episode(_episode, _opts), do: {:ok, %{tokens: %{input: 11, output: 7}}}
   end
 
+  defmodule StubRefusalProvider do
+    @moduledoc false
+    def analyze_episode(_episode, _opts),
+      do: {:ok, %{tokens: %{input: 3, output: 0}, finish_reason: :content_filter}}
+  end
+
+  defmodule StubRaisingProvider do
+    @moduledoc false
+    def analyze_episode(_episode, _opts), do: raise("provider exploded")
+  end
+
   @events [
     [:cybernetic, :work, :finished],
     [:cybernetic, :work, :failed],
@@ -120,6 +131,28 @@ defmodule Cybernetic.VSM.EventProducersTest do
       refute find_event(events, [:amqp, :message, :processed])
       refute find_event(events, [:cybernetic, :work, :finished])
     end
+
+    test "a poison REDELIVERY (attempts > max) does not count the work twice (WC G3)" do
+      key = "s1.status_update.poison_redelivered"
+      meta = %{routing_key: key, headers: [{"_retries", :signedint, 6}]}
+
+      assert :reject =
+               AMQPConsumer.dispatch_with_retry(
+                 :system1,
+                 %{"operation" => "status_update"},
+                 ~s({"operation":"status_update"}),
+                 meta
+               )
+
+      events = events_for(key)
+
+      # The delivery's message outcome is still reported...
+      assert {_event, _meas, %{reason: :poison, attempt: 6}} =
+               find_event(events, [:amqp, :message, :error])
+
+      # ...but the unit of work is not counted a second time.
+      refute find_event(events, [:cybernetic, :work, :failed])
+    end
   end
 
   describe "System4 consumer seam" do
@@ -183,6 +216,45 @@ defmodule Cybernetic.VSM.EventProducersTest do
       assert {_event, _meas, %{reason: :poison}} =
                find_event(events, [:cybernetic, :work, :failed])
     end
+
+    test "one unit of work across raise, raise, success counts exactly once (WC G3)" do
+      key = "s4.reason.unit_counting"
+      raising = {123, "123"}
+      ok = {%{"operation" => "intelligence"}, ~s({"operation":"intelligence"})}
+
+      # The same unit of work, delivered three times: two raising
+      # attempts (republished with _retries incremented), then a
+      # completing attempt.
+      assert :ack =
+               S4Consumer.process_delivery(elem(raising, 0), elem(raising, 1), %{
+                 routing_key: key,
+                 headers: []
+               })
+
+      assert :ack =
+               S4Consumer.process_delivery(elem(raising, 0), elem(raising, 1), %{
+                 routing_key: key,
+                 headers: [{"_retries", :signedint, 1}]
+               })
+
+      assert :ack =
+               S4Consumer.process_delivery(elem(ok, 0), elem(ok, 1), %{
+                 routing_key: key,
+                 headers: [{"_retries", :signedint, 2}]
+               })
+
+      events = events_for(key)
+
+      # Attempts produced message outcomes only...
+      assert Enum.count(events, fn {e, _, _} -> e == [:amqp, :message, :replay] end) == 2
+      assert Enum.count(events, fn {e, _, _} -> e == [:amqp, :message, :processed] end) == 1
+
+      # ...and the unit of work was counted exactly once, on its
+      # completing attempt, with the attempt number attached.
+      finished = Enum.filter(events, fn {e, _, _} -> e == [:cybernetic, :work, :finished] end)
+      assert [{_event, _meas, %{attempt: 2}}] = finished
+      refute find_event(events, [:cybernetic, :work, :failed])
+    end
   end
 
   describe "Hermes Registry invocation event" do
@@ -217,7 +289,35 @@ defmodule Cybernetic.VSM.EventProducersTest do
         collect([])
         |> Enum.filter(fn {_e, _m, meta} -> meta[:provider] == :ollama end)
 
-      assert {_event, %{tokens_in: 11, tokens_out: 7}, _meta} =
+      assert {_event, %{tokens_in: 11, tokens_out: 7}, %{status: :success}} =
+               find_event(events, [:cybernetic, :s4, :usage])
+    end
+
+    test "a refusal's finish_reason rides the usage event, not erased to a stop (WC G3)" do
+      episode = %Episode{id: "ep-usage-refusal", kind: :classification, priority: :normal}
+
+      assert {:ok, %{finish_reason: :content_filter}} =
+               Router.try_provider(episode, StubRefusalProvider, :ollama, [], 0)
+
+      events =
+        collect([])
+        |> Enum.filter(fn {_e, _m, meta} -> meta[:provider] == :ollama end)
+
+      assert {_event, %{tokens_in: 3, tokens_out: 0}, %{finish_reason: :content_filter}} =
+               find_event(events, [:cybernetic, :s4, :usage])
+    end
+
+    test "an error-path provider call still emits usage - zeros, status :error (WC G3)" do
+      episode = %Episode{id: "ep-usage-error", kind: :classification, priority: :normal}
+
+      assert {:error, :request_failed} =
+               Router.try_provider(episode, StubRaisingProvider, :ollama, [], 0)
+
+      events =
+        collect([])
+        |> Enum.filter(fn {_e, _m, meta} -> meta[:provider] == :ollama end)
+
+      assert {_event, %{tokens_in: 0, tokens_out: 0}, %{status: :error}} =
                find_event(events, [:cybernetic, :s4, :usage])
     end
   end

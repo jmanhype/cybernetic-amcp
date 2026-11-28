@@ -488,5 +488,9 @@ defmodule Cybernetic.VSM.System4.Providers.Together do
   defp map_finish_reason("stop"), do: :stop
   defp map_finish_reason("length"), do: :length
   defp map_finish_reason("tool_calls"), do: :tool_calls
+  # A content filter is not a stop (Phase 2 amendment, WC G3):
+  # erasing it here destroyed the refusal signal at the provider
+  # boundary, upstream of every consumer.
+  defp map_finish_reason("content_filter"), do: :content_filter
   defp map_finish_reason(_), do: :stop
 end

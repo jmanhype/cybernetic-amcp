@@ -61,7 +61,7 @@ defmodule Cybernetic.VSM.System4.LLMProvider do
     tokens: %{input: integer(), output: integer()},
     usage: %{cost_usd: float(), latency_ms: integer()},
     tool_calls: [map()],
-    finish_reason: :stop | :length | :tool_calls
+    finish_reason: :stop | :length | :tool_calls | :content_filter | :refusal
   }} | {:error, atom()}
   """
   @callback generate(prompt :: String.t() | list(), opts :: keyword()) ::

@@ -319,29 +319,61 @@ defmodule Cybernetic.VSM.System4.Router do
   defp emit_provider_telemetry(provider, status, latency, result) do
     measurements = %{latency_ms: latency}
 
-    measurements =
+    # Phase 2 (§6) + amendment (WC G3): this is the reflex
+    # layer's third producer seam (the Router), named as such -
+    # D4's two consumer seams carry no cost data. The usage
+    # event fires on ERROR paths too, not only on success: a
+    # retry storm across providers is the most cost-anomalous
+    # pattern there is, and a success-only seam is blind to it.
+    # Error-path calls carry whatever tokens the result knows
+    # (usually none: zeros), the call's status, and the
+    # provider's finish_reason when one survived - refusals and
+    # content filters are no longer erased upstream (the
+    # provider map_finish_reason/map_stop_reason clauses keep
+    # :content_filter / :refusal as themselves).
+    #
+    # Tokens, not dollars: the only prices in this repo are
+    # stale hard-coded 2024 per-provider constants behind the
+    # providers' cost_usd field; they are not used here and no
+    # cost figure is computed or claimed at this seam.
+    {tokens, finish_reason} =
       case result do
-        {:ok, %{tokens: tokens}} ->
+        {:ok, %{tokens: tokens} = res} -> {tokens, Map.get(res, :finish_reason)}
+        {:error, %{tokens: tokens} = res} -> {tokens, Map.get(res, :finish_reason)}
+        _ -> {nil, nil}
+      end
+
+    usage_meta =
+      %{provider: provider, status: status}
+      |> then(fn meta ->
+        if finish_reason, do: Map.put(meta, :finish_reason, finish_reason), else: meta
+      end)
+
+    measurements =
+      case tokens do
+        nil ->
+          :telemetry.execute(
+            [:cybernetic, :s4, :usage],
+            %{tokens_in: 0, tokens_out: 0},
+            usage_meta
+          )
+
+          measurements
+
+        tokens ->
           tokens_in = Map.get(tokens, :input, 0)
           tokens_out = Map.get(tokens, :output, 0)
 
-          # Phase 2 (§6): per-call token usage as its own event -
-          # the cost_anomaly rule's input. Tokens, not dollars: no
-          # price table exists in this codebase, so no cost figure
-          # is computed or claimed here.
           :telemetry.execute(
             [:cybernetic, :s4, :usage],
             %{tokens_in: tokens_in, tokens_out: tokens_out},
-            %{provider: provider}
+            usage_meta
           )
 
           Map.merge(measurements, %{
             tokens_in: tokens_in,
             tokens_out: tokens_out
           })
-
-        _ ->
-          measurements
       end
 
     metadata = %{provider: provider, status: status}

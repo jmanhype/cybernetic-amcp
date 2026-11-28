@@ -320,7 +320,9 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
     }
   end
 
-  defp get_model(opts), do: Keyword.get(opts, :model, System.get_env("ANTHROPIC_MODEL") || @default_model)
+  defp get_model(opts),
+    do: Keyword.get(opts, :model, System.get_env("ANTHROPIC_MODEL") || @default_model)
+
   defp get_max_tokens(opts), do: Keyword.get(opts, :max_tokens, @default_max_tokens)
   defp get_temperature(opts), do: Keyword.get(opts, :temperature, @default_temperature)
   defp get_api_key, do: System.get_env("ANTHROPIC_API_KEY")
@@ -559,5 +561,9 @@ defmodule Cybernetic.VSM.System4.Providers.Anthropic do
   defp map_stop_reason("end_turn"), do: :stop
   defp map_stop_reason("max_tokens"), do: :length
   defp map_stop_reason("tool_use"), do: :tool_calls
+  # A refusal is not a stop (Phase 2 amendment, WC G3): erasing
+  # it here destroyed the refusal signal at the provider
+  # boundary, upstream of every consumer.
+  defp map_stop_reason("refusal"), do: :refusal
   defp map_stop_reason(_), do: :stop
 end

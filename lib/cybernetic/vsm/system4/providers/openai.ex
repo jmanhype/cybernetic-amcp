@@ -407,7 +407,9 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
     }
   end
 
-  defp get_model(opts), do: Keyword.get(opts, :model, System.get_env("OPENAI_MODEL") || @default_model)
+  defp get_model(opts),
+    do: Keyword.get(opts, :model, System.get_env("OPENAI_MODEL") || @default_model)
+
   defp get_max_tokens(opts), do: Keyword.get(opts, :max_tokens, @default_max_tokens)
   defp get_temperature(opts), do: Keyword.get(opts, :temperature, @default_temperature)
   defp get_api_key, do: System.get_env("OPENAI_API_KEY")
@@ -497,6 +499,10 @@ defmodule Cybernetic.VSM.System4.Providers.OpenAI do
   defp map_finish_reason("stop"), do: :stop
   defp map_finish_reason("length"), do: :length
   defp map_finish_reason("tool_calls"), do: :tool_calls
+  # A content filter is not a stop (Phase 2 amendment, WC G3):
+  # erasing it here destroyed the refusal signal at the provider
+  # boundary, upstream of every consumer.
+  defp map_finish_reason("content_filter"), do: :content_filter
   defp map_finish_reason(_), do: :stop
 
   defp normalize_base_url(base_url) do

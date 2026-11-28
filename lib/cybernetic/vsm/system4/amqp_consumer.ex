@@ -99,19 +99,37 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
   # failed attempt the bounded policy will replay ->
   # [:amqp, :message, :replay]; poison -> [:amqp, :message, :error]
   # and [:cybernetic, :work, :failed], labeled :poison.
-  defp emit_delivery_events(routing_key, result, started_us) do
+  # Attempts are not work (Phase 2 amendment, WC G3): every
+  # event carries the delivery's attempt count (the _retries
+  # header), and the work/audit accounting for poison fires only
+  # at the FIRST poison determination (attempts == max_retries),
+  # so a redelivered poison message does not count the same unit
+  # of work twice or write a second :dead_letter record.
+  # Poison settlements and decode rejects record :dead_letter
+  # audit entries (WC G5) - the independent incident source the
+  # shadow FN join reads.
+  defp emit_delivery_events(routing_key, result, started_us, attempts, max_retries) do
     duration_ms = (System.monotonic_time(:microsecond) - started_us) / 1000
-    meta = %{system: :system4, routing_key: routing_key}
+    meta = %{system: :system4, routing_key: routing_key, attempt: attempts}
 
     case result do
       {:error, :poison} ->
         :telemetry.execute([:amqp, :message, :error], %{}, Map.put(meta, :reason, :poison))
 
-        :telemetry.execute(
-          [:cybernetic, :work, :failed],
-          %{},
-          Map.put(meta, :reason, :poison)
-        )
+        if attempts == max_retries do
+          :telemetry.execute(
+            [:cybernetic, :work, :failed],
+            %{},
+            Map.put(meta, :reason, :poison)
+          )
+
+          Cybernetic.Audit.Log.record(:dead_letter, %{
+            seam: :system4_consumer,
+            system: :system4,
+            routing_key: routing_key,
+            reason: :poison
+          })
+        end
 
       {:error, _reason} ->
         :telemetry.execute([:amqp, :message, :replay], %{}, meta)
@@ -131,6 +149,14 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
     meta = %{system: :system4, routing_key: routing_key, reason: :decode_error}
     :telemetry.execute([:amqp, :message, :error], %{}, meta)
     :telemetry.execute([:cybernetic, :work, :failed], %{}, meta)
+
+    Cybernetic.Audit.Log.record(:dead_letter, %{
+      seam: :system4_consumer,
+      system: :system4,
+      routing_key: routing_key,
+      reason: :decode_error
+    })
+
     :ok
   end
 
@@ -232,8 +258,12 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
 
     # Phase 2 (§6): this seam is where the reflex layer's work and
     # message events are born for S4 deliveries (see
-    # emit_delivery_events/3).
-    emit_delivery_events(meta.routing_key, result, started_us)
+    # emit_delivery_events/5). The attempt count rides along so
+    # work accounting can condition on the _retries header
+    # (WC G3: attempts are not work).
+    attempts = Map.get(headers, "_retries", 0)
+    max_retries = Keyword.get(opts, :max_retries, 5)
+    emit_delivery_events(meta.routing_key, result, started_us, attempts, max_retries)
 
     settlement
   end
