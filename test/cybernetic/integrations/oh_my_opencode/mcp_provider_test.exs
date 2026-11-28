@@ -3,15 +3,16 @@ defmodule Cybernetic.Integrations.OhMyOpencode.MCPProviderTest do
 
   alias Cybernetic.Integrations.OhMyOpencode.MCPProvider
   alias Cybernetic.VSM.System3.RateLimiter
-  alias Hermes.Server.Frame
-  alias Hermes.Server.Response
+  alias Anubis.Server.Context
+  alias Anubis.Server.Frame
+  alias Anubis.Server.Response
 
   test "registers tool definitions on init" do
     {:ok, frame} = MCPProvider.init(%{}, Frame.new())
 
     tool_names =
       frame
-      |> Frame.get_tools()
+      |> Frame.get_components()
       |> Enum.map(& &1.name)
 
     assert "code_analysis.analyze" in tool_names
@@ -31,7 +32,7 @@ defmodule Cybernetic.Integrations.OhMyOpencode.MCPProviderTest do
 
     frame =
       Frame.new(%{rate_limiter: rate_limiter})
-      |> Frame.put_private(:session_id, "sess-1")
+      |> with_session_id("sess-1")
 
     {:reply, %Response{} = response, _frame} =
       MCPProvider.handle_tool_call(
@@ -57,7 +58,7 @@ defmodule Cybernetic.Integrations.OhMyOpencode.MCPProviderTest do
 
     frame =
       Frame.new(%{rate_limiter: rate_limiter})
-      |> Frame.put_private(:session_id, "sess-2")
+      |> with_session_id("sess-2")
 
     {:reply, %Response{} = response, _frame} =
       MCPProvider.handle_tool_call(
@@ -82,7 +83,7 @@ defmodule Cybernetic.Integrations.OhMyOpencode.MCPProviderTest do
 
     frame =
       Frame.new(%{rate_limiter: rate_limiter})
-      |> Frame.put_private(:session_id, "sess-3")
+      |> with_session_id("sess-3")
 
     {:reply, %Response{} = ok_response, _frame} =
       MCPProvider.handle_tool_call(
@@ -102,5 +103,11 @@ defmodule Cybernetic.Integrations.OhMyOpencode.MCPProviderTest do
 
     assert limited_response.isError == true
     assert Enum.any?(limited_response.content, &(&1["text"] == "Rate limited"))
+  end
+
+  # Anubis frames carry session identity on the read-only context
+  # (there is no frame.private); build it directly.
+  defp with_session_id(frame, session_id) do
+    %{frame | context: %Context{session_id: session_id}}
   end
 end

@@ -2,15 +2,15 @@
 
 # Simple MCP server for testing our client
 Mix.install([
-  {:hermes_mcp, git: "https://github.com/cloudwalk/hermes-mcp", branch: "main"}
+  {:anubis_mcp, "~> 2.2"}
 ])
 
 defmodule TestMCP.EchoTool do
   @moduledoc "Simple echo tool for testing"
 
-  use Hermes.Server.Component, type: :tool
+  use Anubis.Server.Component, type: :tool
 
-  alias Hermes.Server.Response
+  alias Anubis.Server.Response
 
   schema do
     field(:text, :string, required: true, description: "Text to echo back")
@@ -23,7 +23,7 @@ defmodule TestMCP.EchoTool do
 end
 
 defmodule TestMCP.Server do
-  use Hermes.Server,
+  use Anubis.Server,
     name: "test-mcp-server",
     version: "1.0.0",
     capabilities: [:tools]
@@ -39,7 +39,6 @@ end
 IO.puts("🚀 Starting simple MCP test server...")
 
 children = [
-  Hermes.Server.Registry,
   {TestMCP.Server, transport: :stdio}
 ]
 

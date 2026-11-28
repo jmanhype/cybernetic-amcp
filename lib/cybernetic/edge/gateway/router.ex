@@ -58,13 +58,13 @@ defmodule Cybernetic.Edge.Gateway.Router do
     post("/webhook", TelegramController, :webhook)
   end
 
-  # MCP endpoint (Hermes StreamableHTTP)
+  # MCP endpoint (Anubis StreamableHTTP)
   scope "/mcp" do
     pipe_through(:mcp)
 
     forward(
       "/",
-      Hermes.Server.Transport.StreamableHTTP.Plug,
+      Anubis.Server.Transport.StreamableHTTP.Plug,
       server: Cybernetic.Integrations.OhMyOpencode.MCPProvider
     )
   end

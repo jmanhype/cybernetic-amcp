@@ -12,7 +12,8 @@ defmodule Cybernetic.Core.MCP.MaggClient do
   The implementation mirrors `Cybernetic.Core.MCP.CraftClient`:
   newline-delimited JSON-RPC over a port with proper buffering, so
   messages of any size arrive intact. That shape exists because the
-  Hermes MCP client in `hermes_mcp` 0.14.1 drops server messages
+  Hermes MCP client in `hermes_mcp` 0.14.1 (pre-Anubis-migration)
+  dropped server messages
   larger than one stdio chunk (~64 KB) — a real risk here, since
   Magg's tool list grows with every aggregated backend server. It
   implements just what the bridge needs — initialize handshake,

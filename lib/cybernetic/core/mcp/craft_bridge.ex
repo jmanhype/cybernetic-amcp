@@ -64,8 +64,9 @@ defmodule Cybernetic.Core.MCP.CraftBridge do
   `args: ["mcp"]` for a clean-room, Essentials-only bridge.
 
   The connection uses the purpose-built `CraftClient`, not the
-  Hermes MCP client: hermes_mcp 0.14.1 drops server messages larger
-  than one stdio chunk and wedges after `enable_toolset`, and the
+  Hermes MCP client: hermes_mcp 0.14.1 (pre-Anubis-migration)
+  dropped server messages larger
+  than one stdio chunk and wedged after `enable_toolset`, and the
   widened tool list is ~125 KB. See `CraftClient`'s moduledoc.
   """
 
