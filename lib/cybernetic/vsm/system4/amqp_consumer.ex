@@ -127,6 +127,11 @@ defmodule Cybernetic.VSM.System4.AMQPConsumer do
       |> RetryHelper.headers_map()
       |> Map.put("_routing_key", meta.routing_key)
 
+    # Phase 1 (IP-31): merge the sender's Lamport tick and record
+    # any causal regression into the audit log. Evidence, not a
+    # gate - processing proceeds either way.
+    Cybernetic.Transport.AMQP.Causality.check_and_record(headers)
+
     opts =
       Keyword.merge([exchange: "cyb.commands", routing_key: meta.routing_key], opts)
 
