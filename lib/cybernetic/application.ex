@@ -236,6 +236,7 @@ defmodule Cybernetic.Application do
           |> List.flatten()
           |> Kernel.++(health_children())
           |> Kernel.++(telemetry_children())
+          |> Kernel.++(audit_children())
         end
 
       opts = [
@@ -348,6 +349,14 @@ defmodule Cybernetic.Application do
     else
       []
     end
+  end
+
+  # The audit log (Phase 1, IP-27): the system's record-keeper. It
+  # sits outside the VSM supervision subtree - no VSM system
+  # supervises, restarts, or configures it - and starts only in the
+  # full tree (never in minimal test mode).
+  defp audit_children do
+    [Cybernetic.Audit.Log]
   end
 
   # Add telemetry children conditionally
