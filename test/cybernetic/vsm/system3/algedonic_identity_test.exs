@@ -2,14 +2,31 @@ defmodule Cybernetic.VSM.System3.AlgedonicIdentityTest do
   @moduledoc """
   Phase 2 (§7) signal-integrity bar: one physical algedonic signal
   must reach ControlSupervisor's accounting exactly once, however
-  many paths it travels. Before this phase, one TelemetryAlgedonic
-  emission could arrive three times (in-process report, S3 AMQP
-  round-trip, S4 forward) and be buffered, counted, and
-  audit-recorded three times - with the S4 forward overwriting the
-  provenance to :s4. These tests drive one signal down the three
-  paths and assert one buffered signal, one metric increment, one
+  many paths it travels.
+
+  Corrected census (WC review H1/G1, ruled 2026-11-28 - this
+  replaces the design's original "up to three times" claim,
+  which was wrong): the maximum double-count reachable in the
+  pre-phase code was 2x, for severe pain only (the in-process
+  report plus the s3 AMQP copy), in a hypothetically fed system;
+  as shipped the count was 0, because the producer's wildcard
+  attaches could never fire. The severity routing is mutually
+  exclusive (severe -> s3 only, critical -> s5 only,
+  moderate/mild -> s4 only), and the S4 consumer never dispatches
+  Goldrush algedonic from its envelope, so the S4-forward arm
+  never carried Goldrush signals at all; it is live for
+  S1-originated signals over the InMemory transport. The S4
+  forward also overwrote provenance to :s4 for payloads lacking
+  "source_system".
+
+  These tests drive one signal down the identity contract's
+  paths (in-process report, S4 forward, S3 AMQP dispatch) and
+  assert one buffered signal, one metric increment, one
   :algedonic_signal audit entry, and two :algedonic_duplicate
-  entries naming the redundant paths.
+  entries naming the redundant paths. The producer-driven
+  end-to-end bar - real minted identities from the real
+  producers - is algedonic_producer_identity_test.exs (WC G2
+  pull-forward).
   """
   use ExUnit.Case, async: false
 

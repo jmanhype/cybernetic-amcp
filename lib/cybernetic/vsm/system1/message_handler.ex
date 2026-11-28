@@ -346,6 +346,13 @@ defmodule Cybernetic.VSM.System1.MessageHandler do
       "operation" => "algedonic",
       "type" => "algedonic.#{type}",
       "source_system" => "s1",
+      # Producer-side minting (Phase 2 amendment, WC G2): S1 is
+      # the S4 forward path's only live producer, and it was the
+      # one minting site assigned to no branch - forwarded S1
+      # signals arrived id-less and could never dedup at S3.
+      # The identity is minted here, at first emission, and the
+      # S4 forward preserves it.
+      "signal_id" => Cybernetic.VSM.System3.ControlSupervisor.mint_signal_id(),
       "data" => data,
       "timestamp" => DateTime.utc_now()
     }

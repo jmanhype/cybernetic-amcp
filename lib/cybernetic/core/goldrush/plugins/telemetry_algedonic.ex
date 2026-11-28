@@ -242,9 +242,19 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
   defp emit_pain_signal(success_rate, avg_latency, metrics) do
     severity = calculate_pain_severity(success_rate)
 
+    # Producer-side minting (Phase 2 amendment, WC G2): one
+    # identity per emission, minted here at the first-emission
+    # point and carried by every copy of the signal - the AMQP
+    # payloads below and the in-process report - so the S3
+    # entry point can tell a signal's own copies from distinct
+    # signals. Without it, dedup at the entry point is
+    # undecidable (WC H1).
+    signal_id = Cybernetic.VSM.System3.ControlSupervisor.mint_signal_id()
+
     signal = %{
       type: "algedonic.pain",
       severity: severity,
+      signal_id: signal_id,
       success_rate: success_rate,
       avg_latency: avg_latency,
       metrics: metrics,
@@ -295,15 +305,19 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     # owner of the algedonic path. The AMQP publishes above only
     # reach it when AMQP is enabled; this report closes the loop in
     # every deployment mode.
-    report_to_control(:pain, severity)
+    report_to_control(:pain, severity, signal_id)
   end
 
   defp emit_pleasure_signal(success_rate, avg_latency, metrics) do
     intensity = calculate_pleasure_intensity(success_rate)
 
+    # Producer-side minting - see emit_pain_signal.
+    signal_id = Cybernetic.VSM.System3.ControlSupervisor.mint_signal_id()
+
     signal = %{
       type: "algedonic.pleasure",
       intensity: intensity,
+      signal_id: signal_id,
       success_rate: success_rate,
       avg_latency: avg_latency,
       metrics: metrics,
@@ -364,13 +378,13 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
 
     # Also report in-process to S3's ControlSupervisor (see
     # emit_pain_signal).
-    report_to_control(:pleasure, intensity)
+    report_to_control(:pleasure, intensity, signal_id)
   end
 
   # The algedonic intensity scale shared with
   # Cybernetic.VSM.System4.MessageHandler: ControlSupervisor
   # processes pain above 0.7 and auto-intervenes above 0.8.
-  defp report_to_control(type, level) do
+  defp report_to_control(type, level, signal_id) do
     if Process.whereis(Cybernetic.VSM.System3.ControlSupervisor) do
       intensity =
         case level do
@@ -385,7 +399,8 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       Cybernetic.VSM.System3.ControlSupervisor.report_algedonic(
         type,
         intensity,
-        :goldrush_telemetry
+        :goldrush_telemetry,
+        signal_id
       )
     end
 
