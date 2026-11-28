@@ -100,7 +100,9 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
           json,
           persistent: true,
           content_type: "application/json",
-          headers: []
+          # Phase 1 (IP-31): every publish is stamped with the
+          # node's Lamport tick at this single choke point.
+          headers: Cybernetic.Transport.AMQP.Causality.put_headers()
         )
 
         # Wait for confirm using AMQP.Confirm

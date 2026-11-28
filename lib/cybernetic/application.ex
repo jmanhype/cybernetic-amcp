@@ -128,6 +128,10 @@ defmodule Cybernetic.Application do
             # AMQP Transport
             Cybernetic.Transport.AMQP.Connection,
             {Cybernetic.Core.Transport.AMQP.Topology, []},
+            # Lamport clock (Phase 1, IP-31): ticks at the publish
+            # choke point, merges and detects regressions at the
+            # consume choke points
+            Cybernetic.Transport.AMQP.LamportClock,
             Cybernetic.Core.Transport.AMQP.Publisher,
             # Performance Optimizations
             {Cybernetic.Core.Transport.AMQP.PublisherPool, []}

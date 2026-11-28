@@ -179,6 +179,14 @@ defmodule Cybernetic.Core.Transport.RetryHelper do
     exchange = Keyword.get(opts, :exchange, "cyb.events")
     routing_key = Keyword.get(opts, :routing_key, "retry.#{delay_ms}")
 
+    # Phase 1 (IP-31): a retry republish is a new send - it carries
+    # a fresh Lamport stamp so the causal chain continues through
+    # retries instead of replaying the original tick.
+    headers =
+      headers
+      |> Map.put("x-lamport", Cybernetic.Transport.AMQP.LamportClock.tick())
+      |> Map.put("x-node", to_string(node()))
+
     payload_json =
       case payload do
         bin when is_binary(bin) -> bin
