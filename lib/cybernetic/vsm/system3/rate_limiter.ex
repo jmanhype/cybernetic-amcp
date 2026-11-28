@@ -164,6 +164,21 @@ defmodule Cybernetic.VSM.System3.RateLimiter do
 
     emit_telemetry(budget_key, resource_type, priority, result)
 
+    # Phase 1 (IP-27): budget denials are witnessed into the audit
+    # log by the RateLimiter itself - S3 does not grade this paper.
+    case result do
+      {:error, reason} ->
+        Cybernetic.Audit.Log.record(:budget_denial, %{
+          budget_key: inspect(budget_key),
+          resource_type: inspect(resource_type),
+          priority: priority,
+          reason: reason
+        })
+
+      :ok ->
+        :ok
+    end
+
     {:reply, result, new_state}
   end
 

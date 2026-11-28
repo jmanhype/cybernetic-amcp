@@ -40,6 +40,31 @@ defmodule Cybernetic.VSM.System2.Coordinator do
   @spec release_slot(term()) :: :ok
   def release_slot(topic), do: GenServer.cast(__MODULE__, {:release_slot, topic})
 
+  @doc """
+  Read-only snapshot of coordination state, for audit probes
+  (Phase 1, IP-27: the S3* audit reads the Coordinator's real slot
+  and priority state instead of estimating coordination health).
+  Returns `{:error, :not_running}` when the Coordinator is down.
+  """
+  @spec get_stats() :: {:ok, map()} | {:error, :not_running}
+  def get_stats do
+    GenServer.call(__MODULE__, :get_stats)
+  catch
+    :exit, {:noproc, _} -> {:error, :not_running}
+  end
+
+  def handle_call(:get_stats, _from, state) do
+    stats = %{
+      slots_in_use: state.resource_slots |> Map.values() |> Enum.sum(),
+      max_slots: state.max_slots,
+      resource_slots: state.resource_slots,
+      priorities: state.priorities,
+      topics_tracked: map_size(state.resource_slots)
+    }
+
+    {:reply, {:ok, stats}, state}
+  end
+
   def handle_cast({:focus, task_id}, state) do
     att =
       Map.update(state.attention, task_id, %{weight: 1.1, last: System.monotonic_time()}, fn a ->
