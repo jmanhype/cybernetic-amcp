@@ -185,11 +185,35 @@ defmodule Cybernetic.VSM.AMQPConsumer do
     opts =
       Keyword.merge([exchange: "cyb.commands", routing_key: meta.routing_key], opts)
 
-    attempt = fn -> dispatch_safely(system, message, meta) end
+    # Phase 1 (IP-35): the consume span parents to the publisher's
+    # trace context carried in the delivery headers; the per-system
+    # dispatch runs as its child span.
+    parent_ctx =
+      Cybernetic.Telemetry.OTEL.extract_context(Map.get(meta, :headers) || [])
 
-    case RetryHelper.with_retry(headers, payload, attempt, opts) do
-      {:error, :poison} -> :reject
-      _other -> :ack
+    token = :otel_ctx.attach(parent_ctx)
+
+    try do
+      Cybernetic.Telemetry.OTEL.with_span(
+        "amqp.consume",
+        %{routing_key: meta.routing_key},
+        fn ->
+          attempt = fn ->
+            Cybernetic.Telemetry.OTEL.with_span(
+              "vsm.dispatch",
+              %{system: system, routing_key: meta.routing_key},
+              fn -> dispatch_safely(system, message, meta) end
+            )
+          end
+
+          case RetryHelper.with_retry(headers, payload, attempt, opts) do
+            {:error, :poison} -> :reject
+            _other -> :ack
+          end
+        end
+      )
+    after
+      :otel_ctx.detach(token)
     end
   end
 

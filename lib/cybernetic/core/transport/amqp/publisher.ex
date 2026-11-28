@@ -93,31 +93,46 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
 
     case Jason.encode(secured_message) do
       {:ok, json} ->
-        Basic.publish(
-          channel,
-          exchange,
-          routing_key,
-          json,
-          persistent: true,
-          content_type: "application/json",
-          # Phase 1 (IP-31): every publish is stamped with the
-          # node's Lamport tick at this single choke point.
-          headers: Cybernetic.Transport.AMQP.Causality.put_headers()
+        # Phase 1 (IP-35): the publish is an OTEL span via the
+        # existing Cybernetic.Telemetry.OTEL, and the span's
+        # context is injected into the AMQP headers so consumers
+        # can parent their spans to it.
+        Cybernetic.Telemetry.OTEL.with_span(
+          "amqp.publish",
+          %{exchange: exchange, routing_key: routing_key},
+          fn ->
+            headers =
+              []
+              # Phase 1 (IP-31): every publish is stamped with the
+              # node's Lamport tick at this single choke point.
+              |> Cybernetic.Transport.AMQP.Causality.put_headers()
+              |> Cybernetic.Telemetry.OTEL.inject_context()
+
+            Basic.publish(
+              channel,
+              exchange,
+              routing_key,
+              json,
+              persistent: true,
+              content_type: "application/json",
+              headers: headers
+            )
+
+            # Wait for confirm using AMQP.Confirm
+            case Confirm.wait_for_confirms(channel, 1500) do
+              true ->
+                {:reply, :ok, state}
+
+              false ->
+                Logger.error("Message nack'd by broker")
+                {:reply, {:error, :nack}, state}
+
+              :timeout ->
+                Logger.error("Timeout waiting for confirm")
+                {:reply, {:error, :confirm_timeout}, state}
+            end
+          end
         )
-
-        # Wait for confirm using AMQP.Confirm
-        case Confirm.wait_for_confirms(channel, 1500) do
-          true ->
-            {:reply, :ok, state}
-
-          false ->
-            Logger.error("Message nack'd by broker")
-            {:reply, {:error, :nack}, state}
-
-          :timeout ->
-            Logger.error("Timeout waiting for confirm")
-            {:reply, {:error, :confirm_timeout}, state}
-        end
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
