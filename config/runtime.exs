@@ -92,8 +92,7 @@ config :cybernetic, :amqp,
   exchanges: %{
     events: "cyb.events",
     telemetry: "cyb.telemetry",
-    commands: "cyb.commands",
-    mcp_tools: "cyb.mcp.tools"
+    commands: "cyb.commands"
   }
 
 # VSM System Configuration
@@ -104,13 +103,6 @@ config :cybernetic, :vsm,
   enable_system4: true,
   enable_system5: true,
   telemetry_interval: 5_000
-
-# MCP (Model Context Protocol) Configuration
-config :cybernetic, :mcp,
-  registry_timeout: 5_000,
-  client_timeout: 30_000,
-  max_retries: 3,
-  enable_vsm_tools: true
 
 # Goldrush Configuration for Event Processing
 config :cybernetic, :goldrush,

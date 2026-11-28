@@ -89,10 +89,6 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
        {"x-message-ttl", :long, 86_400_000}
      ]},
 
-    # MCP queues
-    {"mcp.requests", durable: true},
-    {"mcp.responses", durable: true},
-
     # Telemetry aggregation
     {"telemetry.metrics", durable: true},
     {"telemetry.logs", durable: true},
@@ -128,10 +124,6 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     {"cyb.commands", "cyb.s3.control", "s3.#"},
     {"cyb.commands", "cyb.s4.llm", "s4.#"},
     {"cyb.commands", "cyb.s5.policy", "s5.#"},
-
-    # MCP bindings - use cyb.mcp.tools exchange
-    {"cyb.mcp.tools", "mcp.requests", "request"},
-    {"cyb.mcp.tools", "mcp.responses", "response"},
 
     # Telemetry bindings
     {"cyb.telemetry", "telemetry.metrics", "metrics.#"},
@@ -261,8 +253,7 @@ defmodule Cybernetic.Core.Transport.AMQP.Topology do
     exchange_types = %{
       telemetry: :fanout,
       events: :topic,
-      commands: :topic,
-      mcp_tools: :topic
+      commands: :topic
     }
 
     Enum.reduce_while(exchanges, :ok, fn {key, exchange_name}, _acc ->
