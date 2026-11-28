@@ -102,8 +102,6 @@ defmodule Cybernetic.Transport.AddressingSchemeTest do
       queue_names = Enum.map(Topology.queues(), fn {name, _opts} -> name end)
 
       for queue <- [
-            "mcp.requests",
-            "mcp.responses",
             "telemetry.metrics",
             "telemetry.logs",
             "cyb.telemetry.q",
@@ -117,7 +115,6 @@ defmodule Cybernetic.Transport.AddressingSchemeTest do
       end
 
       bindings = Topology.bindings()
-      assert {"cyb.mcp.tools", "mcp.requests", "request"} in bindings
       assert {"cyb.telemetry", "telemetry.metrics", "metrics.#"} in bindings
       assert {"cyb.events", "events.stream", "#"} in bindings
       assert {"vsm.dlx", "dlq", ""} in bindings

@@ -14,7 +14,6 @@ defmodule Cybernetic.Core.Transport.AMQP.Publisher do
       {"cyb.commands", :topic},
       # telemetry is fanout, not topic
       {"cyb.telemetry", :fanout},
-      {"cyb.mcp.tools", :topic},
       {"vsm.dlx", :fanout}
     ]
   end
