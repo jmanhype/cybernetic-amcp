@@ -14,6 +14,10 @@ defmodule Cybernetic.Core.Transport.RetryHelper do
     * `:max_retries` - Maximum retry attempts (default: 5)
     * `:channel` - AMQP channel for republishing
     * `:exchange` - Exchange for retry messages
+    * `:routing_key` - Routing key for the republished retry message
+      (default: `"retry.<delay_ms>"`; the VSM consumers pass the
+      delivery's original routing key so the copy returns to the
+      queue it came from)
     * `:delay_base` - Base delay in ms for exponential backoff (default: 1000)
   """
   def with_retry(headers, payload, fun, opts \\ []) do
@@ -60,6 +64,22 @@ defmodule Cybernetic.Core.Transport.RetryHelper do
         end
     end
   end
+
+  @doc """
+  Converts AMQP delivery headers - a list of `{name, type, value}`
+  tuples as the AMQP client presents them in delivery metadata, or
+  nil when the delivery carried none - into the plain map shape the
+  retry bookkeeping in this module uses.
+  """
+  @spec headers_map([{String.t(), atom(), term()} | {String.t(), term()}] | nil) :: map()
+  def headers_map(headers) when is_list(headers) do
+    Map.new(headers, fn
+      {key, _type, value} -> {key, value}
+      {key, value} -> {key, value}
+    end)
+  end
+
+  def headers_map(_headers), do: %{}
 
   @doc """
   Ensures trace headers are present for distributed tracing.
@@ -157,7 +177,7 @@ defmodule Cybernetic.Core.Transport.RetryHelper do
 
   defp republish_for_retry(channel, headers, payload, delay_ms, opts) do
     exchange = Keyword.get(opts, :exchange, "cyb.events")
-    routing_key = "retry.#{delay_ms}"
+    routing_key = Keyword.get(opts, :routing_key, "retry.#{delay_ms}")
 
     payload_json =
       case payload do

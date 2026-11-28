@@ -21,9 +21,14 @@ defmodule Cybernetic.VSM.AMQPConsumer do
   connect through the shared AMQP Connection, passively check the
   queue exists (Topology declares it), ack after dispatch, reject
   undecodable payloads without requeue, and reconnect on a 5s timer
-  when the channel is unavailable. Dispatch itself is a public
-  function - `dispatch/4` - so the routing from a decoded message
-  to the owning system's entry point is testable without a broker:
+  when the channel is unavailable. A dispatch that raises is retried
+  under the bounded IP-30 policy (`dispatch_with_retry/5`): the
+  failure is republished with an incremented `_retries` header and
+  an exponential-backoff expiration, and only once the retry count
+  is exhausted is the delivery rejected without requeue, which
+  dead-letters it. Dispatch itself is a public function -
+  `dispatch/4` - so the routing from a decoded message to the
+  owning system's entry point is testable without a broker:
 
     * `:system1` -> `Cybernetic.VSM.System1.MessageHandler.handle_message/3`
     * `:system2` -> `Cybernetic.VSM.System2.MessageHandler.handle_message/3`
@@ -41,6 +46,7 @@ defmodule Cybernetic.VSM.AMQPConsumer do
   require Logger
 
   alias Cybernetic.Core.Transport.AMQP.Connection
+  alias Cybernetic.Core.Transport.RetryHelper
   alias Cybernetic.VSM.System3.ControlSupervisor
 
   @default_prefetch_count 10
@@ -138,6 +144,50 @@ defmodule Cybernetic.VSM.AMQPConsumer do
 
   def dispatch(_system, _message, _routing_key, _meta), do: {:error, :invalid_message}
 
+  @doc """
+  Dispatches a decoded delivery under the bounded retry policy
+  (IP-30) and reports how the caller should settle the delivery.
+
+  The dispatch runs through
+  `Cybernetic.Core.Transport.RetryHelper.with_retry/4`, which counts
+  attempts in the `_retries` AMQP header. On a dispatch failure the
+  helper republishes the raw payload to the `cyb.commands` exchange
+  under the delivery's original routing key - so the copy returns to
+  this consumer's queue - with the count incremented and an
+  exponential-backoff expiration, and this function returns `:ack`
+  (the retry copy supersedes the original delivery). Once the count
+  reaches the helper's maximum the message is poison: the helper
+  does not run the dispatch at all and this function returns
+  `:reject`, so the caller rejects without requeue and the message
+  dead-letters - the pre-IP-30 behaviour, now bounded behind
+  retries. Handler-level `{:error, _}` results are contract
+  outcomes, not delivery failures (see `dispatch_safely/3`), and are
+  acked without retrying.
+
+  The `:channel` option is forwarded to the helper (production
+  deliveries always pass the consumer's channel; broker-free tests
+  omit it, in which case the helper skips the republish and the
+  outcome mapping is unchanged).
+  """
+  @spec dispatch_with_retry(atom(), map(), binary(), map(), keyword()) :: :ack | :reject
+  def dispatch_with_retry(system, message, payload, meta, opts \\ []) do
+    headers =
+      meta
+      |> Map.get(:headers)
+      |> RetryHelper.headers_map()
+      |> Map.put("_routing_key", meta.routing_key)
+
+    opts =
+      Keyword.merge([exchange: "cyb.commands", routing_key: meta.routing_key], opts)
+
+    attempt = fn -> dispatch_safely(system, message, meta) end
+
+    case RetryHelper.with_retry(headers, payload, attempt, opts) do
+      {:error, :poison} -> :reject
+      _other -> :ack
+    end
+  end
+
   @impl true
   def init(opts) do
     queue = Keyword.fetch!(opts, :queue)
@@ -176,12 +226,14 @@ defmodule Cybernetic.VSM.AMQPConsumer do
 
     case Jason.decode(payload) do
       {:ok, message} ->
-        case dispatch_safely(state.system, message, meta) do
-          {:ok, _result} ->
+        case dispatch_with_retry(state.system, message, payload, meta, channel: state.channel) do
+          :ack ->
             Basic.ack(state.channel, meta.delivery_tag)
 
-          {:error, reason} ->
-            Logger.error("VSM Consumer #{state.queue}: dispatch failed: #{inspect(reason)}")
+          :reject ->
+            Logger.error(
+              "VSM Consumer #{state.queue}: dispatch retries exhausted, dead-lettering"
+            )
 
             Basic.reject(state.channel, meta.delivery_tag, requeue: false)
         end
