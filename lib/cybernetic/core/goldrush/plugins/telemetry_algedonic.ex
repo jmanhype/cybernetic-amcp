@@ -7,13 +7,18 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
 
   use GenServer
   require Logger
-  alias Cybernetic.Core.Transport.AMQP.Publisher
 
+  # Phase 2 (§5.2): exact event names only. :telemetry matches
+  # names exactly, so the wildcard segments this list used to
+  # carry ([:cybernetic, :*], [:amqp, :message, :*], [:vsm, :*, :*],
+  # [:telegram, :*, :*]) could never fire - the attach was
+  # decoration. These three names are exactly the ones
+  # update_metrics/2 counts, and they have real producers at the
+  # consumer dispatch seams (Phase 2, §6).
   @telemetry_events [
-    [:cybernetic, :*],
-    [:amqp, :message, :*],
-    [:vsm, :*, :*],
-    [:telegram, :*, :*]
+    [:amqp, :message, :processed],
+    [:amqp, :message, :error],
+    [:amqp, :message, :replay]
   ]
 
   # Error rate above this triggers pain signal
@@ -33,7 +38,11 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
         latency_sum: 0,
         latency_count: 0
       },
-      algedonic_state: :neutral
+      algedonic_state: :neutral,
+      # Transition gating (Phase 2, §5.2): the last {kind, level}
+      # actually emitted, or :none. Sitting in a trigger zone does
+      # not re-emit; only a change does.
+      last_emitted: :none
     ]
   end
 
@@ -130,7 +139,8 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
         window_start: cutoff,
         events: filtered_events,
         metrics: recalculate_metrics(filtered_events),
-        algedonic_state: state.algedonic_state
+        algedonic_state: state.algedonic_state,
+        last_emitted: state.last_emitted
       }
       |> check_algedonic_triggers()
 
@@ -151,18 +161,19 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
   system's prefix: `algedonic_routing_key("s3", :pain, :severe)`
   is `"s3.algedonic.pain.severe"`. A `nil` level omits the suffix:
   `algedonic_routing_key("s4", :pain, nil)` is `"s4.algedonic.pain"`.
+
+  Retained as the canonical key builder (pinned by the addressing
+  scheme tests) even though this plugin no longer publishes:
+  since Phase 2 (§5.2) its signals travel the in-process report
+  path only. If a future cross-node deployment restores an AMQP
+  path for Goldrush signals, this is the key shape it must use -
+  with §7's signal identity making the round-trip safe.
   """
   @spec algedonic_routing_key(String.t(), :pain | :pleasure, atom() | nil) :: String.t()
   def algedonic_routing_key(system, kind, nil), do: "#{system}.algedonic.#{kind}"
 
   def algedonic_routing_key(system, kind, level),
     do: "#{system}.algedonic.#{kind}.#{level}"
-
-  # The exchange the canonical scheme publishes on (config-overridable).
-  defp commands_exchange do
-    exchanges = Application.get_env(:cybernetic, :amqp)[:exchanges] || %{}
-    Map.get(exchanges, :commands, "cyb.commands")
-  end
 
   # Private Functions
 
@@ -215,19 +226,19 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
           0
         end
 
-      new_algedonic_state =
+      {new_algedonic_state, emission} =
         cond do
           success_rate < @pain_threshold ->
-            emit_pain_signal(success_rate, avg_latency, state.metrics)
-            :pain
+            {:pain, {:pain, calculate_pain_severity(success_rate)}}
 
           success_rate > @pleasure_threshold ->
-            emit_pleasure_signal(success_rate, avg_latency, state.metrics)
-            :pleasure
+            {:pleasure, {:pleasure, calculate_pleasure_intensity(success_rate)}}
 
           true ->
-            :neutral
+            {:neutral, :none}
         end
+
+      state = maybe_emit(state, emission, success_rate, avg_latency)
 
       if new_algedonic_state != state.algedonic_state do
         Logger.info("Algedonic state changed: #{state.algedonic_state} -> #{new_algedonic_state}")
@@ -239,9 +250,34 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     end
   end
 
-  defp emit_pain_signal(success_rate, avg_latency, metrics) do
-    severity = calculate_pain_severity(success_rate)
+  # Transition gating (Phase 2, §5.2): a signal is emitted only
+  # when the computed {kind, level} differs from the last emitted
+  # one. Entering a zone, escalating within it (moderate ->
+  # severe -> critical), and recovering out of it are the
+  # transitions; sitting in a zone, however many events arrive,
+  # emits nothing further. Returning to neutral rearms the gate,
+  # so a later re-entry emits again. Before this phase the check
+  # emitted on every event while the window sat in a zone - one
+  # pain episode became one signal per message.
+  defp maybe_emit(state, :none, _success_rate, _avg_latency) do
+    %{state | last_emitted: :none}
+  end
 
+  defp maybe_emit(%{last_emitted: emission} = state, emission, _success_rate, _avg_latency) do
+    state
+  end
+
+  defp maybe_emit(state, {:pain, severity}, success_rate, avg_latency) do
+    emit_pain_signal(success_rate, avg_latency, state.metrics, severity)
+    %{state | last_emitted: {:pain, severity}}
+  end
+
+  defp maybe_emit(state, {:pleasure, intensity}, success_rate, avg_latency) do
+    emit_pleasure_signal(success_rate, avg_latency, state.metrics, intensity)
+    %{state | last_emitted: {:pleasure, intensity}}
+  end
+
+  defp emit_pain_signal(success_rate, avg_latency, metrics, severity) do
     signal = %{
       type: "algedonic.pain",
       severity: severity,
@@ -252,55 +288,31 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       recommendations: generate_pain_recommendations(success_rate, avg_latency)
     }
 
-    # Route pain signals based on severity, using the canonical
-    # addressing scheme: sN.* keys on the commands exchange.
-    case severity do
-      :critical ->
-        # Critical pain: Route to S5 (Policy) for system-wide changes
-        Publisher.publish(
-          commands_exchange(),
-          algedonic_routing_key("s5", :pain, :critical),
-          signal
-        )
+    Logger.warning(
+      "PAIN signal (#{severity}): success_rate=#{success_rate}, reporting to S3 Control"
+    )
 
-        Logger.error("CRITICAL PAIN signal sent to S5 Policy: success_rate=#{success_rate}")
-
-      :severe ->
-        # Severe pain: Route to S3 (Control) for intervention
-        Publisher.publish(
-          commands_exchange(),
-          algedonic_routing_key("s3", :pain, :severe),
-          signal
-        )
-
-        Logger.warning("SEVERE PAIN signal sent to S3 Control: success_rate=#{success_rate}")
-
-      _ ->
-        # Mild/moderate pain: Route to S4 (Intelligence) for analysis
-        Publisher.publish(commands_exchange(), algedonic_routing_key("s4", :pain, nil), signal)
-
-        Logger.warning(
-          "PAIN signal sent to S4 Intelligence: success_rate=#{success_rate}, severity=#{severity}"
-        )
-    end
-
-    # Emit telemetry event
+    # Emit telemetry event (observed by tests and the probe)
     :telemetry.execute(
       [:goldrush, :algedonic, :pain],
       %{severity: signal.severity, success_rate: success_rate},
       signal
     )
 
-    # Also report in-process to S3's ControlSupervisor, the single
-    # owner of the algedonic path. The AMQP publishes above only
-    # reach it when AMQP is enabled; this report closes the loop in
-    # every deployment mode.
+    # Single-path emission (Phase 2, §5.2): the in-process report
+    # to S3's ControlSupervisor - coupling #3's single entry
+    # point - is the only path a Goldrush window signal takes.
+    # The AMQP publishes that used to fan this signal out to the
+    # s3/s4/s5 queues are removed: they re-entered S3 through the
+    # consumers and S4's forward, so one window episode arrived
+    # at the entry point up to three times (and the s5 copy
+    # landed on a handler with no algedonic clause and errored).
+    # S3 is the actor; Phase 1's audit log is how the rest of the
+    # system reads what the reflex layer did.
     report_to_control(:pain, severity)
   end
 
-  defp emit_pleasure_signal(success_rate, avg_latency, metrics) do
-    intensity = calculate_pleasure_intensity(success_rate)
-
+  defp emit_pleasure_signal(success_rate, avg_latency, metrics, intensity) do
     signal = %{
       type: "algedonic.pleasure",
       intensity: intensity,
@@ -311,59 +323,18 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
       recommendations: generate_pleasure_recommendations(success_rate, avg_latency)
     }
 
-    # Route pleasure signals based on intensity, using the canonical
-    # addressing scheme: sN.* keys on the commands exchange.
-    case intensity do
-      :euphoric ->
-        # Euphoric pleasure: Route to S5 (Policy) for optimization opportunities
-        Publisher.publish(
-          commands_exchange(),
-          algedonic_routing_key("s5", :pleasure, :euphoric),
-          signal
-        )
+    Logger.info(
+      "PLEASURE signal (#{intensity}): success_rate=#{success_rate}, reporting to S3 Control"
+    )
 
-        Logger.info("EUPHORIC PLEASURE signal sent to S5 Policy: success_rate=#{success_rate}")
-
-      :high ->
-        # High pleasure: Route to both S4 (Intelligence) and S5 (Policy)
-        Publisher.publish(
-          commands_exchange(),
-          algedonic_routing_key("s4", :pleasure, :high),
-          signal
-        )
-
-        Publisher.publish(
-          commands_exchange(),
-          algedonic_routing_key("s5", :pleasure, :high),
-          signal
-        )
-
-        Logger.info(
-          "HIGH PLEASURE signal sent to S4 Intelligence & S5 Policy: success_rate=#{success_rate}"
-        )
-
-      _ ->
-        # Moderate/mild pleasure: Route to S4 (Intelligence) for analysis
-        Publisher.publish(
-          commands_exchange(),
-          algedonic_routing_key("s4", :pleasure, nil),
-          signal
-        )
-
-        Logger.info(
-          "PLEASURE signal sent to S4 Intelligence: success_rate=#{success_rate}, intensity=#{intensity}"
-        )
-    end
-
-    # Emit telemetry event
+    # Emit telemetry event (observed by tests and the probe)
     :telemetry.execute(
       [:goldrush, :algedonic, :pleasure],
       %{intensity: signal.intensity, success_rate: success_rate},
       signal
     )
 
-    # Also report in-process to S3's ControlSupervisor (see
-    # emit_pain_signal).
+    # Single-path emission (see emit_pain_signal).
     report_to_control(:pleasure, intensity)
   end
 
@@ -382,10 +353,13 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
           _other -> 0.5
         end
 
+      # Phase 2 (§7): each window emission mints its signal id at
+      # this, its first-emission point; the origin is this plugin.
       Cybernetic.VSM.System3.ControlSupervisor.report_algedonic(
         type,
         intensity,
-        :goldrush_telemetry
+        :goldrush_telemetry,
+        Cybernetic.VSM.System3.ControlSupervisor.mint_signal_id()
       )
     end
 
