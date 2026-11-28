@@ -303,10 +303,15 @@ defmodule Cybernetic.Core.Goldrush.Plugins.TelemetryAlgedonic do
     # to S3's ControlSupervisor - coupling #3's single entry
     # point - is the only path a Goldrush window signal takes.
     # The AMQP publishes that used to fan this signal out to the
-    # s3/s4/s5 queues are removed: they re-entered S3 through the
-    # consumers and S4's forward, so one window episode arrived
-    # at the entry point up to three times (and the s5 copy
-    # landed on a handler with no algedonic clause and errored).
+    # s3/s4/s5 queues are removed. Corrected census (WC H1/G1,
+    # ruled 2026-11-28): the fan-out's worst case was a 2x count
+    # at the entry point - severe pain only (in-process report
+    # plus the s3 copy); the severity routing was mutually
+    # exclusive, the S4 consumer never dispatched Goldrush
+    # algedonic from its envelope, and as shipped the producer
+    # never emitted at all, so the shipped count was 0. The s5
+    # (critical) copy also landed on a handler with no algedonic
+    # clause and errored. One path, stated accurately.
     # S3 is the actor; Phase 1's audit log is how the rest of the
     # system reads what the reflex layer did.
     report_to_control(:pain, severity)
